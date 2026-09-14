@@ -1,0 +1,366 @@
+//! 引擎策略：附着优先，缺则自起（ADR-0003）。
+//!
+//! clean-chrome 专为自动化而生（`--auto-allow-devtools-connections` 免确认、
+//! 无参数启动即开 9222），所以：
+//!
+//! 1. 显式 `ws` / `port`（CLI 旗标或 `BROWSE_CDP_WS`）优先直连。
+//! 2. 否则探测本机已开的调试口（`/json/version`@9222 -> 默认 profile 的
+//!    `DevToolsActivePort`），命中即附着——人机共存，绝不关用户的浏览器。
+//! 3. 都没有就 spawn 专属实例：独立 profile、`--remote-debugging-port=0`、
+//!    可 `--headless`。[`Engine::shutdown`] 只终结自己 spawn 的（优雅
+//!    `Browser.close` -> 兜底杀进程树）。
+//!
+//! 连上后自动 attach 首个 page target（没有就开 about:blank），
+//! 让 agent 一条命令即可 `session.Page.navigate(...)`（ADR-0004）；
+//! 片段里的显式 `session.connect` / `session.use` 仍然可覆盖。
+
+use anyhow::{Context, Result, anyhow};
+use cdp::{ConnectOptions, Session, discovery, spawn as cdp_spawn};
+use serde::Serialize;
+use serde_json::json;
+use std::path::PathBuf;
+use std::process::Child;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tokio::sync::Mutex;
+
+/// spawn 引擎的独立 profile 目录：`%USERPROFILE%\.browse-rs\engine-profile`。
+///
+/// # Examples
+///
+/// ```
+/// let dir = browse_core::engine::engine_profile_dir();
+/// assert!(dir.ends_with("engine-profile"));
+/// ```
+pub fn engine_profile_dir() -> PathBuf {
+    let home = std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."));
+    home.join(".browse-rs").join("engine-profile")
+}
+
+/// 引擎指令：CLI 旗标 / 环境变量解析出的意图。
+#[derive(Debug, Clone)]
+pub enum EngineSpec {
+    /// 显式 WS URL 直连（`--ws` / `BROWSE_CDP_WS`）。
+    Attach {
+        /// WebSocket 端点。
+        ws_url: String,
+    },
+    /// 显式端口（`--port`），走 `/json/version`。
+    Port(
+        /// 调试端口。
+        u16,
+    ),
+    /// 自动策略：先探测附着，缺则 spawn（`--chrome` / `--headless` / `--pipe` 可约束 spawn 面）。
+    Auto {
+        /// 指定 chrome 可执行文件（`None` 走发现序）。
+        chrome: Option<PathBuf>,
+        /// spawn 时无头。
+        headless: bool,
+        /// spawn 走 CDP 管道通道（`CLEAN_CHROME_DEBUG=pipe`，不开 9222）。
+        pipe: bool,
+    },
+}
+
+impl EngineSpec {
+    /// 从环境解析缺省意图：`BROWSE_CDP_WS` 显式直连，否则自动策略。
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use browse_core::engine::{EngineSpec, EngineSpec::*};
+    /// // 未设 BROWSE_CDP_WS 时是自动策略
+    /// if std::env::var_os("BROWSE_CDP_WS").is_none() {
+    ///     assert!(matches!(EngineSpec::from_env(None, false, false), Auto { .. }));
+    /// }
+    /// ```
+    pub fn from_env(chrome: Option<PathBuf>, headless: bool, pipe: bool) -> Self {
+        if let Some(ws) = std::env::var_os("BROWSE_CDP_WS") {
+            return EngineSpec::Attach {
+                ws_url: ws.to_string_lossy().into_owned(),
+            };
+        }
+        EngineSpec::Auto {
+            chrome,
+            headless,
+            pipe,
+        }
+    }
+}
+
+/// 引擎现状（可序列化，`/health` 面直接用）。
+#[derive(Debug, Clone, Serialize)]
+pub enum EngineSource {
+    /// 未连接。
+    NotConnected,
+    /// 附着了外部浏览器（绝不终结它）。
+    Attached {
+        /// 附着用的 WS 端点（或来源描述）。
+        ws_url: String,
+    },
+    /// 自己 spawn 的专属实例（`browse down` 会终结）。
+    Spawned {
+        /// chrome 进程 pid。
+        pid: u32,
+        /// 独立 profile 目录。
+        profile_dir: PathBuf,
+        /// chrome 可执行文件。
+        chrome: PathBuf,
+        /// 是否无头。
+        headless: bool,
+        /// CDP 通道：`pipe`（S005 管道契约）或 `port`。
+        channel: &'static str,
+    },
+}
+
+/// 引擎状态机：确保连接、报告来源、只终结自己 spawn 的。
+pub struct Engine {
+    session: Arc<Session>,
+    inner: Mutex<EngineInner>,
+}
+
+struct EngineInner {
+    source: EngineSource,
+    child: Option<Child>,
+}
+
+impl Engine {
+    /// 绑定会话建引擎。冷态是 [`EngineSource::NotConnected`]。
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// let engine = browse_core::Engine::new(cdp::Session::new());
+    /// ```
+    pub fn new(session: Arc<Session>) -> Arc<Self> {
+        Arc::new(Self {
+            session,
+            inner: Mutex::new(EngineInner {
+                source: EngineSource::NotConnected,
+                child: None,
+            }),
+        })
+    }
+
+    /// 共享会话。
+    pub fn session(&self) -> Arc<Session> {
+        self.session.clone()
+    }
+
+    /// 当前引擎来源快照。
+    pub async fn source(&self) -> EngineSource {
+        self.inner.lock().await.source.clone()
+    }
+
+    /// 确保引擎在线（幂等：已连接直接返回现状）。
+    ///
+    /// # Errors
+    ///
+    /// - 显式 WS/端口连不上。
+    /// - 自动策略下探测不到、且 chrome 找不到或 spawn 后 15 秒内调试口未就绪。
+    /// - 连上后 attach 首个 page target 失败。
+    pub async fn ensure(&self, spec: &EngineSpec) -> Result<EngineSource> {
+        {
+            let inner = self.inner.lock().await;
+            if self.session.is_connected() {
+                return Ok(inner.source.clone());
+            }
+        }
+        let source = match spec {
+            EngineSpec::Attach { ws_url } => {
+                self.session
+                    .connect_opts(ConnectOptions {
+                        ws_url: Some(ws_url.clone()),
+                        ..Default::default()
+                    })
+                    .await
+                    .with_context(|| format!("attach {ws_url}"))?;
+                EngineSource::Attached {
+                    ws_url: ws_url.clone(),
+                }
+            }
+            EngineSpec::Port(port) => {
+                self.session
+                    .connect_opts(ConnectOptions {
+                        port: Some(*port),
+                        ..Default::default()
+                    })
+                    .await
+                    .with_context(|| format!("attach port {port}"))?;
+                EngineSource::Attached {
+                    ws_url: format!("port {port}"),
+                }
+            }
+            EngineSpec::Auto {
+                chrome,
+                headless,
+                pipe,
+            } => {
+                if let Some(ws) = discovery::probe_default().await {
+                    self.session
+                        .connect_opts(ConnectOptions {
+                            ws_url: Some(ws.clone()),
+                            ..Default::default()
+                        })
+                        .await
+                        .context("attach 已探测到的浏览器")?;
+                    EngineSource::Attached { ws_url: ws }
+                } else if *pipe {
+                    return self.spawn_pipes(chrome.clone(), *headless).await;
+                } else {
+                    // spawn 分支自己落状态（含 child 句柄）并 attach，提前返回
+                    return self.spawn(chrome.clone(), *headless).await;
+                }
+            }
+        };
+        *self.inner.lock().await = EngineInner {
+            source: source.clone(),
+            child: None,
+        };
+        self.attach_first_page().await?;
+        Ok(source)
+    }
+
+    async fn spawn(&self, chrome: Option<PathBuf>, headless: bool) -> Result<EngineSource> {
+        let chrome = cdp_spawn::find_chrome(chrome.as_deref()).ok_or_else(|| {
+            anyhow!(
+                "browse: 找不到 chrome；用 --chrome <path> 或设 BROWSE_CHROME 指向 clean-chrome 的 chrome.exe"
+            )
+        })?;
+        let profile = engine_profile_dir();
+        let child = cdp_spawn::spawn_engine(&chrome, &profile, headless)?;
+        let pid = child.id();
+        let ws = cdp_spawn::wait_devtools_ready(&profile)
+            .await
+            .with_context(|| format!("spawn {} 后等调试口", chrome.display()))?;
+        self.session
+            .connect_opts(ConnectOptions {
+                ws_url: Some(ws.clone()),
+                ..Default::default()
+            })
+            .await
+            .context("连接自起引擎")?;
+        *self.inner.lock().await = EngineInner {
+            source: EngineSource::Spawned {
+                pid,
+                profile_dir: profile,
+                chrome,
+                headless,
+                channel: "port",
+            },
+            child: Some(child),
+        };
+        // spawn 分支自己 attach（ensure 的统一 attach 拿不到 child 句柄归属）
+        self.attach_first_page().await?;
+        Ok(self.source().await)
+    }
+
+    /// 管道态 spawn（S005 契约）：免端口探测、零 TCP 面、断管即关浏览器。
+    async fn spawn_pipes(&self, chrome: Option<PathBuf>, headless: bool) -> Result<EngineSource> {
+        let chrome = cdp_spawn::find_chrome(chrome.as_deref()).ok_or_else(|| {
+            anyhow!(
+                "browse: 找不到 chrome；用 --chrome <path> 或设 BROWSE_CHROME 指向 clean-chrome 的 chrome.exe"
+            )
+        })?;
+        let profile = engine_profile_dir();
+        let engine =
+            cdp_spawn::spawn_engine_pipes(&chrome, &profile, headless, cdp_spawn::PipeMode::Pipe)
+                .context("管道态 spawn")?;
+        let pid = engine.child.id();
+        self.session
+            .connect_pipes(engine.read, engine.write)
+            .await?;
+        *self.inner.lock().await = EngineInner {
+            source: EngineSource::Spawned {
+                pid,
+                profile_dir: profile,
+                chrome,
+                headless,
+                channel: "pipe",
+            },
+            child: Some(engine.child),
+        };
+        self.attach_first_page().await?;
+        Ok(self.source().await)
+    }
+
+    /// attach 首个 page target；没有真实页面就开一个 about:blank
+    /// （对齐「ensure_real_tab」契约：不附着空目标）。
+    async fn attach_first_page(&self) -> Result<()> {
+        let tabs = self.session.list_page_targets().await?;
+        let target = match tabs.first() {
+            Some(t) => t.target_id.clone(),
+            None => self.session.create_target("about:blank").await?,
+        };
+        self.session.use_target(&target).await?;
+        Ok(())
+    }
+
+    /// 新开 about:blank tab 并设为活动路由（`--new-tab` 面）。
+    ///
+    /// # Errors
+    ///
+    /// 未连接（先 [`Engine::ensure`]）或 createTarget 失败。
+    pub async fn new_tab(&self) -> Result<String> {
+        if !self.session.is_connected() {
+            return Err(anyhow!(
+                "browse: 引擎未连接；先 browse up 或直接跑片段（自动拉起）"
+            ));
+        }
+        let id = self.session.create_target("about:blank").await?;
+        self.session.use_target(&id).await?;
+        Ok(id)
+    }
+
+    /// 终结引擎：只对 [`EngineSource::Spawned`] 生效——先 `Browser.close`
+    /// 优雅退（走守卫旁路），5 秒内 `try_wait` 轮询等退，不退兜底杀进程树；
+    /// 附着来源原样保留（铁律：绝不关用户的浏览器）。
+    ///
+    /// # Errors
+    ///
+    /// spawn 来源终结失败（杀不掉）。
+    pub async fn shutdown(&self) -> Result<()> {
+        let mut inner = self.inner.lock().await;
+        let EngineSource::Spawned { pid, .. } = &inner.source else {
+            return Ok(());
+        };
+        let pid = *pid;
+        let _ = self.session.graceful_close_browser().await;
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut exited = false;
+        if let Some(child) = inner.child.as_mut() {
+            while Instant::now() < deadline {
+                match child.try_wait() {
+                    Ok(Some(_)) => {
+                        exited = true;
+                        break;
+                    }
+                    Ok(None) => tokio::time::sleep(Duration::from_millis(200)).await,
+                    Err(_) => break,
+                }
+            }
+        }
+        if !exited {
+            cdp_spawn::terminate_pid(pid)?;
+        }
+        inner.source = EngineSource::NotConnected;
+        inner.child = None;
+        Ok(())
+    }
+
+    /// `/health` 面的状态 JSON。
+    pub async fn health_json(&self, uptime: Duration) -> serde_json::Value {
+        let source = self.source().await;
+        let mut v = json!({
+            "ok": true,
+            "uptime": uptime.as_secs(),
+            "connected": self.session.is_connected(),
+            "activeTargetId": self.session.active_target().await,
+            "activeSessionId": self.session.get_active_session().await,
+        });
+        v["engine"] = serde_json::to_value(&source).unwrap_or(serde_json::Value::Null);
+        v
+    }
+}

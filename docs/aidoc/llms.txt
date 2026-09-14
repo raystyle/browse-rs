@@ -1,0 +1,25 @@
+# browse-rs
+
+> browse CLI 的可测半边：daemon 客户端（HTTP 调用 + 自动拉起）。
+
+## browse-cli 0.1.0
+
+- [browse-cli overview](browse_cli/index.md): browse CLI 的可测半边：daemon 客户端（HTTP 调用 + 自动拉起）。
+- [browse-cli::client](browse_cli/client.md): daemon 客户端：本地 HTTP 调用 + 首次使用自动拉起 detached daemon。
+
+## browse-core 0.1.0
+
+- [browse-core overview](browse_core/index.md): browse CLI 的核心库：方言宿主、引擎策略、daemon HTTP API。
+- [browse-core::engine](browse_core/engine.md): 引擎策略：附着优先，缺则自起（ADR-0003）。
+- [browse-core::js_host](browse_core/js_host.md): 方言求值器：把 [`crate::parser`] 的语句树跑在宿主侧。
+- [browse-core::parser](browse_core/parser.md): browser-harness-js 片段方言的语法分析器（纯函数）。
+- [browse-core::server](browse_core/server.md): daemon 的 HTTP API：常驻会话 + 方言求值 + 引擎生命周期。
+
+## cdp 0.1.0
+
+- [cdp overview](cdp/index.md): Chrome DevTools Protocol（CDP）连接层：一条常驻 browser-level WebSocket 会话。
+- [cdp::discovery](cdp/discovery.md): 连接线索到 WebSocket URL 的解析：`wsUrl` / `port` / `profileDir` 三条路。
+- [cdp::pipe](cdp/pipe.md): 匿名管道薄封装。std 的 anonymous pipe（`std::io::pipe`）至 1.98 仍未稳定，
+- [cdp::session](cdp/session.md): 一条 browser-level WebSocket + flatten attach + sessionId 路由。
+- [cdp::spawn](cdp/spawn.md): 找到 Chrome 可执行文件并拉起一个带调试口的专属实例。
+

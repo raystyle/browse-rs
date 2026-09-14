@@ -1,0 +1,106 @@
+{
+  "crate": "browse-core",
+  "version": "0.1.0",
+  "items": [
+    {
+      "path": "browse_core::engine",
+      "kind": "module",
+      "docs": "引擎策略：附着优先，缺则自起（ADR-0003）。\n\nclean-chrome 专为自动化而生（`--auto-allow-devtools-connections` 免确认、\n无参数启动即开 9222），所以：\n\n1. 显式 `ws` / `port`（CLI 旗标或 `BROWSE_CDP_WS`）优先直连。\n2. 否则探测本机已开的调试口（`/json/version`@9222 -> 默认 profile 的\n   `DevToolsActivePort`），命中即附着——人机共存，绝不关用户的浏览器。\n3. 都没有就 spawn 专属实例：独立 profile、`--remote-debugging-port=0`、\n   可 `--headless`。[`Engine::shutdown`] 只终结自己 spawn 的（优雅\n   `Browser.close` -> 兜底杀进程树）。\n\n连上后自动 attach 首个 page target（没有就开 about:blank），\n让 agent 一条命令即可 `session.Page.navigate(...)`（ADR-0004）；\n片段里的显式 `session.connect` / `session.use` 仍然可覆盖。"
+    },
+    {
+      "path": "browse_core::engine::Engine",
+      "kind": "struct",
+      "docs": "引擎状态机：确保连接、报告来源、只终结自己 spawn 的。"
+    },
+    {
+      "path": "browse_core::engine::EngineSource",
+      "kind": "enum",
+      "docs": "引擎现状（可序列化，`/health` 面直接用）。"
+    },
+    {
+      "path": "browse_core::engine::EngineSpec",
+      "kind": "enum",
+      "docs": "引擎指令：CLI 旗标 / 环境变量解析出的意图。"
+    },
+    {
+      "path": "browse_core::engine::engine_profile_dir",
+      "kind": "function",
+      "docs": "spawn 引擎的独立 profile 目录：`%USERPROFILE%\\.browse-rs\\engine-profile`。\n\n# Examples\n\n```\nlet dir = browse_core::engine::engine_profile_dir();\nassert!(dir.ends_with(\"engine-profile\"));\n```"
+    },
+    {
+      "path": "browse_core::js_host",
+      "kind": "module",
+      "docs": "方言求值器：把 [`crate::parser`] 的语句树跑在宿主侧。\n\n移植自 browser-harness-rs `src/js_host.rs` 的求值半边：\n\n- `session.<Domain>.<method>(params)` 直接转发 CDP 字符串调用（无 652 个\n  typed wrapper，新 Chrome 方法不用 codegen）。\n- 宿主全局：`listPageTargets()`、`resolveWsUrl(opts?)`、`print(x)`。\n- `session.connect / use / waitFor / call / isConnected / getActiveSession`。\n- `vars` 在 daemon 内跨片段持久（`const tabs = ...` 之后的片段还能用 `tabs`）。"
+    },
+    {
+      "path": "browse_core::js_host::JsHost",
+      "kind": "struct",
+      "docs": "方言宿主：一个 CDP [`Session`] + 一份跨片段持久的变量表。"
+    },
+    {
+      "path": "browse_core::js_host::render_result",
+      "kind": "function",
+      "docs": "把方言求值结果渲染成 CLI stdout 文本：标量裸打、空容器不打、其余打 JSON。\n\n# Examples\n\n```\nuse serde_json::json;\nassert_eq!(browse_core::render_result(&json!(\"hi\")), \"hi\");\nassert_eq!(browse_core::render_result(&json!({})), \"\");\nassert_eq!(browse_core::render_result(&json!({\"a\": 1})), r#\"{\"a\":1}\"#);\n```"
+    },
+    {
+      "path": "browse_core::parser",
+      "kind": "module",
+      "docs": "browser-harness-js 片段方言的语法分析器（纯函数）。\n\n移植自 browser-harness-rs `src/js_host.rs` 的解析半边，独立成模块便于单测。\n方言支持：字面量、对象、数组、成员、下标、`await`、`const/let/var`、\n`return`、`//` 注释。不支持：函数字面量、`if/for/while`、模板字符串——\n这些在解析期就报错并提示「页面逻辑放 `Runtime.evaluate` 的 expression」。"
+    },
+    {
+      "path": "browse_core::parser::Expr",
+      "kind": "enum",
+      "docs": "表达式节点。"
+    },
+    {
+      "path": "browse_core::parser::Stmt",
+      "kind": "enum",
+      "docs": "语句：声明、表达式或 return。"
+    },
+    {
+      "path": "browse_core::parser::parse_script",
+      "kind": "function",
+      "docs": "解析整段片段为语句列表（先剥 `//` 注释）。\n\n# Errors\n\n- 含方言外语法（见 [`UNSUPPORTED_HINT`]）。\n- token 残缺（未闭合字符串、缺 `=` / `]` / `,` 等），错误信息带停住的位置。\n- 末尾有解析不掉的余量。\n\n# Examples\n\n```\nuse browse_core::parser::{parse_script, Stmt};\n\nlet stmts = parse_script(\"const n = 1\").unwrap();\nassert!(matches!(stmts[0], Stmt::Let { .. }));\nassert!(parse_script(\"if (x) { y() }\").is_err()); // 方言外\n```"
+    },
+    {
+      "path": "browse_core::parser::render",
+      "kind": "function",
+      "docs": "语句列表回显成源码（诊断与 doctest 用，非规范格式化器）。\n\n# Examples\n\n```\nuse browse_core::parser::{parse_script, render};\nlet stmts = parse_script(\"await session.Page.navigate({url:\\\"https://example.com\\\"})\").unwrap();\nassert_eq!(render(&stmts), r#\"await session.Page.navigate({url: \"https://example.com\"})\"#);\n```"
+    },
+    {
+      "path": "browse_core::parser::snippet_complete",
+      "kind": "function",
+      "docs": "片段是否括号配平（stdin/TTY 增量读入用：配平才送求值）。\n\n# Examples\n\n```\nassert!(browse_core::snippet_complete(\"await session.use(tabs[0].targetId)\"));\nassert!(!browse_core::snippet_complete(\"const x = {a: 1\"));\n```"
+    },
+    {
+      "path": "browse_core::parser::strip_comments",
+      "kind": "function",
+      "docs": "剥掉 `//` 行注释（保留字符串字面量里的 `//`）。\n\n# Examples\n\n```\nassert_eq!(browse_core::parser::strip_comments(\"a // 尾注\\nb\"), \"a \\nb\");\nassert_eq!(browse_core::parser::strip_comments(r#\"\"http://x\"\"#), r#\"\"http://x\"\"#);\n```"
+    },
+    {
+      "path": "browse_core::server",
+      "kind": "module",
+      "docs": "daemon 的 HTTP API：常驻会话 + 方言求值 + 引擎生命周期。\n\n移植自 browser-harness-rs `src/server.rs`（POST /eval、GET /health、\nPOST /quit 三端点保留），新增 `/engine/up` 与求值前的懒引擎策略：\n\n- 求值前未连接且片段里没有 `session.connect` -> 自动 [`crate::Engine::ensure`]；\n  片段自带 `session.connect` 则不预连（显式意图优先，ADR-0004）。\n- 求值撞上「Not connected」再兜底 ensure + 重试一次（覆盖先语句后连接的写法）。\n- 单飞槽：同一时刻只跑一条片段，后来者排队（不拒 429）。\n- `/eval` 超时默认 300 秒（`BROWSE_EVAL_TIMEOUT`，单位秒）。"
+    },
+    {
+      "path": "browse_core::server::Daemon",
+      "kind": "struct",
+      "docs": "daemon 运行面：宿主、引擎、缺省引擎意图、单飞槽与退出旗标。"
+    },
+    {
+      "path": "browse_core::server::EngineUpRequest",
+      "kind": "struct",
+      "docs": "`/engine/up` 请求体。"
+    },
+    {
+      "path": "browse_core::server::EvalRequest",
+      "kind": "struct",
+      "docs": "`/eval` 请求体。"
+    },
+    {
+      "path": "browse_core::server::serve",
+      "kind": "function",
+      "docs": "起 HTTP daemon，监听 `bind`，直到 POST /quit。\n\n# Errors\n\n端口绑定失败或 axum serve 出错。"
+    }
+  ]
+}

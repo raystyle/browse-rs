@@ -1,0 +1,2 @@
+missing-docs-in-crate-items = true
+missing-docs-allow-unused = true

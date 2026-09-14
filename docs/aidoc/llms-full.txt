@@ -1,0 +1,298 @@
+<!-- browse_cli/index.md -->
+# browse-cli 0.1.0
+
+browse CLI 的可测半边：daemon 客户端（HTTP 调用 + 自动拉起）。
+
+bin 侧（`main.rs`）只做接线：手写参数解析、三传输形态
+（`--eval` / stdin 括号配平 / TTY REPL）与 up/down/status 生命周期子命令。
+会话状态（方言变量、活动 tab、引擎）全在 daemon 侧持久，
+CLI 进程本身无状态、即起即走。
+
+## Modules
+
+- [`client`](client.md): daemon 客户端：本地 HTTP 调用 + 首次使用自动拉起 detached daemon。
+
+
+<!-- browse_cli/client.md -->
+# browse-cli::client
+
+daemon 客户端：本地 HTTP 调用 + 首次使用自动拉起 detached daemon。
+
+## Functions
+
+- `daemon_alive` — daemon 是否在跑（GET /health 通即为在）。
+- `daemon_bind` — daemon 的 `host:port` 绑定串。
+- `engine_up` — POST /engine/up（显式起引擎）。
+- `ensure_daemon` — 确保 daemon 在跑：不通就 detached 拉起 `browse --serve`，再探活。
+- `eval` — POST /eval。返回片段求值结果；daemon 侧错误进 `Err`（错误串已是给人/agent 的下一步指令形态）。
+- `health` — GET /health。
+- `quit` — POST /quit（退 daemon；daemon 侧顺带只终结自起引擎）。
+- `state_dir` — daemon 日志与运行面目录：`%USERPROFILE%\.browse-rs`。
+
+## Constants
+
+- `DEFAULT_PORT` — daemon 缺省端口（`BROWSE_PORT` 可覆盖）。避开 bh 的 9876。
+
+
+<!-- browse_core/index.md -->
+# browse-core 0.1.0
+
+browse CLI 的核心库：方言宿主、引擎策略、daemon HTTP API。
+
+三块职责：
+
+- [`parser`]：browser-harness-js 片段方言的手写语法分析器（纯函数，可单测）。
+  支持：字面量、对象、数组、成员、下标、`await`、`const/let/var`、`return`、
+  `//` 注释。不支持：函数字面量、`if/for`、模板字符串——页面逻辑放进
+  `Runtime.evaluate` 的 `expression` 字符串里。
+- [`js_host`]：方言求值器。`session.<Domain>.<method>(params)` 转发为 CDP
+  字符串调用，宿主全局 `listPageTargets` / `resolveWsUrl` / `print`。
+- [`engine`]：引擎策略（附着优先，缺则自起 clean-chrome 专属实例，只杀
+  自己 spawn 的）与引擎状态。
+- [`server`]：daemon 的 HTTP API（POST /eval、GET /health、POST /engine/up、
+  POST /quit），常驻会话与全局变量跨 CLI 调用保持。
+
+# Examples
+
+解析一条片段（纯语法，不碰网络）：
+
+```
+use browse_core::parser::{parse_script, render};
+
+let stmts = parse_script("const tabs = await listPageTargets()").unwrap();
+assert_eq!(render(&stmts), "const tabs = await listPageTargets()");
+```
+
+## Modules
+
+- [`engine`](engine.md): 引擎策略：附着优先，缺则自起（ADR-0003）。
+- [`js_host`](js_host.md): 方言求值器：把 [`crate::parser`] 的语句树跑在宿主侧。
+- [`parser`](parser.md): browser-harness-js 片段方言的语法分析器（纯函数）。
+- [`server`](server.md): daemon 的 HTTP API：常驻会话 + 方言求值 + 引擎生命周期。
+
+
+<!-- browse_core/engine.md -->
+# browse-core::engine
+
+引擎策略：附着优先，缺则自起（ADR-0003）。
+
+clean-chrome 专为自动化而生（`--auto-allow-devtools-connections` 免确认、
+无参数启动即开 9222），所以：
+
+1. 显式 `ws` / `port`（CLI 旗标或 `BROWSE_CDP_WS`）优先直连。
+2. 否则探测本机已开的调试口（`/json/version`@9222 -> 默认 profile 的
+   `DevToolsActivePort`），命中即附着——人机共存，绝不关用户的浏览器。
+3. 都没有就 spawn 专属实例：独立 profile、`--remote-debugging-port=0`、
+   可 `--headless`。[`Engine::shutdown`] 只终结自己 spawn 的（优雅
+   `Browser.close` -> 兜底杀进程树）。
+
+连上后自动 attach 首个 page target（没有就开 about:blank），
+让 agent 一条命令即可 `session.Page.navigate(...)`（ADR-0004）；
+片段里的显式 `session.connect` / `session.use` 仍然可覆盖。
+
+## Functions
+
+- `engine_profile_dir` — spawn 引擎的独立 profile 目录：`%USERPROFILE%\.browse-rs\engine-profile`。
+
+## Types
+
+- `Engine` — 引擎状态机：确保连接、报告来源、只终结自己 spawn 的。
+- `EngineSource` — 引擎现状（可序列化，`/health` 面直接用）。
+- `EngineSpec` — 引擎指令：CLI 旗标 / 环境变量解析出的意图。
+
+
+<!-- browse_core/js_host.md -->
+# browse-core::js_host
+
+方言求值器：把 [`crate::parser`] 的语句树跑在宿主侧。
+
+移植自 browser-harness-rs `src/js_host.rs` 的求值半边：
+
+- `session.<Domain>.<method>(params)` 直接转发 CDP 字符串调用（无 652 个
+  typed wrapper，新 Chrome 方法不用 codegen）。
+- 宿主全局：`listPageTargets()`、`resolveWsUrl(opts?)`、`print(x)`。
+- `session.connect / use / waitFor / call / isConnected / getActiveSession`。
+- `vars` 在 daemon 内跨片段持久（`const tabs = ...` 之后的片段还能用 `tabs`）。
+
+## Functions
+
+- `render_result` — 把方言求值结果渲染成 CLI stdout 文本：标量裸打、空容器不打、其余打 JSON。
+
+## Types
+
+- `JsHost` — 方言宿主：一个 CDP [`Session`] + 一份跨片段持久的变量表。
+
+
+<!-- browse_core/parser.md -->
+# browse-core::parser
+
+browser-harness-js 片段方言的语法分析器（纯函数）。
+
+移植自 browser-harness-rs `src/js_host.rs` 的解析半边，独立成模块便于单测。
+方言支持：字面量、对象、数组、成员、下标、`await`、`const/let/var`、
+`return`、`//` 注释。不支持：函数字面量、`if/for/while`、模板字符串——
+这些在解析期就报错并提示「页面逻辑放 `Runtime.evaluate` 的 expression」。
+
+## Functions
+
+- `parse_script` — 解析整段片段为语句列表（先剥 `//` 注释）。
+- `render` — 语句列表回显成源码（诊断与 doctest 用，非规范格式化器）。
+- `snippet_complete` — 片段是否括号配平（stdin/TTY 增量读入用：配平才送求值）。
+- `strip_comments` — 剥掉 `//` 行注释（保留字符串字面量里的 `//`）。
+
+## Types
+
+- `Expr` — 表达式节点。
+- `Stmt` — 语句：声明、表达式或 return。
+
+
+<!-- browse_core/server.md -->
+# browse-core::server
+
+daemon 的 HTTP API：常驻会话 + 方言求值 + 引擎生命周期。
+
+移植自 browser-harness-rs `src/server.rs`（POST /eval、GET /health、
+POST /quit 三端点保留），新增 `/engine/up` 与求值前的懒引擎策略：
+
+- 求值前未连接且片段里没有 `session.connect` -> 自动 [`crate::Engine::ensure`]；
+  片段自带 `session.connect` 则不预连（显式意图优先，ADR-0004）。
+- 求值撞上「Not connected」再兜底 ensure + 重试一次（覆盖先语句后连接的写法）。
+- 单飞槽：同一时刻只跑一条片段，后来者排队（不拒 429）。
+- `/eval` 超时默认 300 秒（`BROWSE_EVAL_TIMEOUT`，单位秒）。
+
+## Functions
+
+- `serve` — 起 HTTP daemon，监听 `bind`，直到 POST /quit。
+
+## Types
+
+- `Daemon` — daemon 运行面：宿主、引擎、缺省引擎意图、单飞槽与退出旗标。
+- `EngineUpRequest` — `/engine/up` 请求体。
+- `EvalRequest` — `/eval` 请求体。
+
+
+<!-- cdp/index.md -->
+# cdp 0.1.0
+
+Chrome DevTools Protocol（CDP）连接层：一条常驻 browser-level WebSocket 会话。
+
+移植自 browser-harness-rs 的 `session.rs`，职责单一：
+
+- [`Session`]：连 browser 端点（不是某个 tab 的 `/devtools/page/...`），
+  `Target.attachToTarget({flatten:true})` 后按 `sessionId` 路由非 browser 域方法，
+  事件进环形缓冲供 [`Session::wait_for`] 消费。
+- [`discovery`]：把 `wsUrl` / `port` / `profileDir` 三种线索解析成 WebSocket URL
+  （Chrome 144+ 默认 profile 下 HTTP `/json` 端点可能不服务，`DevToolsActivePort`
+  文件是兜底真相）。
+- [`spawn`]：找到并拉起一个 Chrome 可执行文件，等它的 `DevToolsActivePort` 就绪。
+
+本 crate 不做语义封装：没有 `goto()`、没有 `click()`。调用方（`browse-core`）
+直接写 `session.call("Page.navigate", params)`。
+
+# Examples
+
+```no_run
+# async fn demo() -> anyhow::Result<()> {
+use cdp::{ConnectOptions, Session};
+use serde_json::json;
+
+let s = Session::new();
+s.connect_opts(ConnectOptions { port: Some(9222), ..Default::default() }).await?;
+let tabs = s.list_page_targets().await?;
+s.use_target(&tabs[0].target_id).await?;
+s.call("Page.navigate", json!({ "url": "https://example.com" })).await?;
+# Ok(())
+# }
+```
+
+## Modules
+
+- [`discovery`](discovery.md): 连接线索到 WebSocket URL 的解析：`wsUrl` / `port` / `profileDir` 三条路。
+- [`pipe`](pipe.md): 匿名管道薄封装。std 的 anonymous pipe（`std::io::pipe`）至 1.98 仍未稳定，
+- [`session`](session.md): 一条 browser-level WebSocket + flatten attach + sessionId 路由。
+- [`spawn`](spawn.md): 找到 Chrome 可执行文件并拉起一个带调试口的专属实例。
+
+
+<!-- cdp/discovery.md -->
+# cdp::discovery
+
+连接线索到 WebSocket URL 的解析：`wsUrl` / `port` / `profileDir` 三条路。
+
+Chrome 144+ 对默认 profile 的 HTTP `/json` 端点可能不服务，
+`DevToolsActivePort` 文件（user-data 目录根下，首行端口、次行 WS 路径）
+是可靠兜底。clean-chrome 无参数启动即开 9222，正常走 `/json/version`。
+
+## Functions
+
+- `default_profile_dirs` — clean-chrome / Chromium / Chrome 的默认 user-data 目录（按探测优先序）。
+- `http_version_ws_url` — GET `<http>/json/version` 取 `webSocketDebuggerUrl`。
+- `parse_port` — 解析端口字面量：`"9222"`、`"http://127.0.0.1:9222"`、`"127.0.0.1:9222/"` 都出 `9222`。
+- `probe_default` — 引擎附着探测：返回本机已开调试口浏览器的 WS URL，没有则 `None`。
+- `resolve_ws_url` — 解析 [`super::ConnectOptions`] 为 WS URL。`profileDir` 路径会轮询等文件出现
+- `wait_active_port_file` — 轮询 profile 目录下的 `DevToolsActivePort`，直到超时。
+- `ws_from_active_port_text` — 从 `DevToolsActivePort` 文件文本解析 WS URL：首行端口，次行 `/devtools/...` 路径。
+
+
+<!-- cdp/pipe.md -->
+# cdp::pipe
+
+匿名管道薄封装。std 的 anonymous pipe（`std::io::pipe`）至 1.98 仍未稳定，
+Windows 直接用 `CreatePipe`；POSIX 留桩（管道通道暂仅 Windows，走端口态）。
+
+句柄存 `usize` 以获得 `Send + Sync`；阻塞 IO 由 [`crate::Session`] 的
+管道泵在 blocking 线程池上跑。
+
+## Functions
+
+- `anon_pair` — 建一对匿名管道（默认不可继承）：`(读端, 写端)`。
+- `set_inheritable` — 把句柄标为（不）可被子进程继承（`HANDLE_FLAG_INHERIT`）。
+
+## Types
+
+- `PipeReader` — 管道读端（启动器持有，读 chrome 写出的 CDP）。
+- `PipeWriter` — 管道写端（启动器持有，往 chrome 写 CDP）。
+
+
+<!-- cdp/session.md -->
+# cdp::session
+
+一条 browser-level WebSocket + flatten attach + sessionId 路由。
+
+移植自 browser-harness-rs `src/session.rs`，差异：
+事件缓冲有上限（防长跑泄漏）；[`Session::call`] 内置安全守卫
+（拦 `Browser.close` 等破坏性方法、`Target.closeTarget` 只放行自建 tab）。
+
+## Functions
+
+- `is_browser_method` — 方法是否属于 browser 端点域（不附 `sessionId`）。
+
+## Types
+
+- `ConnectOptions` — 连接线索三选一：`wsUrl` / `port` / `profileDir`。
+- `PageTarget` — 一个可附着的 page target（已滤 `chrome://`、`devtools://`）。
+- `Session` — 常驻 CDP 会话。clone `Arc<Self>` 共享同一条连接。
+
+
+<!-- cdp/spawn.md -->
+# cdp::spawn
+
+找到 Chrome 可执行文件并拉起一个带调试口的专属实例。
+
+只服务于「引擎自起」路径：独立 user-data 目录、调试端口自动分配
+（`--remote-debugging-port=0`，真实端口写进 profile 的
+`DevToolsActivePort`）、`browse down` 时才终结，绝不碰用户默认 profile。
+
+## Functions
+
+- `find_chrome` — 依优先序找 Chrome 可执行文件：`BROWSE_CHROME` 环境变量 ->
+- `spawn_engine` — 拉起专属引擎实例。参数：可执行文件、独立 profile 目录、是否无头。
+- `spawn_engine_pipes` — 按管道契约拉起 clean-chrome（S005 / D02-6，当前仅 Windows）。
+- `terminate_pid` — 强杀进程树（优雅退出 `Browser.close` 失败后的兜底）。
+- `wait_devtools_ready` — 等 spawn 出来的实例调试口就绪（读它 profile 下的 `DevToolsActivePort`），
+
+## Types
+
+- `PipeEngine` — 管道态引擎句柄：子进程 + 留在启动器侧的两条 CDP 管道端。
+- `PipeMode` — 管道通道三态：CLEAN_CHROME_DEBUG 的取值。
+
+

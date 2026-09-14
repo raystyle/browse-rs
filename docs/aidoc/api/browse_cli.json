@@ -1,0 +1,56 @@
+{
+  "crate": "browse-cli",
+  "version": "0.1.0",
+  "items": [
+    {
+      "path": "browse_cli::client",
+      "kind": "module",
+      "docs": "daemon 客户端：本地 HTTP 调用 + 首次使用自动拉起 detached daemon。"
+    },
+    {
+      "path": "browse_cli::client::DEFAULT_PORT",
+      "kind": "constant",
+      "docs": "daemon 缺省端口（`BROWSE_PORT` 可覆盖）。避开 bh 的 9876。"
+    },
+    {
+      "path": "browse_cli::client::daemon_alive",
+      "kind": "function",
+      "docs": "daemon 是否在跑（GET /health 通即为在）。"
+    },
+    {
+      "path": "browse_cli::client::daemon_bind",
+      "kind": "function",
+      "docs": "daemon 的 `host:port` 绑定串。\n\n# Examples\n\n```\nlet port = std::env::var(\"BROWSE_PORT\").unwrap_or_else(|_| \"9880\".into());\nassert_eq!(browse_cli::client::daemon_bind(), format!(\"127.0.0.1:{port}\"));\n```"
+    },
+    {
+      "path": "browse_cli::client::engine_up",
+      "kind": "function",
+      "docs": "POST /engine/up（显式起引擎）。\n\n# Errors\n\nHTTP 失败或引擎 ensure 失败（连不上、chrome 找不到、spawn 超时）。"
+    },
+    {
+      "path": "browse_cli::client::ensure_daemon",
+      "kind": "function",
+      "docs": "确保 daemon 在跑：不通就 detached 拉起 `browse --serve`，再探活。\n\n# Errors\n\n拉起失败（exe 找不到）或 10 秒内 /health 不通。"
+    },
+    {
+      "path": "browse_cli::client::eval",
+      "kind": "function",
+      "docs": "POST /eval。返回片段求值结果；daemon 侧错误进 `Err`（错误串已是给人/agent 的下一步指令形态）。\n\n# Errors\n\nHTTP 失败或 daemon 求值失败（语法错、CDP 错、守卫拦截、超时）。"
+    },
+    {
+      "path": "browse_cli::client::health",
+      "kind": "function",
+      "docs": "GET /health。\n\n# Errors\n\ndaemon 不在或响应坏。"
+    },
+    {
+      "path": "browse_cli::client::quit",
+      "kind": "function",
+      "docs": "POST /quit（退 daemon；daemon 侧顺带只终结自起引擎）。\n\n# Errors\n\ndaemon 不在（幂等场景调用方先判活）或 HTTP 失败。"
+    },
+    {
+      "path": "browse_cli::client::state_dir",
+      "kind": "function",
+      "docs": "daemon 日志与运行面目录：`%USERPROFILE%\\.browse-rs`。"
+    }
+  ]
+}

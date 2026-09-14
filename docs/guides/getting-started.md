@@ -1,0 +1,65 @@
+# getting-started：五分钟上手
+
+前置：本机有 clean-chrome 部署（仓库根 `chromium-*/chrome.exe`，或设 `BROWSE_CHROME`）。
+
+## 1. 装
+
+```bash
+cargo install --path crates/browse-cli --force
+browse --help
+```
+
+## 2. 一条命令开跑（自动拉 daemon + 引擎）
+
+```bash
+browse --headless 'await session.Page.navigate({url:"data:text/html,<title>hi</title>"} )'
+browse 'return (await session.Runtime.evaluate({expression:"document.title", returnByValue:true})).result.value'
+# hi
+```
+
+- `--headless` 只影响**首次** spawn 的引擎形态；daemon 常驻，后续调用免拉起。
+- 变量跨调用持久：`browse 'const tabs = await listPageTargets()'` 之后另起进程 `browse 'return tabs[0].url'` 仍可用。
+
+## 3. 真网页
+
+```bash
+browse up --headless            # 或 browse up（有头窗口）
+browse 'await session.Page.navigate({url:"https://example.com"})'
+browse 'return (await session.Runtime.evaluate({expression:"document.querySelector(\"h1\").textContent", returnByValue:true})).result.value'
+browse 'await session.waitFor("Page.loadEventFired", undefined, 15000)'
+```
+
+## 4. 管道通道（零 TCP 面）
+
+```bash
+browse up --headless --pipe
+browse status     # engine 行 channel=pipe；此时 9222 无监听
+browse down
+```
+
+## 5. 附着已在跑的浏览器
+
+用户双击 clean-chrome（无参数即开 9222，免确认对话框）后：
+
+```bash
+browse 'await listPageTargets()'          # 探测附着，不新开浏览器
+browse 'await session.use((await listPageTargets())[0].targetId)'
+```
+
+铁律：附着来源绝不关浏览器、绝不关非自建 tab（守卫在 `Session::call` 层强制）。
+
+## 6. 批处理（stdin）
+
+```bash
+printf '%s\n' \
+  'const t = await listPageTargets()' \
+  'return t[0].type' \
+| browse
+```
+
+## 常见坑
+
+- 方言没有 `if/for/函数/模板字符串`：页面逻辑写进 `Runtime.evaluate` 的 `expression` 字符串（页内是真 V8）。
+- 多语句片段要 `return` 才有输出（与样例一致）。
+- E2E 测试共享 profile 会撞 chrome 单实例锁；测试已内置串行。
+- daemon 日志在 `%USERPROFILE%\.browse-rs\daemon.log`；`browse down` 幂等。

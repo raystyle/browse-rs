@@ -1,0 +1,136 @@
+{
+  "crate": "cdp",
+  "version": "0.1.0",
+  "items": [
+    {
+      "path": "cdp::discovery",
+      "kind": "module",
+      "docs": "连接线索到 WebSocket URL 的解析：`wsUrl` / `port` / `profileDir` 三条路。\n\nChrome 144+ 对默认 profile 的 HTTP `/json` 端点可能不服务，\n`DevToolsActivePort` 文件（user-data 目录根下，首行端口、次行 WS 路径）\n是可靠兜底。clean-chrome 无参数启动即开 9222，正常走 `/json/version`。"
+    },
+    {
+      "path": "cdp::discovery::default_profile_dirs",
+      "kind": "function",
+      "docs": "clean-chrome / Chromium / Chrome 的默认 user-data 目录（按探测优先序）。\n\nclean-chrome 是 Chromium 品牌，profile 在 `%LOCALAPPDATA%\\Chromium\\User Data`。"
+    },
+    {
+      "path": "cdp::discovery::http_version_ws_url",
+      "kind": "function",
+      "docs": "GET `<http>/json/version` 取 `webSocketDebuggerUrl`。\n\n# Errors\n\n请求失败、非 JSON、或缺 `webSocketDebuggerUrl` 字段。"
+    },
+    {
+      "path": "cdp::discovery::parse_port",
+      "kind": "function",
+      "docs": "解析端口字面量：`\"9222\"`、`\"http://127.0.0.1:9222\"`、`\"127.0.0.1:9222/\"` 都出 `9222`。\n\n# Examples\n\n```\nassert_eq!(cdp::parse_port(\"9222\"), Some(9222));\nassert_eq!(cdp::parse_port(\"http://127.0.0.1:9222\"), Some(9222));\nassert_eq!(cdp::parse_port(\"not-a-port\"), None);\n```"
+    },
+    {
+      "path": "cdp::discovery::probe_default",
+      "kind": "function",
+      "docs": "引擎附着探测：返回本机已开调试口浏览器的 WS URL，没有则 `None`。\n\n顺序：默认端口 9222 的 `/json/version`（300ms 短超时，别让缺浏览器拖慢冷启动）\n-> 各默认 profile 目录下的 `DevToolsActivePort` 文件（静态读一次，\n浏览器已在跑则文件已在）。"
+    },
+    {
+      "path": "cdp::discovery::resolve_ws_url",
+      "kind": "function",
+      "docs": "解析 [`super::ConnectOptions`] 为 WS URL。`profileDir` 路径会轮询等文件出现\n（Chrome 启动到写文件有窗口期），其余立即解析。\n\n# Errors\n\n- `wsUrl` 是 http 端点但 `/json/version` 请求失败或没有 `webSocketDebuggerUrl`。\n- `profileDir` 在 5 秒内读不到合法的 `DevToolsActivePort`。\n- 三线索全空时按默认端口 9222 走 `/json/version`，失败同上。"
+    },
+    {
+      "path": "cdp::discovery::wait_active_port_file",
+      "kind": "function",
+      "docs": "轮询 profile 目录下的 `DevToolsActivePort`，直到超时。\n\n# Errors\n\n`timeout` 内文件没出现或内容不合法。"
+    },
+    {
+      "path": "cdp::discovery::ws_from_active_port_text",
+      "kind": "function",
+      "docs": "从 `DevToolsActivePort` 文件文本解析 WS URL：首行端口，次行 `/devtools/...` 路径。\n\n# Examples\n\n```\nlet text = \"52345\\n/devtools/browser/8f4eaaaa-1111\\n\";\nassert_eq!(\n    cdp::ws_from_active_port_text(text),\n    Some(\"ws://127.0.0.1:52345/devtools/browser/8f4eaaaa-1111\".to_string()),\n);\nassert_eq!(cdp::ws_from_active_port_text(\"garbage\"), None);\n```"
+    },
+    {
+      "path": "cdp::pipe",
+      "kind": "module",
+      "docs": "匿名管道薄封装。std 的 anonymous pipe（`std::io::pipe`）至 1.98 仍未稳定，\nWindows 直接用 `CreatePipe`；POSIX 留桩（管道通道暂仅 Windows，走端口态）。\n\n句柄存 `usize` 以获得 `Send + Sync`；阻塞 IO 由 [`crate::Session`] 的\n管道泵在 blocking 线程池上跑。"
+    },
+    {
+      "path": "cdp::pipe::PipeReader",
+      "kind": "struct",
+      "docs": "管道读端（启动器持有，读 chrome 写出的 CDP）。"
+    },
+    {
+      "path": "cdp::pipe::PipeWriter",
+      "kind": "struct",
+      "docs": "管道写端（启动器持有，往 chrome 写 CDP）。"
+    },
+    {
+      "path": "cdp::pipe::anon_pair",
+      "kind": "function",
+      "docs": "建一对匿名管道（默认不可继承）：`(读端, 写端)`。\n\n# Errors\n\n`CreatePipe` 失败（错误码进上下文）。"
+    },
+    {
+      "path": "cdp::pipe::set_inheritable",
+      "kind": "function",
+      "docs": "把句柄标为（不）可被子进程继承（`HANDLE_FLAG_INHERIT`）。\n\n# Errors\n\n`SetHandleInformation` 失败。"
+    },
+    {
+      "path": "cdp::session",
+      "kind": "module",
+      "docs": "一条 browser-level WebSocket + flatten attach + sessionId 路由。\n\n移植自 browser-harness-rs `src/session.rs`，差异：\n事件缓冲有上限（防长跑泄漏）；[`Session::call`] 内置安全守卫\n（拦 `Browser.close` 等破坏性方法、`Target.closeTarget` 只放行自建 tab）。"
+    },
+    {
+      "path": "cdp::session::ConnectOptions",
+      "kind": "struct",
+      "docs": "连接线索三选一：`wsUrl` / `port` / `profileDir`。"
+    },
+    {
+      "path": "cdp::session::PageTarget",
+      "kind": "struct",
+      "docs": "一个可附着的 page target（已滤 `chrome://`、`devtools://`）。"
+    },
+    {
+      "path": "cdp::session::Session",
+      "kind": "struct",
+      "docs": "常驻 CDP 会话。clone `Arc<Self>` 共享同一条连接。"
+    },
+    {
+      "path": "cdp::session::is_browser_method",
+      "kind": "function",
+      "docs": "方法是否属于 browser 端点域（不附 `sessionId`）。\n\n# Examples\n\n```\nassert!(cdp::session::is_browser_method(\"Target.getTargets\"));\nassert!(!cdp::session::is_browser_method(\"Page.navigate\"));\n```"
+    },
+    {
+      "path": "cdp::spawn",
+      "kind": "module",
+      "docs": "找到 Chrome 可执行文件并拉起一个带调试口的专属实例。\n\n只服务于「引擎自起」路径：独立 user-data 目录、调试端口自动分配\n（`--remote-debugging-port=0`，真实端口写进 profile 的\n`DevToolsActivePort`）、`browse down` 时才终结，绝不碰用户默认 profile。"
+    },
+    {
+      "path": "cdp::spawn::PipeEngine",
+      "kind": "struct",
+      "docs": "管道态引擎句柄：子进程 + 留在启动器侧的两条 CDP 管道端。"
+    },
+    {
+      "path": "cdp::spawn::PipeMode",
+      "kind": "enum",
+      "docs": "管道通道三态：CLEAN_CHROME_DEBUG 的取值。"
+    },
+    {
+      "path": "cdp::spawn::find_chrome",
+      "kind": "function",
+      "docs": "依优先序找 Chrome 可执行文件：`BROWSE_CHROME` 环境变量 ->\n可执行文件同目录与当前目录下的 `chromium-*/chrome.exe`（clean-chrome\nSxS 部署形态）-> 常规安装路径。找不到返回 `None`。\n\n# Examples\n\n```\n// 本机 clean-chrome 部署在仓库根的 chromium-*/ 下时：\nlet p = cdp::spawn::find_chrome(None);\nprintln!(\"{p:?}\");\n```"
+    },
+    {
+      "path": "cdp::spawn::spawn_engine",
+      "kind": "function",
+      "docs": "拉起专属引擎实例。参数：可执行文件、独立 profile 目录、是否无头。\n\n命令行：`--user-data-dir <dir> --remote-debugging-port=0 --no-first-run\n--no-default-browser-check --no-sandbox [--headless] about:blank`。\n\n`--no-sandbox`：SxS 部署的 clean-chrome 在本机沙箱进程打不开自身 exe\n（`Sandbox cannot access executable`，0x5）；引擎是自动化专属隔离实例，\n不承载用户浏览面，关沙箱与 clean-chrome 验收实践一致（linux 同款）。\n\n# Errors\n\nspawn 失败（路径不是可执行文件等）。"
+    },
+    {
+      "path": "cdp::spawn::spawn_engine_pipes",
+      "kind": "function",
+      "docs": "按管道契约拉起 clean-chrome（S005 / D02-6，当前仅 Windows）。\n\n启动器建两条匿名管道，把「子读端,子写端」句柄经\n`--remote-debugging-io-pipes=<in>,<out>` 传入（十进制），两枚句柄标\n可继承；`CLEAN_CHROME_DEBUG=pipe|both` 决定端口段开否。协议 ASCIIZ。\n断管即关浏览器（clean-chrome 行为），生命周期与本进程绑定。\n\n# Errors\n\n- 非 Windows 平台（POSIX 需 fd 3/4 布线，未实现，走端口态）。\n- 建管道 / 设可继承 / spawn 失败。"
+    },
+    {
+      "path": "cdp::spawn::terminate_pid",
+      "kind": "function",
+      "docs": "强杀进程树（优雅退出 `Browser.close` 失败后的兜底）。\n\n# Errors\n\nWindows `taskkill` 或 unix `kill` 失败。"
+    },
+    {
+      "path": "cdp::spawn::wait_devtools_ready",
+      "kind": "function",
+      "docs": "等 spawn 出来的实例调试口就绪（读它 profile 下的 `DevToolsActivePort`），\n返回 WS URL。冷启动首跑（建 profile）可能要几秒，默认上限 15 秒。\n\n# Errors\n\n超时内端口文件没就绪。"
+    }
+  ]
+}
