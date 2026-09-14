@@ -66,9 +66,31 @@ pub enum Expr {
     Array(Vec<Expr>),
 }
 
-/// 不支持语式的统一报错前缀：告诉 agent 把复杂逻辑放进页面侧求值。
-const UNSUPPORTED_HINT: &str =
-    "方言不支持该语法（if/for/while/函数/模板字符串）；页面逻辑放 Runtime.evaluate 的 expression";
+/// 不支持语式的统一报错（CTA：诊断 + 下一步）。保留关键字
+/// `Runtime.evaluate`，契约测试锁它。
+const UNSUPPORTED_HINT: &str = "方言不支持该语法（if/for/while/函数/模板字符串）；下一步：页面逻辑放 Runtime.evaluate 的 expression 字符串，宿主侧只留 CDP 调用与取值";
+
+/// 把字节偏移换算成「行L:列C」（错误定位用，CTA 的一半是位置）。
+///
+/// # Examples
+///
+/// ```
+/// let two_lines = concat!("ab", '\n', "cd");
+/// assert_eq!(browse_core::parser::loc(two_lines, 4), "行2:列2");
+/// assert_eq!(browse_core::parser::loc("abc", 0), "行1:列1");
+/// ```
+pub fn loc(src: &str, pos: usize) -> String {
+    let head = &src[..pos.min(src.len())];
+    let line = head.matches('\n').count() + 1;
+    let col = head
+        .rsplit('\n')
+        .next()
+        .map(str::chars)
+        .map(|c| c.count())
+        .unwrap_or(0)
+        + 1;
+    format!("行{line}:列{col}")
+}
 
 /// 解析整段片段为语句列表（先剥 `//` 注释）。
 ///
@@ -98,8 +120,9 @@ pub fn parse_script(source: &str) -> Result<Vec<Stmt>> {
     p.skip_ws();
     if p.pos < p.src.len() {
         bail!(
-            "未解析完，停在: {}",
-            p.src[p.pos..].chars().take(40).collect::<String>()
+            "未解析完，停在「{}」（{}）；下一步：检查该处附近的括号/引号是否闭合",
+            p.src[p.pos..].chars().take(40).collect::<String>(),
+            loc(p.src, p.pos)
         );
     }
     Ok(stmts)
@@ -273,6 +296,11 @@ impl<'a> Parser<'a> {
         self.src[self.pos..].chars().next()
     }
 
+    /// 当前位置（错误消息用）。
+    fn here(&self) -> String {
+        loc(self.src, self.pos)
+    }
+
     fn eat(&mut self, s: &str) -> bool {
         self.skip_ws();
         if self.src[self.pos..].starts_with(s) {
@@ -302,12 +330,12 @@ impl<'a> Parser<'a> {
     fn parse_stmt(&mut self) -> Result<Stmt> {
         self.skip_ws();
         if self.peek() == Some('`') {
-            bail!("{UNSUPPORTED_HINT}");
+            bail!("{UNSUPPORTED_HINT}（模板字符串，{}）", self.here());
         }
         if let Some(kw) = self.peek_keyword()
             && matches!(kw, "if" | "for" | "while" | "function" | "class")
         {
-            bail!("{UNSUPPORTED_HINT}（发现 {kw}）");
+            bail!("{UNSUPPORTED_HINT}（发现 {kw}，{}）", self.here());
         }
         if self.eat("return") {
             self.skip_ws();
@@ -319,7 +347,10 @@ impl<'a> Parser<'a> {
         if self.eat("const") || self.eat("let") || self.eat("var") {
             let name = self.parse_ident()?;
             if !self.eat("=") {
-                bail!("期望 =");
+                bail!(
+                    "期望 =（声明 {name} 后，{}）；下一步：补成 const {name} = <值>",
+                    self.here()
+                );
             }
             return Ok(Stmt::Let {
                 name,
@@ -368,7 +399,7 @@ impl<'a> Parser<'a> {
             if self.eat("[") {
                 let index = self.parse_expr()?;
                 if !self.eat("]") {
-                    bail!("期望 ]");
+                    bail!("期望 ]（{}）；下一步：补齐下标的闭合中括号", self.here());
                 }
                 e = Expr::Index {
                     obj: Box::new(e),
@@ -385,7 +416,7 @@ impl<'a> Parser<'a> {
                 continue;
             }
             if self.src[self.pos..].starts_with("=>") {
-                bail!("{UNSUPPORTED_HINT}（箭头函数）");
+                bail!("{UNSUPPORTED_HINT}（箭头函数，{}）", self.here());
             }
             break;
         }
@@ -405,7 +436,10 @@ impl<'a> Parser<'a> {
                 break;
             }
             if !self.eat(",") {
-                bail!("期望 , 或 )");
+                bail!(
+                    "期望 , 或 )（{}）；下一步：实参之间用逗号，末尾闭括号",
+                    self.here()
+                );
             }
             self.skip_ws();
             if self.peek() == Some(')') {
@@ -428,7 +462,7 @@ impl<'a> Parser<'a> {
             return Ok(Expr::Lit(Value::Null));
         }
         if self.peek() == Some('`') {
-            bail!("{UNSUPPORTED_HINT}（模板字符串）");
+            bail!("{UNSUPPORTED_HINT}（模板字符串，{}）", self.here());
         }
         if self.eat("{") {
             return self.parse_object();
@@ -439,7 +473,10 @@ impl<'a> Parser<'a> {
         if self.eat("(") {
             let e = self.parse_expr()?;
             if !self.eat(")") {
-                bail!("期望 )");
+                bail!(
+                    "期望 )（{}）；下一步：补齐括号；stdin 模式会攒到括号配平才发送",
+                    self.here()
+                );
             }
             return Ok(e);
         }
@@ -447,7 +484,10 @@ impl<'a> Parser<'a> {
             Some('"') | Some('\'') => Ok(Expr::Lit(Value::String(self.parse_string()?))),
             Some(c) if c.is_ascii_digit() || c == '-' => Ok(Expr::Lit(self.parse_number()?)),
             Some(c) if is_ident_start(c) => Ok(Expr::Ident(self.parse_ident()?)),
-            other => bail!("意外 token {other:?}；{UNSUPPORTED_HINT}"),
+            other => bail!(
+                "意外 token {other:?}（{}）；方言是值语言，没有运算符；下一步：计算放 Runtime.evaluate 的 expression，宿主侧直接写字面量",
+                self.here()
+            ),
         }
     }
 
@@ -464,7 +504,10 @@ impl<'a> Parser<'a> {
                 self.parse_ident()?
             };
             if !self.eat(":") {
-                bail!("期望 :");
+                bail!(
+                    "期望 :（键 {key} 后，{}）；下一步：对象字面量写成 {{key: value}}",
+                    self.here()
+                );
             }
             let val = self.parse_expr()?;
             kvs.push((key, val));
@@ -503,7 +546,10 @@ impl<'a> Parser<'a> {
         let start = self.pos;
         if let Some(c) = self.peek() {
             if !is_ident_start(c) {
-                bail!("期望标识符");
+                bail!(
+                    "期望标识符（{}）；下一步：成员访问写 .prop，属性名限字母数字下划线",
+                    self.here()
+                );
             }
             self.pos += c.len_utf8();
         }
@@ -519,20 +565,32 @@ impl<'a> Parser<'a> {
 
     fn parse_string(&mut self) -> Result<String> {
         self.skip_ws();
-        let q = self.peek().ok_or_else(|| anyhow!("期望字符串"))?;
+        let q = self.peek().ok_or_else(|| {
+            anyhow!(
+                "期望字符串（{}）；下一步：字符串用成对单/双引号",
+                self.here()
+            )
+        })?;
         if q != '"' && q != '\'' {
-            bail!("期望字符串");
+            bail!(
+                "期望字符串（{}）；下一步：字符串用成对单/双引号",
+                self.here()
+            );
         }
         self.pos += 1;
         let mut out = String::new();
         loop {
-            let c = self.peek().ok_or_else(|| anyhow!("未闭合字符串"))?;
+            let c = self
+                .peek()
+                .ok_or_else(|| anyhow!("未闭合字符串（{}）；下一步：补上结尾引号", self.here()))?;
             self.pos += c.len_utf8();
             if c == q {
                 break;
             }
             if c == '\\' {
-                let n = self.peek().ok_or_else(|| anyhow!("未闭合字符串"))?;
+                let n = self.peek().ok_or_else(|| {
+                    anyhow!("未闭合字符串（{}）；下一步：补上结尾引号", self.here())
+                })?;
                 self.pos += n.len_utf8();
                 out.push(match n {
                     'n' => '\n',

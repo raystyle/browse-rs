@@ -58,6 +58,11 @@
       "docs": "语句：声明、表达式或 return。"
     },
     {
+      "path": "browse_core::parser::loc",
+      "kind": "function",
+      "docs": "把字节偏移换算成「行L:列C」（错误定位用，CTA 的一半是位置）。\n\n# Examples\n\n```\nlet two_lines = concat!(\"ab\", '\\n', \"cd\");\nassert_eq!(browse_core::parser::loc(two_lines, 4), \"行2:列2\");\nassert_eq!(browse_core::parser::loc(\"abc\", 0), \"行1:列1\");\n```"
+    },
+    {
       "path": "browse_core::parser::parse_script",
       "kind": "function",
       "docs": "解析整段片段为语句列表（先剥 `//` 注释）。\n\n# Errors\n\n- 含方言外语法（见 [`UNSUPPORTED_HINT`]）。\n- token 残缺（未闭合字符串、缺 `=` / `]` / `,` 等），错误信息带停住的位置。\n- 末尾有解析不掉的余量。\n\n# Examples\n\n```\nuse browse_core::parser::{parse_script, Stmt};\n\nlet stmts = parse_script(\"const n = 1\").unwrap();\nassert!(matches!(stmts[0], Stmt::Let { .. }));\nassert!(parse_script(\"if (x) { y() }\").is_err()); // 方言外\n```"

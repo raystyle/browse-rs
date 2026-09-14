@@ -137,6 +137,7 @@ browser-harness-js 片段方言的语法分析器（纯函数）。
 
 ## Functions
 
+- `loc` — 把字节偏移换算成「行L:列C」（错误定位用，CTA 的一半是位置）。
 - `parse_script` — 解析整段片段为语句列表（先剥 `//` 注释）。
 - `render` — 语句列表回显成源码（诊断与 doctest 用，非规范格式化器）。
 - `snippet_complete` — 片段是否括号配平（stdin/TTY 增量读入用：配平才送求值）。

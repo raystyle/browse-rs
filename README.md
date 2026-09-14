@@ -35,6 +35,9 @@ browse --serve [--bind host:port]    # 前台跑 daemon
 环境变量：`BROWSE_PORT`（daemon 端口，默认 9880）、`BROWSE_CHROME`（chrome.exe 路径）、`BROWSE_CDP_WS`（钉死连接）、`BROWSE_EVAL_TIMEOUT`（秒，默认 300）。
 
 退出码：`0` 成功 / `1` 执行失败 / `2` 用法错；错误串形态 `browse: <下一步指令>` 进 stderr。
+方言错误一律 CTA 三段式：`诊断（行L:列C）；下一步：<可照抄的写法或命令>`
+（如 `未定义变量 tabs；下一步：先在前一条片段里 const tabs = <值>`），
+由 `tests/dialect_errors.rs` 契约锁定。
 
 ## 片段方言（与 browser-harness-js 对齐）
 

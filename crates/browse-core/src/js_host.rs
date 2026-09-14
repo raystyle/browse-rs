@@ -101,7 +101,9 @@ impl JsHost {
                         .await
                         .get(name)
                         .cloned()
-                        .ok_or_else(|| anyhow!("未定义变量 {name}"))
+                        .ok_or_else(|| anyhow!(
+                            "未定义变量 {name}；下一步：先在前一条片段里 const {name} = <值>（变量跨调用持久），或检查拼写"
+                        ))
                 }
                 Expr::Object(kvs) => {
                     let mut m = Map::new();
@@ -167,7 +169,11 @@ impl JsHost {
                     }
                     return self.call_session(prop, argv).await;
                 }
-                bail!("不能调用 {}.{}", preview(&o), prop)
+                bail!(
+                    "不能调用 {}.{}；下一步：可调用的是宿主全局函数或 session.<Domain>.<method>(params)",
+                    preview(&o),
+                    prop
+                )
             }
             _ => bail!("非法调用"),
         }
@@ -203,7 +209,9 @@ impl JsHost {
                 eprintln!("{}", preview(&argv.first().cloned().unwrap_or(Value::Null)));
                 Ok(Value::Null)
             }
-            other => bail!("未知函数 {other}"),
+            other => bail!(
+                "未知函数 {other}；下一步：可用全局 listPageTargets()/resolveWsUrl()/detectBrowsers()/print(x)；CDP 走 session.<Domain>.<method>(params)"
+            ),
         }
     }
 
@@ -221,7 +229,9 @@ impl JsHost {
                 let id = argv
                     .first()
                     .and_then(Value::as_str)
-                    .ok_or_else(|| anyhow!("session.use(targetId) 需要字符串"))?;
+                    .ok_or_else(|| anyhow!(
+                        "session.use 需要 targetId 字符串；下一步：session.use(tabs[0].targetId)，先 const tabs = await listPageTargets()"
+                    ))?;
                 let sid = self.session.use_target(id).await?;
                 Ok(json!(sid))
             }
@@ -229,7 +239,9 @@ impl JsHost {
                 let ev = argv
                     .first()
                     .and_then(Value::as_str)
-                    .ok_or_else(|| anyhow!("waitFor(method, pred?, timeoutMs?)"))?;
+                    .ok_or_else(|| anyhow!(
+                        "waitFor 缺 method 字符串；下一步：await session.waitFor(\"Page.loadEventFired\", undefined, 15000)"
+                    ))?;
                 let ms = argv
                     .get(2)
                     .and_then(Value::as_u64)
@@ -241,7 +253,9 @@ impl JsHost {
                 let method = argv
                     .first()
                     .and_then(Value::as_str)
-                    .ok_or_else(|| anyhow!("session.call(method, params?)"))?;
+                    .ok_or_else(|| anyhow!(
+                        "session.call 缺 method 字符串；下一步：await session.call(\"Page.navigate\", {{url:\"https://example.com\"}})"
+                    ))?;
                 let params = argv.get(1).cloned().unwrap_or(json!({}));
                 self.session.call(method, params).await
             }
@@ -260,16 +274,22 @@ impl JsHost {
                 let m = argv
                     .first()
                     .and_then(Value::as_str)
-                    .ok_or_else(|| anyhow!("session.peekEvents(method, n?) 需要 method 字符串"))?;
+                    .ok_or_else(|| anyhow!(
+                        "peekEvents 缺 method 字符串；下一步：await session.peekEvents(\"Page.frameStartedLoading\", 3)"
+                    ))?;
                 let n = argv.get(1).and_then(Value::as_u64).unwrap_or(1) as usize;
                 Ok(Value::Array(self.session.peek_events(m, n).await))
             }
             "peekEventsSince" => {
                 let m = argv.first().and_then(Value::as_str).ok_or_else(|| {
-                    anyhow!("session.peekEventsSince(method, sinceSeq, n?) 需要 method 与 sinceSeq")
+                    anyhow!(
+                        "peekEventsSince 缺 method 字符串；下一步：await session.peekEventsSince(\"Network.requestWillBeSent\", 0, 5)（首拍 sinceSeq 用 0）"
+                    )
                 })?;
                 let since = argv.get(1).and_then(Value::as_u64).ok_or_else(|| {
-                    anyhow!("peekEventsSince 第二参要是 seq 数字（上一拍最后一条的 seq）")
+                    anyhow!(
+                        "peekEventsSince 第二参要是 seq 数字；下一步：用上一拍最后一条事件的 seq（首拍用 0）"
+                    )
                 })?;
                 let n = argv.get(2).and_then(Value::as_u64).unwrap_or(1) as usize;
                 Ok(Value::Array(
@@ -278,10 +298,14 @@ impl JsHost {
             }
             "findEvents" => {
                 let m = argv.first().and_then(Value::as_str).ok_or_else(|| {
-                    anyhow!("session.findEvents(method, path, value, n?) 需要 method、path、value")
+                    anyhow!(
+                        "findEvents 缺 method 字符串；下一步：await session.findEvents(\"Network.responseReceived\", \"params.response.status\", 200, 1)"
+                    )
                 })?;
                 let path = argv.get(1).and_then(Value::as_str).ok_or_else(|| {
-                    anyhow!("findEvents 第二参要是点分路径字符串，如 \"params.requestId\"")
+                    anyhow!(
+                        "findEvents 第二参要是点分路径字符串；下一步：例如 \"params.requestId\"、\"params.response.status\""
+                    )
                 })?;
                 let val = argv.get(2).cloned().unwrap_or(Value::Null);
                 let n = argv.get(3).and_then(Value::as_u64).unwrap_or(1) as usize;
@@ -289,7 +313,9 @@ impl JsHost {
                     self.session.find_events(m, path, &val, n).await,
                 ))
             }
-            other => bail!("未知 session.{other}"),
+            other => bail!(
+                "未知 session.{other}；下一步：宿主面 connect/close/use/setActiveSession/waitFor/call/peekEvents/peekEventsSince/findEvents/isConnected/getActiveSession；CDP 域写 session.<Domain>.<method>(params)"
+            ),
         }
     }
 }
