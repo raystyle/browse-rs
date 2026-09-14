@@ -54,8 +54,12 @@ return (await session.Runtime.evaluate({expression:"document.title", returnByVal
 宿主全局：`listPageTargets()` / `resolveWsUrl(opts?)` / `detectBrowsers()` /
 `print(x)`。session 方法族：`connect`（支持 `timeoutMs`，等 Allow 给 30000）/
 `use` / `close`（断开不关浏览器，可重连）/ `setActiveSession` / `waitFor` /
-`call` / `peekEvents(method, n?)`（非破坏窥视事件缓冲，官方 `onEvent` 的
-无函数方言等价面）/ `isConnected` / `getActiveSession`。
+`call` / `isConnected` / `getActiveSession`。事件家族：`peekEvents(method, n?)`
+（非破坏窥视，官方 `onEvent` 的无函数方言等价面）、
+`peekEventsSince(method, sinceSeq, n?)`（seq 游标增量轮询，不重看旧事件）、
+`findEvents(method, "params.requestId", <值>, n?)`（点分路径等值过滤，
+挑特定请求/帧的事件）。事件进缓冲即盖单调 `seq`，waitFor/peek 拿到的
+事件自带游标。
 
 ## 与样例（browser-harness-rs）的差异
 

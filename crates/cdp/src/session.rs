@@ -73,6 +73,7 @@ pub struct Session {
     target_id: Mutex<Option<String>>,
     own_targets: Arc<Mutex<HashSet<String>>>,
     connected: AtomicBool,
+    next_seq: Arc<AtomicI64>,
 }
 
 impl Session {
@@ -94,6 +95,7 @@ impl Session {
             target_id: Mutex::new(None),
             own_targets: Arc::new(Mutex::new(HashSet::new())),
             connected: AtomicBool::new(false),
+            next_seq: Arc::new(AtomicI64::new(1)),
         })
     }
 
@@ -172,12 +174,13 @@ impl Session {
 
         let pending_r = self.pending.clone();
         let events_r = self.events.clone();
+        let seq_r = self.next_seq.clone();
         let connected = Arc::new(AtomicBool::new(true));
         let flag = connected.clone();
         tokio::spawn(async move {
             while let Some(Ok(Message::Text(t))) = read.next().await {
                 if let Ok(v) = serde_json::from_str::<Value>(&t) {
-                    route(v, &pending_r, &events_r).await;
+                    route(v, &pending_r, &events_r, &seq_r).await;
                 }
             }
             flag.store(false, Ordering::Relaxed);
@@ -226,6 +229,7 @@ impl Session {
 
         let pending_r = self.pending.clone();
         let events_r = self.events.clone();
+        let seq_r = self.next_seq.clone();
         let connected = Arc::new(AtomicBool::new(true));
         let flag = connected.clone();
         let read = Arc::new(std::sync::Mutex::new(read));
@@ -248,7 +252,7 @@ impl Session {
                 while let Some(pos) = carry.iter().position(|&c| c == 0) {
                     let frame: Vec<u8> = carry.drain(..=pos).collect();
                     if let Ok(v) = serde_json::from_slice(&frame[..frame.len() - 1]) {
-                        route(v, &pending_r, &events_r).await;
+                        route(v, &pending_r, &events_r, &seq_r).await;
                     }
                 }
             }
@@ -444,12 +448,56 @@ impl Session {
     /// 非破坏窥视事件缓冲：返回 `method` 匹配的前 `n` 条（不消费，
     /// `wait_for` 仍能取到它们）。给 agent 轮询消费事件流用，
     /// 是官方 `onEvent` 回调在方言（无函数）下的等价面。
+    ///
+    /// 事件自带 [`Session::peek_events_since`] 用的 `seq` 游标。
     pub async fn peek_events(&self, method: &str, n: usize) -> Vec<Value> {
         self.events
             .lock()
             .await
             .iter()
             .filter(|e| e.get("method").and_then(|m| m.as_str()) == Some(method))
+            .take(n)
+            .cloned()
+            .collect()
+    }
+
+    /// 增量窥视：只回 `seq > since_seq` 的匹配事件（非破坏）。
+    /// 轮询模式：首拍 `since_seq=0`，之后用上一拍最后一条的 `seq`，
+    /// 不重复看旧事件。被环形淘汰的事件自然跳过。
+    pub async fn peek_events_since(&self, method: &str, since_seq: u64, n: usize) -> Vec<Value> {
+        self.events
+            .lock()
+            .await
+            .iter()
+            .filter(|e| {
+                e.get("method").and_then(|m| m.as_str()) == Some(method)
+                    && e.get("seq")
+                        .and_then(Value::as_u64)
+                        .is_some_and(|s| s > since_seq)
+            })
+            .take(n)
+            .cloned()
+            .collect()
+    }
+
+    /// 等值过滤窥视：`method` 匹配且 `path` 点分路径（如 `params.requestId`）
+    /// 指到的值 `==` `value` 的前 `n` 条（非破坏）。方言无谓词函数，
+    /// 这是「挑特定 requestId / 特定 frame 的事件」的结构化等价面。
+    pub async fn find_events(
+        &self,
+        method: &str,
+        path: &str,
+        value: &Value,
+        n: usize,
+    ) -> Vec<Value> {
+        self.events
+            .lock()
+            .await
+            .iter()
+            .filter(|e| {
+                e.get("method").and_then(|m| m.as_str()) == Some(method)
+                    && json_path(e, path) == Some(value)
+            })
             .take(n)
             .cloned()
             .collect()
@@ -481,22 +529,37 @@ impl Session {
 }
 
 /// 把一条入站 JSON-RPC 消息路由到 pending 应答或事件缓冲（WS/管道共用）。
+/// 进缓冲的事件盖上单调 `seq`（从 1 起）：`waitFor`/`peek` 拿到的事件自带
+/// 游标，供 [`Session::peek_events_since`] 增量轮询。
 async fn route(
-    v: Value,
+    mut v: Value,
     pending: &Arc<Mutex<HashMap<i64, oneshot::Sender<Value>>>>,
     events: &Arc<Mutex<VecDeque<Value>>>,
+    next_seq: &AtomicI64,
 ) {
     if let Some(id) = v.get("id").and_then(|x| x.as_i64()) {
         if let Some(tx) = pending.lock().await.remove(&id) {
             let _ = tx.send(v);
         }
     } else if v.get("method").is_some() {
+        let seq = next_seq.fetch_add(1, Ordering::Relaxed);
+        if let Value::Object(map) = &mut v {
+            map.insert("seq".into(), json!(seq));
+        }
         let mut evs = events.lock().await;
         if evs.len() >= EVENT_BUFFER_CAP {
             evs.pop_front();
         }
         evs.push_back(v);
     }
+}
+
+/// 按点分路径取 JSON 子值：`json_path(v, "params.requestId")`。
+/// 段名按对象字段取（空段跳过，空路径返回整值）；路径不存在返回 `None`。
+fn json_path<'a>(v: &'a Value, path: &str) -> Option<&'a Value> {
+    path.split('.')
+        .filter(|seg| !seg.is_empty())
+        .try_fold(v, |cur, seg| cur.get(seg))
 }
 
 /// 方法是否属于 browser 端点域（不附 `sessionId`）。
@@ -578,7 +641,7 @@ mod tests {
         let s = Session::new();
         let pending = Arc::new(Mutex::new(HashMap::new()));
         for i in 0..(EVENT_BUFFER_CAP + 10) {
-            route(ev("X.y", i as f64), &pending, &s.events).await;
+            route(ev("X.y", i as f64), &pending, &s.events, &s.next_seq).await;
         }
         let len = s.events.lock().await.len();
         assert_eq!(len, EVENT_BUFFER_CAP, "容量封顶");
@@ -609,5 +672,117 @@ mod tests {
         assert!(s.is_connected());
         s.close().await;
         assert!(!s.is_connected());
+    }
+
+    async fn route_all(s: &Session, events: Vec<Value>) {
+        let pending = Arc::new(Mutex::new(HashMap::new()));
+        for e in events {
+            route(e, &pending, &s.events, &s.next_seq).await;
+        }
+    }
+
+    /// seq 从 1 起单调递增；peekEventsSince 严格大于边界、增量不重看。
+    #[tokio::test]
+    async fn seq_stamps_and_since_incremental() {
+        let s = Session::new();
+        route_all(&s, vec![ev("N.a", 1.0), ev("N.a", 2.0), ev("N.a", 3.0)]).await;
+
+        let first = s.peek_events("N.a", 10).await;
+        let seqs: Vec<u64> = first
+            .iter()
+            .map(|e| e.get("seq").and_then(Value::as_u64).unwrap_or(0))
+            .collect();
+        assert_eq!(seqs, vec![1, 2, 3], "seq 从 1 起单调");
+
+        // since 严格大于：since=1 -> 只见 2,3
+        let after1 = s.peek_events_since("N.a", 1, 10).await;
+        assert_eq!(after1.len(), 2);
+        assert_eq!(
+            after1[0]
+                .pointer("/params/timestamp")
+                .and_then(Value::as_f64),
+            Some(2.0)
+        );
+
+        // 游标推进到 2 -> 只见 3；到 3 -> 空
+        assert_eq!(s.peek_events_since("N.a", 2, 10).await.len(), 1);
+        assert_eq!(s.peek_events_since("N.a", 3, 10).await.len(), 0);
+        // 不匹配 method 的 since 查询为空
+        assert_eq!(s.peek_events_since("别的.事件", 0, 10).await.len(), 0);
+    }
+
+    /// findEvents：method + 点分路径等值过滤，命中与不命中各验。
+    #[tokio::test]
+    async fn find_events_by_path_value() {
+        let s = Session::new();
+        let mk = |rid: &str, status: i64| {
+            json!({ "method": "Network.responseReceived",
+                    "params": { "requestId": rid, "response": { "status": status } } })
+        };
+        route_all(
+            &s,
+            vec![mk("AAA.1", 200), mk("BBB.2", 404), mk("AAA.3", 500)],
+        )
+        .await;
+
+        let hit = s
+            .find_events(
+                "Network.responseReceived",
+                "params.requestId",
+                &json!("AAA.1"),
+                5,
+            )
+            .await;
+        assert_eq!(hit.len(), 1);
+        assert_eq!(
+            hit[0]
+                .pointer("/params/response/status")
+                .and_then(Value::as_i64),
+            Some(200)
+        );
+
+        // 嵌套路径 + 数字等值
+        let not_found = s
+            .find_events(
+                "Network.responseReceived",
+                "params.response.status",
+                &json!(404),
+                5,
+            )
+            .await;
+        assert_eq!(not_found.len(), 1);
+        assert_eq!(
+            not_found[0].get("params").and_then(|p| p.get("requestId")),
+            Some(&json!("BBB.2"))
+        );
+
+        // 路径不存在 -> 不命中；method 不匹配 -> 不命中
+        assert_eq!(
+            s.find_events(
+                "Network.responseReceived",
+                "params.没有这字段",
+                &json!(1),
+                5
+            )
+            .await
+            .len(),
+            0
+        );
+        assert_eq!(
+            s.find_events("别的.事件", "params.requestId", &json!("AAA.1"), 5)
+                .await
+                .len(),
+            0
+        );
+    }
+
+    /// json_path 点分链与缺失行为。
+    #[test]
+    fn json_path_walks_and_misses() {
+        let v = json!({ "params": { "response": { "status": 301 } } });
+        assert_eq!(json_path(&v, "params.response.status"), Some(&json!(301)));
+        assert_eq!(json_path(&v, "params"), v.get("params"));
+        assert_eq!(json_path(&v, "params.nope.status"), None);
+        assert_eq!(json_path(&v, ""), Some(&v));
     }
 }

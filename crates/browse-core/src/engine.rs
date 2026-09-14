@@ -261,16 +261,28 @@ impl Engine {
         let profile = engine_profile_dir();
         let child = cdp_spawn::spawn_engine(&chrome, &profile, headless)?;
         let pid = child.id();
-        let ws = cdp_spawn::wait_devtools_ready(&profile)
-            .await
-            .with_context(|| format!("spawn {} 后等调试口", chrome.display()))?;
-        self.session
+        // spawn 之后的任何失败都必须杀掉 child：std Child 的 Drop 不杀进程，
+        // 丢句柄 = 孤儿 chrome 锁死 profile，后续 spawn 全挂
+        macro_rules! bail_kill {
+            ($e:expr) => {{
+                let _ = cdp_spawn::terminate_pid(pid);
+                return Err($e);
+            }};
+        }
+        let ws = match cdp_spawn::wait_devtools_ready(&profile).await {
+            Ok(ws) => ws,
+            Err(e) => bail_kill!(e.context(format!("spawn {} 后等调试口", chrome.display()))),
+        };
+        if let Err(e) = self
+            .session
             .connect_opts(ConnectOptions {
                 ws_url: Some(ws.clone()),
                 ..Default::default()
             })
             .await
-            .context("连接自起引擎")?;
+        {
+            bail_kill!(e.context("连接自起引擎"));
+        }
         *self.inner.lock().await = EngineInner {
             source: EngineSource::Spawned {
                 ws_url: Some(ws),
@@ -283,7 +295,10 @@ impl Engine {
             child: Some(child),
         };
         // spawn 分支自己 attach（ensure 的统一 attach 拿不到 child 句柄归属）
-        self.attach_first_page().await?;
+        if let Err(e) = self.attach_first_page().await {
+            let _ = self.shutdown().await;
+            return Err(e);
+        }
         Ok(self.source().await)
     }
 
@@ -313,7 +328,10 @@ impl Engine {
             },
             child: Some(engine.child),
         };
-        self.attach_first_page().await?;
+        if let Err(e) = self.attach_first_page().await {
+            let _ = self.shutdown().await;
+            return Err(e);
+        }
         Ok(self.source().await)
     }
 

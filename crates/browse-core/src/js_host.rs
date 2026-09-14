@@ -264,6 +264,31 @@ impl JsHost {
                 let n = argv.get(1).and_then(Value::as_u64).unwrap_or(1) as usize;
                 Ok(Value::Array(self.session.peek_events(m, n).await))
             }
+            "peekEventsSince" => {
+                let m = argv.first().and_then(Value::as_str).ok_or_else(|| {
+                    anyhow!("session.peekEventsSince(method, sinceSeq, n?) 需要 method 与 sinceSeq")
+                })?;
+                let since = argv.get(1).and_then(Value::as_u64).ok_or_else(|| {
+                    anyhow!("peekEventsSince 第二参要是 seq 数字（上一拍最后一条的 seq）")
+                })?;
+                let n = argv.get(2).and_then(Value::as_u64).unwrap_or(1) as usize;
+                Ok(Value::Array(
+                    self.session.peek_events_since(m, since, n).await,
+                ))
+            }
+            "findEvents" => {
+                let m = argv.first().and_then(Value::as_str).ok_or_else(|| {
+                    anyhow!("session.findEvents(method, path, value, n?) 需要 method、path、value")
+                })?;
+                let path = argv.get(1).and_then(Value::as_str).ok_or_else(|| {
+                    anyhow!("findEvents 第二参要是点分路径字符串，如 \"params.requestId\"")
+                })?;
+                let val = argv.get(2).cloned().unwrap_or(Value::Null);
+                let n = argv.get(3).and_then(Value::as_u64).unwrap_or(1) as usize;
+                Ok(Value::Array(
+                    self.session.find_events(m, path, &val, n).await,
+                ))
+            }
             other => bail!("未知 session.{other}"),
         }
     }

@@ -66,6 +66,33 @@ async fn exercise(engine: &Engine, host: &JsHost, expect_channel: &str) {
         peeked.as_array().is_some_and(|a| !a.is_empty()),
         "peek 应见到 frameStartedLoading: {peeked}"
     );
+    // seq 盖戳 + 增量轮询：记下当前游标，再导航一次，since 只见新事件
+    let cursor = peeked
+        .as_array()
+        .and_then(|a| a.last())
+        .and_then(|e| e.get("seq").and_then(serde_json::Value::as_u64))
+        .expect("事件应带 seq");
+    host.eval_snippet(
+        r#"await session.Page.navigate({url:"data:text/html,<title>browse-e2e-2</title>"})"#,
+    )
+    .await
+    .expect("第三次导航");
+    let fresh = host
+        .eval_snippet(&format!(
+            r#"return await session.peekEventsSince("Page.frameStartedLoading", {cursor}, 5)"#
+        ))
+        .await
+        .expect("peekEventsSince");
+    let arr = fresh.as_array().expect("数组");
+    assert!(!arr.is_empty(), "since 之后应有新事件");
+    assert!(
+        arr.iter().all(|e| {
+            e.get("seq")
+                .and_then(serde_json::Value::as_u64)
+                .is_some_and(|s| s > cursor)
+        }),
+        "since 返回的事件 seq 必须全部大于游标"
+    );
     host.eval_snippet(r#"await session.waitFor("Page.frameStartedLoading", undefined, 15000)"#)
         .await
         .expect("peek 之后 waitFor 仍取得到（非破坏）");
