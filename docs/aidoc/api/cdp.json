@@ -8,14 +8,24 @@
       "docs": "连接线索到 WebSocket URL 的解析：`wsUrl` / `port` / `profileDir` 三条路。\n\nChrome 144+ 对默认 profile 的 HTTP `/json` 端点可能不服务，\n`DevToolsActivePort` 文件（user-data 目录根下，首行端口、次行 WS 路径）\n是可靠兜底。clean-chrome 无参数启动即开 9222，正常走 `/json/version`。"
     },
     {
+      "path": "cdp::discovery::DetectedBrowser",
+      "kind": "struct",
+      "docs": "一个可附着浏览器的候选描述（`detect_browsers` 的产物）。"
+    },
+    {
       "path": "cdp::discovery::default_profile_dirs",
       "kind": "function",
       "docs": "clean-chrome / Chromium / Chrome 的默认 user-data 目录（按探测优先序）。\n\nclean-chrome 是 Chromium 品牌，profile 在 `%LOCALAPPDATA%\\Chromium\\User Data`。"
     },
     {
+      "path": "cdp::discovery::detect_browsers",
+      "kind": "function",
+      "docs": "扫默认 profile 目录列出所有可附着候选（对齐官方 harness 的\n`detectBrowsers()`）：读各目录的 `DevToolsActivePort`，按 mtime 降序\n（最近启动优先）。同步、零网络。\n\n# Examples\n\n```no_run\n# async fn demo() {\nfor b in cdp::discovery::detect_browsers() {\n    println!(\"{} port={} mtime={}\", b.profile_dir.display(), b.port, b.mtime_ms);\n}\n# }\n```"
+    },
+    {
       "path": "cdp::discovery::http_version_ws_url",
       "kind": "function",
-      "docs": "GET `<http>/json/version` 取 `webSocketDebuggerUrl`。\n\n# Errors\n\n请求失败、非 JSON、或缺 `webSocketDebuggerUrl` 字段。"
+      "docs": "GET `<http>/json/version` 取 `webSocketDebuggerUrl`（自带 `timeout` 超时）。\n\n# Errors\n\n请求失败、非 JSON、或缺 `webSocketDebuggerUrl` 字段。"
     },
     {
       "path": "cdp::discovery::parse_port",
@@ -30,7 +40,7 @@
     {
       "path": "cdp::discovery::resolve_ws_url",
       "kind": "function",
-      "docs": "解析 [`super::ConnectOptions`] 为 WS URL。`profileDir` 路径会轮询等文件出现\n（Chrome 启动到写文件有窗口期），其余立即解析。\n\n# Errors\n\n- `wsUrl` 是 http 端点但 `/json/version` 请求失败或没有 `webSocketDebuggerUrl`。\n- `profileDir` 在 5 秒内读不到合法的 `DevToolsActivePort`。\n- 三线索全空时按默认端口 9222 走 `/json/version`，失败同上。"
+      "docs": "解析 [`super::ConnectOptions`] 为 WS URL。`profileDir` 路径会轮询等文件出现\n（Chrome 启动到写文件有窗口期），其余立即解析；整体超时由\n[`super::ConnectOptions::timeout_ms`] 控制（缺省 5 秒）。\n\n# Errors\n\n- `wsUrl` 是 http 端点但 `/json/version` 请求失败或没有 `webSocketDebuggerUrl`。\n- `profileDir` 超时内读不到合法的 `DevToolsActivePort`。\n- 三线索全空时按默认端口 9222 走 `/json/version`，失败同上。"
     },
     {
       "path": "cdp::discovery::wait_active_port_file",

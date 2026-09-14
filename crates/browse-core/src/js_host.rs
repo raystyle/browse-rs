@@ -184,6 +184,21 @@ impl JsHost {
                 let u = cdp::resolve_ws_url(&opts).await?;
                 Ok(json!(u))
             }
+            "detectBrowsers" => {
+                let hits = cdp::discovery::detect_browsers();
+                Ok(Value::Array(
+                    hits.into_iter()
+                        .map(|b| {
+                            json!({
+                                "profileDir": b.profile_dir.display().to_string(),
+                                "port": b.port,
+                                "wsUrl": b.ws_url,
+                                "mtimeMs": b.mtime_ms as u64,
+                            })
+                        })
+                        .collect(),
+                ))
+            }
             "print" => {
                 eprintln!("{}", preview(&argv.first().cloned().unwrap_or(Value::Null)));
                 Ok(Value::Null)
@@ -232,6 +247,23 @@ impl JsHost {
             }
             "isConnected" => Ok(json!(self.session.is_connected())),
             "getActiveSession" => Ok(json!(self.session.get_active_session().await)),
+            "close" => {
+                self.session.close().await;
+                Ok(json!(true))
+            }
+            "setActiveSession" => {
+                let sid = argv.first().and_then(Value::as_str).map(str::to_string);
+                self.session.set_active_session(sid).await;
+                Ok(json!(true))
+            }
+            "peekEvents" => {
+                let m = argv
+                    .first()
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| anyhow!("session.peekEvents(method, n?) 需要 method 字符串"))?;
+                let n = argv.get(1).and_then(Value::as_u64).unwrap_or(1) as usize;
+                Ok(Value::Array(self.session.peek_events(m, n).await))
+            }
             other => bail!("未知 session.{other}"),
         }
     }
@@ -268,6 +300,7 @@ fn connect_opts(v: Option<&Value>) -> ConnectOptions {
             .get("profileDir")
             .and_then(Value::as_str)
             .map(|s| s.to_string()),
+        timeout_ms: v.get("timeoutMs").and_then(Value::as_u64),
     }
 }
 

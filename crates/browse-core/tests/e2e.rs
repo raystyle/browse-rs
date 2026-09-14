@@ -45,6 +45,31 @@ async fn exercise(engine: &Engine, host: &JsHost, expect_channel: &str) {
         .expect("evaluate");
     assert_eq!(title, json!("browse-e2e"));
 
+    // peekEvents 非破坏：frameStartedLoading 一定先于 frameNavigated 落缓冲，
+    // 等到后者时前者必在；peek 它不消费，waitFor 仍取得到
+    host.eval_snippet("await session.Page.enable({})")
+        .await
+        .expect("Page.enable");
+    host.eval_snippet(
+        r#"await session.Page.navigate({url:"data:text/html,<title>browse-e2e</title>"})"#,
+    )
+    .await
+    .expect("再导航");
+    host.eval_snippet(r#"await session.waitFor("Page.frameNavigated", undefined, 15000)"#)
+        .await
+        .expect("waitFor frameNavigated");
+    let peeked = host
+        .eval_snippet(r#"return await session.peekEvents("Page.frameStartedLoading", 3)"#)
+        .await
+        .expect("peekEvents");
+    assert!(
+        peeked.as_array().is_some_and(|a| !a.is_empty()),
+        "peek 应见到 frameStartedLoading: {peeked}"
+    );
+    host.eval_snippet(r#"await session.waitFor("Page.frameStartedLoading", undefined, 15000)"#)
+        .await
+        .expect("peek 之后 waitFor 仍取得到（非破坏）");
+
     // 守卫：Browser.close 必须被拦（程序级强制，与引擎来源无关）
     let blocked = host.eval_snippet("await session.Browser.close()").await;
     assert!(blocked.is_err(), "Browser.close 应被守卫拦截");

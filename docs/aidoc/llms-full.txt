@@ -46,7 +46,9 @@ browse CLI 的核心库：方言宿主、引擎策略、daemon HTTP API。
   `//` 注释。不支持：函数字面量、`if/for`、模板字符串——页面逻辑放进
   `Runtime.evaluate` 的 `expression` 字符串里。
 - [`js_host`]：方言求值器。`session.<Domain>.<method>(params)` 转发为 CDP
-  字符串调用，宿主全局 `listPageTargets` / `resolveWsUrl` / `print`。
+  字符串调用，宿主全局 `listPageTargets` / `resolveWsUrl` /
+  `detectBrowsers` / `print`，session 方法族含 `close` / `setActiveSession` /
+  `peekEvents`（非破坏事件窥视）。
 - [`engine`]：引擎策略（附着优先，缺则自起 clean-chrome 专属实例，只杀
   自己 spawn 的）与引擎状态。
 - [`server`]：daemon 的 HTTP API（POST /eval、GET /health、POST /engine/up、
@@ -225,12 +227,17 @@ Chrome 144+ 对默认 profile 的 HTTP `/json` 端点可能不服务，
 ## Functions
 
 - `default_profile_dirs` — clean-chrome / Chromium / Chrome 的默认 user-data 目录（按探测优先序）。
-- `http_version_ws_url` — GET `<http>/json/version` 取 `webSocketDebuggerUrl`。
+- `detect_browsers` — 扫默认 profile 目录列出所有可附着候选（对齐官方 harness 的
+- `http_version_ws_url` — GET `<http>/json/version` 取 `webSocketDebuggerUrl`（自带 `timeout` 超时）。
 - `parse_port` — 解析端口字面量：`"9222"`、`"http://127.0.0.1:9222"`、`"127.0.0.1:9222/"` 都出 `9222`。
 - `probe_default` — 引擎附着探测：返回本机已开调试口浏览器的 WS URL，没有则 `None`。
 - `resolve_ws_url` — 解析 [`super::ConnectOptions`] 为 WS URL。`profileDir` 路径会轮询等文件出现
 - `wait_active_port_file` — 轮询 profile 目录下的 `DevToolsActivePort`，直到超时。
 - `ws_from_active_port_text` — 从 `DevToolsActivePort` 文件文本解析 WS URL：首行端口，次行 `/devtools/...` 路径。
+
+## Types
+
+- `DetectedBrowser` — 一个可附着浏览器的候选描述（`detect_browsers` 的产物）。
 
 
 <!-- cdp/pipe.md -->

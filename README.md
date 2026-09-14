@@ -50,8 +50,12 @@ return (await session.Runtime.evaluate({expression:"document.title", returnByVal
 支持：字面量、对象、数组、成员、下标、`await`、`const/let/var`、`return`、`//` 注释。
 不支持：函数字面量、`if/for/while`、模板字符串。报错会提示把页面逻辑放进
 `Runtime.evaluate` 的 `expression` 字符串（页内是真 V8）。
-`session.<Domain>.<method>(params)` 直转 CDP 字符串调用，652 个方法无封装；
-宿主全局：`listPageTargets()` / `resolveWsUrl(opts?)` / `print(x)`。
+`session.<Domain>.<method>(params)` 直转 CDP 字符串调用，652 个方法无封装。
+宿主全局：`listPageTargets()` / `resolveWsUrl(opts?)` / `detectBrowsers()` /
+`print(x)`。session 方法族：`connect`（支持 `timeoutMs`，等 Allow 给 30000）/
+`use` / `close`（断开不关浏览器，可重连）/ `setActiveSession` / `waitFor` /
+`call` / `peekEvents(method, n?)`（非破坏窥视事件缓冲，官方 `onEvent` 的
+无函数方言等价面）/ `isConnected` / `getActiveSession`。
 
 ## 与样例（browser-harness-rs）的差异
 

@@ -55,7 +55,13 @@ pub struct ConnectOptions {
     pub port: Option<u16>,
     /// Chrome user-data 目录，读其中的 `DevToolsActivePort` 文件。
     pub profile_dir: Option<String>,
+    /// 连接超时毫秒（发现轮询 + WS 握手 + `/json/version` 请求共用）。
+    /// 缺省 5000；要等人工点 Allow 的场景给 30000。对齐官方 harness。
+    pub timeout_ms: Option<u64>,
 }
+
+/// 缺省连接超时（毫秒）。
+const DEFAULT_CONNECT_TIMEOUT_MS: u64 = 5000;
 
 /// 常驻 CDP 会话。clone `Arc<Self>` 共享同一条连接。
 pub struct Session {
@@ -96,15 +102,20 @@ impl Session {
         self.connected.load(Ordering::Relaxed)
     }
 
-    /// 按线索连接。已连接时重复调用会再开一条连接（先 [`Session::connect`] 前自查）。
+    /// 按线索连接（超时由 [`ConnectOptions::timeout_ms`] 控制，缺省 5 秒）。
+    /// 已连接时重复调用会再开一条连接（先 [`Session::connect`] 前自查）。
     ///
     /// # Errors
     ///
-    /// - WS 握手失败（浏览器没开 / 端口不对）。
-    /// - `profileDir` 下 5 秒内读不到 `DevToolsActivePort`。
+    /// - WS 握手失败或超时（浏览器没开 / 端口不对 / 等 Allow 没等到）。
+    /// - `profileDir` 下超时内读不到 `DevToolsActivePort`。
     pub async fn connect_opts(self: &Arc<Self>, opts: ConnectOptions) -> Result<()> {
         let ws = crate::discovery::resolve_ws_url(&opts).await?;
-        self.open_ws(&ws).await
+        let dur = Duration::from_millis(opts.timeout_ms.unwrap_or(DEFAULT_CONNECT_TIMEOUT_MS));
+        timeout(dur, self.open_ws(&ws))
+            .await
+            .context("ws 握手超时")??;
+        Ok(())
     }
 
     /// 按字符串连接：`ws://`/`wss://` 直用；`9222` 或 `http://127.0.0.1:9222` 解析端口；
@@ -126,7 +137,13 @@ impl Session {
             }
         } else {
             ConnectOptions {
-                ws_url: Some(crate::discovery::http_version_ws_url(url).await?),
+                ws_url: Some(
+                    crate::discovery::http_version_ws_url(
+                        url,
+                        Duration::from_millis(DEFAULT_CONNECT_TIMEOUT_MS),
+                    )
+                    .await?,
+                ),
                 ..Default::default()
             }
         };
@@ -416,6 +433,28 @@ impl Session {
             .ok_or_else(|| anyhow!("createTarget: no targetId"))
     }
 
+    /// 断开连接（不关浏览器）。丢弃发送端，写循环随之退出、socket 关闭；
+    /// `is_connected` 立即为 false。之后可重新 `connect` 或由引擎策略重拉。
+    /// 对齐官方 harness 的 `session.close()`。
+    pub async fn close(&self) {
+        *self.outgoing.lock().await = None;
+        self.connected.store(false, Ordering::Relaxed);
+    }
+
+    /// 非破坏窥视事件缓冲：返回 `method` 匹配的前 `n` 条（不消费，
+    /// `wait_for` 仍能取到它们）。给 agent 轮询消费事件流用，
+    /// 是官方 `onEvent` 回调在方言（无函数）下的等价面。
+    pub async fn peek_events(&self, method: &str, n: usize) -> Vec<Value> {
+        self.events
+            .lock()
+            .await
+            .iter()
+            .filter(|e| e.get("method").and_then(|m| m.as_str()) == Some(method))
+            .take(n)
+            .cloned()
+            .collect()
+    }
+
     /// 从环形缓冲里找第一个 `method` 事件（取出即移除）。超时报错。
     ///
     /// # Errors
@@ -470,4 +509,105 @@ async fn route(
 /// ```
 pub fn is_browser_method(method: &str) -> bool {
     BROWSER_METHODS.iter().any(|p| method.starts_with(p))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ev(method: &str, stamp: f64) -> Value {
+        json!({ "method": method, "params": { "timestamp": stamp } })
+    }
+
+    /// peek 非破坏：窥视后 wait_for 仍能取到同一条。
+    #[tokio::test]
+    async fn peek_does_not_consume() {
+        let s = Session::new();
+        s.events
+            .lock()
+            .await
+            .push_back(ev("Page.loadEventFired", 1.0));
+        s.events
+            .lock()
+            .await
+            .push_back(ev("Page.navigatedWithinDocument", 2.0));
+        s.events
+            .lock()
+            .await
+            .push_back(ev("Page.loadEventFired", 3.0));
+
+        let peeked = s.peek_events("Page.loadEventFired", 5).await;
+        assert_eq!(peeked.len(), 2);
+        assert_eq!(
+            peeked[0]
+                .pointer("/params/timestamp")
+                .and_then(Value::as_f64),
+            Some(1.0),
+            "按入队序取"
+        );
+
+        let taken = s
+            .wait_for("Page.loadEventFired", 0)
+            .await
+            .expect("peek 后 wait 仍取得到");
+        assert_eq!(
+            taken.pointer("/params/timestamp").and_then(Value::as_f64),
+            Some(1.0),
+            "wait 取的是最早的（peek 没动过缓冲）"
+        );
+    }
+
+    /// peek 的 n 截断生效。
+    #[tokio::test]
+    async fn peek_takes_n() {
+        let s = Session::new();
+        for i in 0..5 {
+            s.events
+                .lock()
+                .await
+                .push_back(ev("Network.loadingFailed", i as f64));
+        }
+        assert_eq!(s.peek_events("Network.loadingFailed", 2).await.len(), 2);
+        assert_eq!(s.peek_events("Network.loadingFailed", 0).await.len(), 0);
+        assert_eq!(s.peek_events("不存在的.事件", 3).await.len(), 0);
+    }
+
+    /// 环形上限：route 丢最老，保留最新。
+    #[tokio::test]
+    async fn ring_buffer_caps() {
+        let s = Session::new();
+        let pending = Arc::new(Mutex::new(HashMap::new()));
+        for i in 0..(EVENT_BUFFER_CAP + 10) {
+            route(ev("X.y", i as f64), &pending, &s.events).await;
+        }
+        let len = s.events.lock().await.len();
+        assert_eq!(len, EVENT_BUFFER_CAP, "容量封顶");
+        let peeked = s.peek_events("X.y", EVENT_BUFFER_CAP + 5).await;
+        assert_eq!(
+            peeked
+                .first()
+                .and_then(|v| v.pointer("/params/timestamp"))
+                .and_then(Value::as_f64),
+            Some(10.0),
+            "丢的是最老（0..=9 被挤掉），最旧保留者是 10"
+        );
+        assert_eq!(
+            peeked
+                .last()
+                .and_then(|v| v.pointer("/params/timestamp"))
+                .and_then(Value::as_f64),
+            Some((EVENT_BUFFER_CAP + 9) as f64),
+            "留的是最新"
+        );
+    }
+
+    /// close 后 is_connected 立即 false（无需等读循环退出）。
+    #[tokio::test]
+    async fn close_flips_connected() {
+        let s = Session::new();
+        s.connected.store(true, Ordering::Relaxed);
+        assert!(s.is_connected());
+        s.close().await;
+        assert!(!s.is_connected());
+    }
 }

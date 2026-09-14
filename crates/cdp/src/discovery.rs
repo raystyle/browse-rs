@@ -56,36 +56,44 @@ pub fn ws_from_active_port_text(text: &str) -> Option<String> {
 }
 
 /// 解析 [`super::ConnectOptions`] 为 WS URL。`profileDir` 路径会轮询等文件出现
-/// （Chrome 启动到写文件有窗口期），其余立即解析。
+/// （Chrome 启动到写文件有窗口期），其余立即解析；整体超时由
+/// [`super::ConnectOptions::timeout_ms`] 控制（缺省 5 秒）。
 ///
 /// # Errors
 ///
 /// - `wsUrl` 是 http 端点但 `/json/version` 请求失败或没有 `webSocketDebuggerUrl`。
-/// - `profileDir` 在 5 秒内读不到合法的 `DevToolsActivePort`。
+/// - `profileDir` 超时内读不到合法的 `DevToolsActivePort`。
 /// - 三线索全空时按默认端口 9222 走 `/json/version`，失败同上。
 pub async fn resolve_ws_url(opts: &super::ConnectOptions) -> Result<String> {
+    let dur = Duration::from_millis(opts.timeout_ms.unwrap_or(5000));
     if let Some(u) = &opts.ws_url {
         if u.starts_with("ws") {
             return Ok(u.clone());
         }
-        return http_version_ws_url(u).await;
+        return http_version_ws_url(u, dur).await;
     }
     if let Some(dir) = &opts.profile_dir {
-        return wait_active_port_file(Path::new(dir), Duration::from_secs(5)).await;
+        return wait_active_port_file(Path::new(dir), dur).await;
     }
     let port = opts.port.unwrap_or(9222);
-    http_version_ws_url(&format!("http://127.0.0.1:{port}")).await
+    http_version_ws_url(&format!("http://127.0.0.1:{port}"), dur).await
 }
 
-/// GET `<http>/json/version` 取 `webSocketDebuggerUrl`。
+/// GET `<http>/json/version` 取 `webSocketDebuggerUrl`（自带 `timeout` 超时）。
 ///
 /// # Errors
 ///
 /// 请求失败、非 JSON、或缺 `webSocketDebuggerUrl` 字段。
-pub async fn http_version_ws_url(http: &str) -> Result<String> {
+pub async fn http_version_ws_url(http: &str, timeout: Duration) -> Result<String> {
     let http = http.trim_end_matches('/');
     let url = format!("{http}/json/version");
-    let body: Value = reqwest::get(&url)
+    let client = reqwest::Client::builder()
+        .timeout(timeout)
+        .build()
+        .context("build http client")?;
+    let body: Value = client
+        .get(&url)
+        .send()
         .await
         .with_context(|| format!("GET {url}"))?
         .json()
@@ -159,4 +167,64 @@ pub async fn probe_default() -> Option<String> {
         }
     }
     None
+}
+
+/// 一个可附着浏览器的候选描述（`detect_browsers` 的产物）。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DetectedBrowser {
+    /// user-data 目录（候选来源）。
+    pub profile_dir: PathBuf,
+    /// `DevToolsActivePort` 首行端口。
+    pub port: u16,
+    /// 可直连的 browser 级 WS URL。
+    pub ws_url: String,
+    /// 端口文件 mtime 毫秒（候选排序依据：越新越可能是在跑的那个）。
+    pub mtime_ms: u128,
+}
+
+/// 扫默认 profile 目录列出所有可附着候选（对齐官方 harness 的
+/// `detectBrowsers()`）：读各目录的 `DevToolsActivePort`，按 mtime 降序
+/// （最近启动优先）。同步、零网络。
+///
+/// # Examples
+///
+/// ```no_run
+/// # async fn demo() {
+/// for b in cdp::discovery::detect_browsers() {
+///     println!("{} port={} mtime={}", b.profile_dir.display(), b.port, b.mtime_ms);
+/// }
+/// # }
+/// ```
+pub fn detect_browsers() -> Vec<DetectedBrowser> {
+    let mut hits = Vec::new();
+    for dir in default_profile_dirs() {
+        let path = dir.join("DevToolsActivePort");
+        let Ok(meta) = std::fs::metadata(&path) else {
+            continue;
+        };
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let Some(ws) = ws_from_active_port_text(&text) else {
+            continue;
+        };
+        let port = text
+            .lines()
+            .next()
+            .and_then(|l| l.trim().parse::<u16>().ok())
+            .unwrap_or(0);
+        hits.push(DetectedBrowser {
+            profile_dir: dir,
+            port,
+            ws_url: ws,
+            mtime_ms: meta
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_millis())
+                .unwrap_or(0),
+        });
+    }
+    hits.sort_by_key(|b| std::cmp::Reverse(b.mtime_ms));
+    hits
 }

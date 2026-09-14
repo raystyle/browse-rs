@@ -102,6 +102,9 @@ pub enum EngineSource {
     },
     /// 自己 spawn 的专属实例（`browse down` 会终结）。
     Spawned {
+        /// 端口态的 WS 端点（`close` 后重连用）；管道态为 `None`
+        /// （断管即浏览器自亡，只能重 spawn）。
+        ws_url: Option<String>,
         /// chrome 进程 pid。
         pid: u32,
         /// 独立 profile 目录。
@@ -167,6 +170,32 @@ impl Engine {
             if self.session.is_connected() {
                 return Ok(inner.source.clone());
             }
+        }
+        // 重连快路径：自己 spawn 的端口态引擎还活着（session.close 后的恢复），
+        // 直接重连同一实例，别丢下孤儿再开新的
+        let reconnect_ws = match self.source().await {
+            EngineSource::Spawned {
+                ws_url: Some(ws), ..
+            } => Some(ws),
+            _ => None,
+        };
+        if let Some(ws) = reconnect_ws
+            && self
+                .session
+                .connect_opts(ConnectOptions {
+                    ws_url: Some(ws),
+                    ..Default::default()
+                })
+                .await
+                .is_ok()
+        {
+            self.attach_first_page().await?;
+            return Ok(self.source().await);
+        }
+        // 到这里还挂着旧 spawn 状态（端口态连不上或管道态已亡）：先清尸再走新流程，
+        // 否则 child 句柄被覆盖丢弃，浏览器成孤儿
+        if matches!(self.source().await, EngineSource::Spawned { .. }) {
+            let _ = self.shutdown().await;
         }
         let source = match spec {
             EngineSpec::Attach { ws_url } => {
@@ -244,6 +273,7 @@ impl Engine {
             .context("连接自起引擎")?;
         *self.inner.lock().await = EngineInner {
             source: EngineSource::Spawned {
+                ws_url: Some(ws),
                 pid,
                 profile_dir: profile,
                 chrome,
@@ -274,6 +304,7 @@ impl Engine {
             .await?;
         *self.inner.lock().await = EngineInner {
             source: EngineSource::Spawned {
+                ws_url: None,
                 pid,
                 profile_dir: profile,
                 chrome,
