@@ -17,9 +17,10 @@ fn gated() -> bool {
 }
 
 async fn clean_profile() {
-    // 先收割上次被杀测试留下的引擎 chrome（只认 browse-rs 部署路径，
+    // 先收割上次被杀测试留下的引擎 chrome（只认 browse-rs 的引擎 profile，
     // 不碰用户浏览器），否则单实例 profile 锁让本次 spawn 连坐挂死
-    let _ = tokio::task::spawn_blocking(|| {
+    #[cfg(windows)]
+    let reap = || {
         let _ = std::process::Command::new("powershell")
             .args([
                 "-NoProfile",
@@ -29,8 +30,16 @@ async fn clean_profile() {
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .status();
-    })
-    .await;
+    };
+    #[cfg(unix)]
+    let reap = || {
+        let _ = std::process::Command::new("pkill")
+            .args(["-9", "-f", "\\.browse-rs/engine-profile"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+    };
+    let _ = tokio::task::spawn_blocking(reap).await;
     tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
     let dir = browse_core::paths::engine_profile_dir();
     let _ = tokio::task::spawn_blocking(move || {

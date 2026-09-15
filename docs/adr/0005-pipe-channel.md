@@ -28,10 +28,14 @@ WS 与管道共用 pending/事件/守卫/sessionId 路由，仅字节泵不同
 （`open_ws` / `connect_pipes`，后者经 blocking 线程池）。管道态免端口文件
 探测（首条调用即等待就绪），`EngineSource::Spawned.channel` 记录通道。
 2026-09-15 补记：POSIX 布线按同一契约落地（`libc` 仅 unix 目标依赖），
-本机是 Windows 只做了代码评审级验证；编译与管道单测由 CI 的 ubuntu
-作业门禁（`cargo clippy/test -p cdp`），对真机 Linux clean-chrome 的
-端到端待有环境后补验。因为断管自关已经把浏览器生命周期绑定到 daemon，
-所以管道态同时消灭了孤儿浏览器问题。
+编译与管道单测由 CI 的 ubuntu 作业门禁（`cargo clippy/test -p cdp`）。
+2026-09-15 晚再补：**真机 macOS 端到端已验**（lan-mac 的 out\Release
+50 锚构建上 `--remote-debugging-io-pipes=3,4` 双通道 e2e 全绿，含录制
+帧流）；真机 Linux（lan-ubuntu）待其工具链就绪后同法补验。顺带修掉
+两处生命周期耦合：管道泵改游离 std 线程（阻塞读不再拖死 runtime
+销毁）；引擎 chrome stdio 全显式（stderr 落 `<state>/engine.log`，
+不继承调用方句柄，调用方管道不被挟持 EOF）。因为断管自关已经把
+浏览器生命周期绑定到 daemon，所以管道态同时消灭了孤儿浏览器问题。
 
 ## Consequences
 

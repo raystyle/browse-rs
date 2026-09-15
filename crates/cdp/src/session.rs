@@ -212,6 +212,11 @@ impl Session {
     /// `connected=false`；clean-chrome 侧 pipe 断开会自行关浏览器，
     /// 生命周期与启动器绑定。
     ///
+    /// 阻塞读写跑在游离 std 线程上（不经 `spawn_blocking`）：管道对端
+    /// 沉默时 `read`/`write` 会永久阻塞，若挂在 tokio 阻塞池里，runtime
+    /// 销毁会等它到天荒地老（e2e  teardown 实测挂死）。游离线程随进程
+    /// 退出回收；管道断开（浏览器没了）后自行退出。
+    ///
     /// # Errors
     ///
     /// 仅在内部通道装配失败时出错（正常路径无网络 IO）。
@@ -219,49 +224,60 @@ impl Session {
     /// # Panics
     ///
     /// 管道泵里的锁只在「持锁线程先前已 panic」的中毒锁上 panic（实际不可达）。
-    pub async fn connect_pipes<R, W>(self: &Arc<Self>, read: R, write: W) -> Result<()>
+    pub async fn connect_pipes<R, W>(self: &Arc<Self>, mut read: R, mut write: W) -> Result<()>
     where
         R: std::io::Read + Send + 'static,
         W: std::io::Write + Send + 'static,
     {
         let (tx, mut rx) = mpsc::unbounded_channel::<Value>();
-        let write = Arc::new(std::sync::Mutex::new(write));
+        // 写泵：异步收消息，游离线程做阻塞写（对端不读时 write 会卡，
+        // 不能占 tokio 阻塞池名额也不能挡 runtime 销毁）
+        let (wbytes_tx, wbytes_rx) = std::sync::mpsc::sync_channel::<Vec<u8>>(256);
+        std::thread::Builder::new()
+            .name("cdp-pipe-write".into())
+            .spawn(move || {
+                for mut buf in wbytes_rx {
+                    buf.push(b'\0');
+                    if write.write_all(&buf).is_err() {
+                        break;
+                    }
+                }
+            })
+            .expect("pipe write thread");
         tokio::spawn(async move {
             while let Some(msg) = rx.recv().await {
-                let mut buf = msg.to_string().into_bytes();
-                buf.push(b'\0');
-                let w = write.clone();
-                let res = tokio::task::spawn_blocking(move || {
-                    w.lock().expect("pipe write lock").write_all(&buf)
-                })
-                .await;
-                if !matches!(res, Ok(Ok(()))) {
+                if wbytes_tx.send(msg.to_string().into_bytes()).is_err() {
                     break;
                 }
             }
         });
 
+        // 读泵：游离线程阻塞读，字节块过通道交异步侧切帧路由
         let pending_r = self.pending.clone();
         let events_r = self.events.clone();
         let seq_r = self.next_seq.clone();
         let connected = Arc::new(AtomicBool::new(true));
         let flag = connected.clone();
-        let read = Arc::new(std::sync::Mutex::new(read));
+        let (chunk_tx, mut chunk_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+        std::thread::Builder::new()
+            .name("cdp-pipe-read".into())
+            .spawn(move || {
+                let mut b = [0u8; 8192];
+                loop {
+                    match read.read(&mut b) {
+                        Ok(0) | Err(_) => break, // EOF / 管道断：浏览器侧没了
+                        Ok(n) => {
+                            if chunk_tx.send(b[..n].to_vec()).is_err() {
+                                break;
+                            }
+                        }
+                    }
+                }
+            })
+            .expect("pipe read thread");
         tokio::spawn(async move {
             let mut carry: Vec<u8> = Vec::new();
-            loop {
-                let r = read.clone();
-                let chunk = tokio::task::spawn_blocking(move || {
-                    let mut b = [0u8; 8192];
-                    let n = r.lock().expect("pipe read lock").read(&mut b)?;
-                    Ok::<_, std::io::Error>(b[..n].to_vec())
-                })
-                .await
-                .unwrap_or_else(|_| Err(std::io::Error::other("join")));
-                let chunk = match chunk {
-                    Ok(c) if !c.is_empty() => c,
-                    _ => break, // EOF / 管道断：浏览器侧没了
-                };
+            while let Some(chunk) = chunk_rx.recv().await {
                 carry.extend_from_slice(&chunk);
                 while let Some(pos) = carry.iter().position(|&c| c == 0) {
                     let frame: Vec<u8> = carry.drain(..=pos).collect();

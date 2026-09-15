@@ -89,6 +89,22 @@ fn fallback_paths() -> Vec<PathBuf> {
     }
 }
 
+/// 引擎 chrome 的 stdio 三路全显式：stderr 落 profile 旁的 `engine.log`，
+/// stdin/stdout 置空。绝不继承父进程句柄——引擎常比单次调用方（CLI/测试）
+/// 活得久，继承的 stderr 管道会让调用方管道永不 EOF（实测挂死过整条流水）。
+fn engine_stdio(profile_dir: &Path) -> std::process::Stdio {
+    let log = profile_dir
+        .parent()
+        .map(|p| p.join("engine.log"))
+        .unwrap_or_else(|| PathBuf::from("engine.log"));
+    std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log)
+        .map(std::process::Stdio::from)
+        .unwrap_or_else(|_| std::process::Stdio::null())
+}
+
 /// 拉起专属引擎实例。参数：可执行文件、独立 profile 目录、是否无头。
 ///
 /// 命令行：`--user-data-dir <dir> --remote-debugging-port=0 --no-first-run
@@ -97,6 +113,7 @@ fn fallback_paths() -> Vec<PathBuf> {
 /// `--no-sandbox`：SxS 部署的 clean-chrome 在本机沙箱进程打不开自身 exe
 /// （`Sandbox cannot access executable`，0x5）；引擎是自动化专属隔离实例，
 /// 不承载用户浏览面，关沙箱与 clean-chrome 验收实践一致（linux 同款）。
+/// chrome 诊断写 `<state>/engine.log`。
 ///
 /// # Errors
 ///
@@ -113,7 +130,10 @@ pub fn spawn_engine(chrome: &Path, profile_dir: &Path, headless: bool) -> Result
         .arg("--no-first-run")
         .arg("--no-default-browser-check")
         .arg("--no-sandbox")
-        .arg("about:blank");
+        .arg("about:blank")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(engine_stdio(profile_dir));
     if headless {
         cmd.arg("--headless");
     }
@@ -201,7 +221,9 @@ pub fn spawn_engine_pipes(
             .arg("--no-sandbox")
             .arg("about:blank")
             .env("CLEAN_CHROME_DEBUG", mode.as_env())
-            .stderr(std::process::Stdio::inherit());
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(engine_stdio(profile_dir));
         if headless {
             cmd.arg("--headless");
         }
@@ -265,8 +287,12 @@ pub fn spawn_engine_pipes(
             .arg("--no-sandbox")
             .arg("about:blank")
             .env("CLEAN_CHROME_DEBUG", mode.as_env())
-            // 触发 std 的 bInheritHandles=TRUE 路径，chrome 诊断顺带进 daemon 日志
-            .stderr(std::process::Stdio::inherit());
+            // chrome 诊断进 <state>/engine.log；不继承本进程句柄
+            // （stderr(Stdio::inherit) 触发 bInheritHandles=TRUE 路径，
+            // 但继承的 stderr 管道会让调用方流水永不 EOF）
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(engine_stdio(profile_dir));
         if headless {
             cmd.arg("--headless");
         }
