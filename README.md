@@ -37,7 +37,18 @@ backendNodeId 不会。引用表只保留最近一次 snapshot（整表替换）
 snapshot 时在页窗口盖 `__browse_ref_gen` 代标记，引用前核对：
 文档被导航重开即整表作废（SPA 同文档 pushState 不误伤），
 另有 `DOM.resolveNode`/零尺寸被动兜底，错误一律带「重新 snapshot」CTA，
-绝不静默点错位置。
+绝不静默点错位置。`clickRef` 带遮挡守卫（吸收 agent-browser 的 blocker
+思路）：`elementFromPoint` 命中测试，点击点被无关元素盖住（consent
+banner、modal）即拒绝并报遮挡物，同样不静默点错。
+
+对话框（吸收 agent-browser 语义）：`alert`/`beforeunload` 由常驻
+watcher 自动接受（`BROWSE_NO_AUTO_DIALOG=1` 关掉），永不阻塞 agent；
+`confirm`/`prompt` 走 `dialogStatus()` / `dialogAccept(text?)` /
+`dialogDismiss()` 显式处理：状态由 cdp 路由层截获，对话框开着时
+Input/evaluate 挂起会被 8 秒短超时拦下并给「先处理对话框」CTA，
+不烧 30 秒。另有 `selectOption(ref, value或label)` 内建下拉选择
+（设值+派发 input/change，未命中报全部可选值）、`pdf(path?)`
+无头专属存 PDF（回 `{path,bytes}`）。
 
 录制：`recordStart(opts?)` / `recordStop()`。`Page.startScreencast` 帧流
 由常驻泵任务落盘 `%USERPROFILE%\.browse-rs\record-<ts>\frame-NNNNNN.png`

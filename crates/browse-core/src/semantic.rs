@@ -122,8 +122,7 @@ pub async fn fill_input(s: &Session, selector: &str, text: &str) -> Result<Value
     }
     if m.get("tag").and_then(Value::as_str) == Some("SELECT") {
         bail!(
-            "fillInput 暂不支持 <select>；下一步：await session.Runtime.evaluate({{expression:\"document.querySelector({sel}).value='v'; document.querySelector({sel}).dispatchEvent(new Event('change',{{bubbles:true}}))\"}})",
-            sel = selector
+            "fillInput 暂不支持 <select>；下一步：先 await snapshot() 拿该下拉框的 ref，再 selectOption(ref, \"值或可见 label\")"
         );
     }
     if m.get("ro").and_then(Value::as_bool) == Some(true) {
@@ -314,12 +313,17 @@ async fn resolve_node_object(s: &Session, backend_node_id: i64) -> Result<String
     }
 }
 
-/// 按短 ref 点击：滚动可见 -> 量视口中心 -> 复用 [`click_at`] 的 trusted
-/// 鼠标事件。比 `clickAt` 省掉手工量坐标，页面重排后 ref 仍指同一节点。
+/// 按短 ref 点击：滚动可见 -> 量视口中心 -> **遮挡命中测试** -> 复用
+/// [`click_at`] 的 trusted 鼠标事件。命中测试（吸收 agent-browser 的
+/// blocker 思路）：`elementFromPoint` 看点击点实际落谁头上，落点与目标
+/// 无祖孙/label 关联即判被遮挡（consent banner、modal 场景），报遮挡
+/// 元素描述并拒绝点击——绝不静默点错位置。`clickAt` 是显式「点可见物」，
+/// 不做此检查。
 ///
 /// # Errors
 ///
-/// ref 失效（节点没了）、取不到中心（不可见）、派发失败。
+/// ref 失效（节点没了）、取不到中心（不可见）、被遮挡（错误附遮挡元素）、
+/// 派发失败。
 pub async fn click_ref(s: &Session, backend_node_id: i64) -> Result<Value> {
     let object_id = resolve_node_object(s, backend_node_id).await?;
     let r = s
@@ -327,20 +331,67 @@ pub async fn click_ref(s: &Session, backend_node_id: i64) -> Result<Value> {
             "Runtime.callFunctionOn",
             json!({
                 "objectId": object_id,
-                "functionDeclaration": "function(){ this.scrollIntoView({block:'center'}); const r = this.getBoundingClientRect(); if (!this.isConnected || (!r.width && !r.height)) return null; return JSON.stringify([r.x + r.width/2, r.y + r.height/2]); }",
+                "functionDeclaration": r#"function(){
+                    this.scrollIntoView({block:'center'});
+                    const r = this.getBoundingClientRect();
+                    if (!this.isConnected || (!r.width && !r.height)) return null;
+                    const el = this;
+                    const x = r.x + r.width/2, y = r.y + r.height/2;
+                    // 下降进同源 iframe：点在 frame 上时解析到 frame 内元素
+                    let d = document, lx = x, ly = y;
+                    let hit = d.elementFromPoint(lx, ly);
+                    while (hit && (hit.tagName === 'IFRAME' || hit.tagName === 'FRAME')
+                           && hit.contentDocument && hit !== el) {
+                        const fr = hit.getBoundingClientRect();
+                        lx -= fr.x + hit.clientLeft;
+                        ly -= fr.y + hit.clientTop;
+                        d = hit.contentDocument;
+                        hit = d.elementFromPoint(lx, ly);
+                    }
+                    let blocker = null;
+                    if (hit && hit !== el) {
+                        const up = (n) => n.parentNode || n.host || (n.getRootNode && n.getRootNode().host) || null;
+                        let related = false;
+                        for (let n = hit; n; n = up(n)) { if (n === el) { related = true; break; } }
+                        if (!related) for (let n = el; n; n = up(n)) { if (n === hit) { related = true; break; } }
+                        if (!related) {
+                            const hl = hit.closest ? hit.closest('label') : null;
+                            if (hl && (hl.control === el || hl.contains(el))) related = true;
+                            const elLabel = el.closest ? el.closest('label') : null;
+                            if (elLabel && elLabel.contains(hit)) related = true;
+                        }
+                        if (!related) {
+                            blocker = hit.tagName.toLowerCase();
+                            if (hit.id) blocker += '#' + hit.id;
+                            else if (typeof hit.className === 'string' && hit.className.trim())
+                                blocker += '.' + hit.className.trim().split(/\s+/).slice(0, 2).join('.');
+                        }
+                    }
+                    return JSON.stringify({x: x, y: y, blocker: blocker});
+                }"#,
                 "returnByValue": true
             }),
         )
         .await?;
-    let center = r
+    let probe = r
         .pointer("/result/value")
         .and_then(Value::as_str)
-        .and_then(|v| serde_json::from_str::<Vec<f64>>(v).ok())
-        .filter(|v| v.len() == 2)
+        .and_then(|v| serde_json::from_str::<Value>(v).ok())
         .ok_or_else(|| anyhow!(
             "clickRef 量不到元素中心（元素不可见，或已随导航/重排失效）；下一步：重新 await snapshot() 取新 ref，或 clickAt(x,y) 手点坐标"
         ))?;
-    click_at(s, center[0].round() as i64, center[1].round() as i64).await
+    if let Some(b) = probe
+        .get("blocker")
+        .and_then(Value::as_str)
+        .filter(|b| !b.is_empty())
+    {
+        bail!(
+            "clickRef 目标被遮挡：{b} 盖住了点击点；下一步：先 snapshot() 拿遮挡物的 ref，clickRef 它或关掉它，再重试原目标"
+        );
+    }
+    let x = probe.get("x").and_then(Value::as_f64).unwrap_or(0.0);
+    let y = probe.get("y").and_then(Value::as_f64).unwrap_or(0.0);
+    click_at(s, x.round() as i64, y.round() as i64).await
 }
 
 /// 按短 ref 填输入框：objectId 上 focus -> 探测控件（SELECT/readOnly 拒收
@@ -371,7 +422,7 @@ pub async fn fill_ref(s: &Session, backend_node_id: i64, text: &str) -> Result<V
         ))?;
     if m.get("tag").and_then(Value::as_str) == Some("SELECT") {
         bail!(
-            "fillRef 暂不支持 <select>；下一步：await session.Runtime.evaluate({{expression:\"document.querySelector('select').value='v'; document.querySelector('select').dispatchEvent(new Event('change',{{bubbles:true}}))\"}})"
+            "fillRef 暂不支持 <select>；下一步：selectOption(ref, \"值或可见 label\")（同一个 ref 即可）"
         );
     }
     if m.get("ro").and_then(Value::as_bool) == Some(true) {
@@ -422,10 +473,123 @@ pub async fn fill_ref(s: &Session, backend_node_id: i64, text: &str) -> Result<V
     Ok(json!(text))
 }
 
+/// 当前页存 PDF（`Page.printToPDF`，`printBackground`+`preferCSSPageSize`）。
+/// 仅无头 chrome 支持（Chromium 限制）。路径缺省落 `<state>/pdf-<ts>.pdf`，
+/// 回 `{path,bytes}`——screenshot 的姊妹件，agent 存档页面用。
+///
+/// # Errors
+///
+/// 有头 chrome（CTP 拒绝）、PDF 生成或写盘失败。
+pub async fn pdf(s: &Session, path: Option<&str>) -> Result<Value> {
+    let r = s
+        .call(
+            "Page.printToPDF",
+            json!({ "printBackground": true, "preferCSSPageSize": true }),
+        )
+        .await
+        .map_err(|e| anyhow!(
+            "pdf 失败：{e:#}（Page.printToPDF 仅无头 chrome 支持）；下一步：browse down 后 browse up --headless 再试"
+        ))?;
+    let data = r
+        .get("data")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("printToPDF 未回 data"))?;
+    let bytes = crate::js_host::base64_decode(data)?;
+    let path = match path {
+        Some(p) => std::path::PathBuf::from(p),
+        None => {
+            let dir = crate::paths::state_dir().join("pdfs");
+            tokio::fs::create_dir_all(&dir).await.ok();
+            let ts = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0);
+            dir.join(format!("pdf-{ts}.pdf"))
+        }
+    };
+    let display = path.display().to_string();
+    tokio::fs::write(&path, &bytes).await?;
+    Ok(json!({ "path": display, "bytes": bytes.len() }))
+}
+
+/// 按短 ref 选下拉框选项：value 或可见 label 匹配，设值并派发 input+change
+/// （不发鼠标事件，确定性路径）。回 `{value,label}`。选择器版的入口是
+/// `fillInput` 的 SELECT CTA（指向本函数先 snapshot 取 ref）。
+///
+/// # Errors
+///
+/// ref 失效、目标不是 `<select>`、没有匹配选项（错误附全部可选 value）。
+pub async fn select_option(s: &Session, backend_node_id: i64, value: &str) -> Result<Value> {
+    let object_id = resolve_node_object(s, backend_node_id).await?;
+    let r = s
+        .call(
+            "Runtime.callFunctionOn",
+            json!({
+                "objectId": object_id,
+                "functionDeclaration": r#"function(v){
+                    const el = this;
+                    if (!el || el.tagName !== 'SELECT') return JSON.stringify({notSelect: true});
+                    const opt = Array.from(el.options)
+                        .find(o => o.value === v || o.label === v || (o.textContent || '').trim() === v);
+                    if (!opt) return JSON.stringify({miss: Array.from(el.options).map(o => o.value)});
+                    el.value = opt.value;
+                    el.dispatchEvent(new Event('input', {bubbles: true}));
+                    el.dispatchEvent(new Event('change', {bubbles: true}));
+                    return JSON.stringify({ok: true, value: opt.value, label: opt.label});
+                }"#,
+                "arguments": [{ "value": value }],
+                "returnByValue": true
+            }),
+        )
+        .await?;
+    let probe = r
+        .pointer("/result/value")
+        .and_then(Value::as_str)
+        .and_then(|v| serde_json::from_str::<Value>(v).ok())
+        .ok_or_else(|| anyhow!(
+            "selectOption 目标不可用（ref 已随导航失效或不可交互）；下一步：重新 await snapshot() 取新 ref"
+        ))?;
+    if probe.get("notSelect").is_some() {
+        bail!(
+            "selectOption 目标不是 <select>（backendNodeId {backend_node_id}）；下一步：换正确的 ref，或用 Runtime.evaluate 设值"
+        );
+    }
+    if let Some(miss) = probe.get("miss").and_then(Value::as_array) {
+        let opts: Vec<String> = miss
+            .iter()
+            .filter_map(|v| v.as_str().map(str::to_string))
+            .collect();
+        bail!(
+            "selectOption 没有匹配选项 {value:?}；可选 value：{}；下一步：用其中之一（也接受可见 label）",
+            opts.join(" / ")
+        );
+    }
+    Ok(json!({
+        "value": probe.get("value"),
+        "label": probe.get("label"),
+    }))
+}
+
+/// 派发一串 Input 域调用。两个挂起自愈路径：
+/// - 页面 JS 对话框开着：Input 被它挂起——立即报「先处理对话框」CTA，
+///   不烧超时（状态来自 [`cdp::Session::pending_dialog`]，route 层截获）。
+/// - `cdp timeout`（从未激活的后台 tab 收 Input 的典型症状）：
+///   `Target.activateTarget` 后整串重试一次——bh 内置激活重试同款，
+///   只在挂起时自愈，不主动抢用户前台。
 async fn dispatch_input_seq(s: &Session, seq: Vec<(&'static str, Value)>) -> Result<()> {
+    if s.pending_dialog().await.is_some() {
+        bail!(
+            "页面有未处理的 confirm/prompt 对话框（Input 会被它挂起）；下一步：return await dialogStatus() 看内容，再 await dialogAccept() 或 await dialogDismiss()"
+        );
+    }
     match run_input_seq(s, &seq).await {
         Ok(()) => Ok(()),
         Err(first) if format!("{first:#}").contains("cdp timeout") => {
+            if s.pending_dialog().await.is_some() {
+                bail!(
+                    "交互触发了页面对话框（后续 Input 被它挂起）；下一步：return await dialogStatus() 看内容，再 await dialogAccept() 或 await dialogDismiss()"
+                );
+            }
             if let Some(t) = s.active_target().await {
                 let _ = s
                     .call("Target.activateTarget", json!({ "targetId": t }))
@@ -439,9 +603,18 @@ async fn dispatch_input_seq(s: &Session, seq: Vec<(&'static str, Value)>) -> Res
     }
 }
 
+/// Input 派发通常瞬时完成；单条 8 秒短超时让「对话框/后台 tab 挂起」
+/// 尽快落进自愈路径，而不是干等全量 30 秒。
+const INPUT_DISPATCH_TIMEOUT: Duration = Duration::from_secs(8);
+
 async fn run_input_seq(s: &Session, seq: &[(&'static str, Value)]) -> Result<()> {
     for (method, params) in seq {
-        s.call(method, params.clone()).await?;
+        match tokio::time::timeout(INPUT_DISPATCH_TIMEOUT, s.call(method, params.clone())).await {
+            Ok(r) => {
+                r?;
+            }
+            Err(_) => return Err(anyhow!("cdp timeout (input {method})")),
+        }
     }
     Ok(())
 }

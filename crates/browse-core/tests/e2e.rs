@@ -191,6 +191,28 @@ async fn exercise(engine: &Engine, host: &JsHost, expect_channel: &str) {
         .await
         .expect("clickRef 副作用");
     assert_eq!(go, json!(5));
+    // 遮挡守卫：全屏盖板盖住按钮 -> clickRef 拒点并报遮挡物；撤盖板后放行
+    host.eval_snippet(
+        r#"await session.Runtime.evaluate({expression:"const d = document.createElement('div'); d.id = 'cover'; d.style = 'position:fixed;inset:0;z-index:9;background:rgb(0,0,0)'; document.body.appendChild(d)"})"#,
+    )
+    .await
+    .expect("加盖板");
+    let blocked = host
+        .eval_snippet(&format!(r#"await clickRef("{btn_ref}")"#))
+        .await;
+    let blocked_msg = format!("{blocked:#?}");
+    assert!(
+        blocked.is_err() && blocked_msg.contains("被遮挡") && blocked_msg.contains("cover"),
+        "盖板应触发遮挡拒绝并报遮挡物: {blocked_msg}"
+    );
+    host.eval_snippet(
+        r#"await session.Runtime.evaluate({expression:"document.getElementById('cover').remove()"})"#,
+    )
+    .await
+    .expect("撤盖板");
+    host.eval_snippet(&format!(r#"await clickRef("{btn_ref}")"#))
+        .await
+        .expect("撤盖板后 clickRef 放行");
     // 未知 ref：错误带「先 snapshot」CTA
     let unknown = host.eval_snippet(r#"await clickRef("e9999")"#).await;
     assert!(
@@ -224,6 +246,136 @@ async fn exercise(engine: &Engine, host: &JsHost, expect_channel: &str) {
     let meta = tokio::fs::metadata(&path).await.expect("截图文件应在");
     assert!(meta.len() > 0);
     tokio::fs::remove_file(&path).await.ok();
+
+    eprintln!("[e2e] pdf/select/dialog 开始");
+    // pdf：无头专属，存盘字节为正，%PDF 头
+    let doc = host.eval_snippet("return await pdf()").await.expect("pdf");
+    let pdf_path = doc
+        .get("path")
+        .and_then(Value::as_str)
+        .expect("pdf path")
+        .to_string();
+    let pdf_bytes = doc.get("bytes").and_then(Value::as_u64).unwrap_or(0);
+    // 空页 PDF 本来就只有几百字节，真校验靠 %PDF 头
+    assert!(pdf_bytes > 300, "PDF 应有内容: {doc}");
+    let head = tokio::fs::read(&pdf_path).await.expect("pdf 文件应在");
+    assert!(head.starts_with(b"%PDF"), "应是 PDF 文件头");
+    tokio::fs::remove_file(&pdf_path).await.ok();
+
+    // selectOption：value 与 label 双路径 + 未命中 CTA + 回读
+    host.eval_snippet(
+        r#"await session.Page.navigate({url:"data:text/html,<select id='s'><option value='a'>Alpha</option><option value='b'>Beta</option></select>"})"#,
+    )
+    .await
+    .expect("导航 select 页");
+    let ssn = host
+        .eval_snippet("return await snapshot()")
+        .await
+        .expect("select snapshot");
+    let sel_ref = ssn
+        .get("nodes")
+        .and_then(Value::as_array)
+        .expect("nodes")
+        .iter()
+        .find(|n| n.get("role") == Some(&json!("combobox")))
+        .and_then(|n| n.get("ref"))
+        .and_then(Value::as_str)
+        .expect("combobox 应带 ref")
+        .to_string();
+    let picked = host
+        .eval_snippet(&format!(
+            r#"return await selectOption("{sel_ref}", "Beta")"#
+        ))
+        .await
+        .expect("selectOption label 路径");
+    assert_eq!(picked.pointer("/value"), Some(&json!("b")));
+    assert_eq!(picked.pointer("/label"), Some(&json!("Beta")));
+    let readback = host
+        .eval_snippet(
+            r#"return (await session.Runtime.evaluate({expression:"document.getElementById('s').value", returnByValue:true})).result.value"#,
+        )
+        .await
+        .expect("select 回读");
+    assert_eq!(readback, json!("b"), "selectOption 应真实改值");
+    let miss = host
+        .eval_snippet(&format!(r#"await selectOption("{sel_ref}", "nope")"#))
+        .await;
+    assert!(
+        miss.is_err() && format!("{miss:#?}").contains("可选 value"),
+        "未命中应列可选值: {miss:?}"
+    );
+
+    // 对话框：alert 自动接受（不阻塞后续 evaluate）；confirm 显式处理
+    let dlg_t0 = std::time::Instant::now();
+    let mark = |s: &str| eprintln!("[e2e] dialog {s} +{:?}", dlg_t0.elapsed());
+    host.eval_snippet(
+        r#"await session.Page.navigate({url:"data:text/html,<button onclick='alert(\"hi\")'>A</button><button onclick='confirm(\"sure?\")'>C</button>"})"#,
+    )
+    .await
+    .expect("导航 dialog 页");
+    mark("nav");
+    let dsn = host
+        .eval_snippet("return await snapshot()")
+        .await
+        .expect("dialog snapshot");
+    mark("snapshot");
+    let refs: Vec<String> = dsn
+        .get("nodes")
+        .and_then(Value::as_array)
+        .expect("nodes")
+        .iter()
+        .filter(|n| n.get("role") == Some(&json!("button")))
+        .filter_map(|n| n.get("ref").and_then(Value::as_str).map(str::to_string))
+        .collect();
+    assert!(refs.len() >= 2, "应有两个按钮 ref: {dsn}");
+    // alert：clickRef 后 watcher 1 秒内自动接受，evaluate 不被拖死
+    host.eval_snippet(&format!(r#"await clickRef("{}")"#, refs[0]))
+        .await
+        .expect("点 alert 按钮");
+    mark("click-alert");
+    tokio::time::sleep(std::time::Duration::from_millis(1200)).await;
+    let t0 = std::time::Instant::now();
+    host.eval_snippet(
+        r#"return await session.Runtime.evaluate({expression:"1+1", returnByValue:true})"#,
+    )
+    .await
+    .expect("alert 被自动接受后 evaluate 应立刻可用");
+    mark("evaluate-after-alert");
+    assert!(t0.elapsed().as_secs() < 10, "alert 不应阻塞 evaluate");
+    // confirm：点开（Ok 或 8s 短超时后「对话框 CTA」都算达阵——pressed
+    // 已送达、对话框已开）-> dialogStatus 可见 -> 再点被快失败拦 -> 收掉
+    let opened = host
+        .eval_snippet(&format!(r#"await clickRef("{}")"#, refs[1]))
+        .await;
+    let opened_ok = opened.is_ok() || format!("{opened:#?}").contains("dialogStatus");
+    assert!(opened_ok, "confirm 点击应成功或触发对话框 CTA: {opened:?}");
+    mark("click-confirm");
+    tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+    let st = host
+        .eval_snippet("return await dialogStatus()")
+        .await
+        .expect("dialogStatus");
+    mark("status");
+    assert_eq!(st.pointer("/open"), Some(&json!(true)), "{st}");
+    assert_eq!(st.pointer("/type"), Some(&json!("confirm")), "{st}");
+    let held = host
+        .eval_snippet(&format!(r#"await clickRef("{}")"#, refs[0]))
+        .await;
+    mark("held-click");
+    assert!(
+        held.is_err() && format!("{held:#?}").contains("dialogAccept"),
+        "对话框未处理时交互应快失败并带 CTA: {held:?}"
+    );
+    host.eval_snippet("await dialogAccept()")
+        .await
+        .expect("dialogAccept");
+    mark("accept");
+    let st2 = host
+        .eval_snippet("return await dialogStatus()")
+        .await
+        .expect("dialogStatus2");
+    mark("status2");
+    assert_eq!(st2.pointer("/open"), Some(&json!(false)), "{st2}");
 
     eprintln!("[e2e] 录制开始");
     // 录制：startScreencast 帧流落盘；导航触发重绘产帧

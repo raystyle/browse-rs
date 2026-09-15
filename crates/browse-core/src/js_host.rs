@@ -13,7 +13,7 @@ use anyhow::{Result, anyhow, bail};
 use cdp::methods::METHODS_RAW;
 use cdp::{ConnectOptions, PageTarget, Session};
 use serde_json::{Map, Value, json};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -46,12 +46,24 @@ impl JsHost {
     /// let host = browse_core::JsHost::new(cdp::Session::new());
     /// ```
     pub fn new(session: Arc<Session>) -> Arc<Self> {
+        spawn_dialog_watcher(session.clone());
         Arc::new(Self {
             session,
             vars: Mutex::new(HashMap::new()),
             refs: Mutex::new(None),
             record: Mutex::new(None),
         })
+    }
+
+    /// 交互/求值族调用前的快失败：有未处理的 confirm/prompt 时 Input 与
+    /// Runtime.evaluate 都会挂起，与其烧超时不如立刻给 CTA。
+    async fn assert_no_dialog(&self) -> Result<()> {
+        if self.session.pending_dialog().await.is_some() {
+            bail!(
+                "页面有未处理的 confirm/prompt 对话框（Input 会被它挂起）；下一步：return await dialogStatus() 看内容，再 await dialogAccept() 或 await dialogDismiss()"
+            );
+        }
+        Ok(())
     }
 
     /// 共享的会话（health/status 面用）。
@@ -382,6 +394,7 @@ impl JsHost {
                     "clickAt 缺坐标；下一步：clickAt(x, y)（视口坐标，snapshot+DOM.getBoxModel 量中心）"
                 ))?;
                 let y = argv.get(1).and_then(Value::as_i64).unwrap_or(0);
+                self.assert_no_dialog().await?;
                 crate::semantic::click_at(&self.session, x, y).await
             }
             "fillInput" => {
@@ -389,12 +402,14 @@ impl JsHost {
                     "fillInput 缺选择器；下一步：fillInput(\"#q\", \"hello\")（CSS 选择器，填完回读验证）"
                 ))?;
                 let text = argv.get(1).and_then(Value::as_str).unwrap_or("");
+                self.assert_no_dialog().await?;
                 crate::semantic::fill_input(&self.session, sel, text).await
             }
             "pressKey" => {
                 let key = argv.first().and_then(Value::as_str).ok_or_else(|| anyhow!(
                     "pressKey 缺键名；下一步：pressKey(\"Enter\") / pressKey(\"Tab\") / pressKey(\"a\")"
                 ))?;
+                self.assert_no_dialog().await?;
                 crate::semantic::press_key(&self.session, key).await
             }
             "waitLoad" => {
@@ -410,6 +425,7 @@ impl JsHost {
                 let r = argv.first().and_then(Value::as_str).ok_or_else(|| anyhow!(
                     "clickRef 缺 ref；下一步：clickRef(\"e3\")，ref 在最近一次 snapshot() 返回的 nodes[].ref"
                 ))?;
+                self.assert_no_dialog().await?;
                 let bn = self.lookup_ref(r).await?;
                 crate::semantic::click_ref(&self.session, bn).await
             }
@@ -418,8 +434,59 @@ impl JsHost {
                     "fillRef 缺 ref；下一步：fillRef(\"e2\", \"hello\")，ref 在最近一次 snapshot() 返回的 nodes[].ref"
                 ))?;
                 let text = argv.get(1).and_then(Value::as_str).unwrap_or("");
+                self.assert_no_dialog().await?;
                 let bn = self.lookup_ref(r).await?;
                 crate::semantic::fill_ref(&self.session, bn, text).await
+            }
+            "selectOption" => {
+                let r = argv.first().and_then(Value::as_str).ok_or_else(|| anyhow!(
+                    "selectOption 缺 ref；下一步：selectOption(\"e4\", \"Beta\")（value 或可见 label，ref 来自 snapshot()）"
+                ))?;
+                let value = argv.get(1).and_then(Value::as_str).ok_or_else(|| anyhow!(
+                    "selectOption 缺选项值；下一步：selectOption(\"e4\", \"Beta\")（第二参是 value 或可见 label）"
+                ))?;
+                self.assert_no_dialog().await?;
+                let bn = self.lookup_ref(r).await?;
+                crate::semantic::select_option(&self.session, bn, value).await
+            }
+            // ---- 对话框（吸收 agent-browser 语义）----
+            "dialogStatus" => match self.session.pending_dialog().await {
+                None => Ok(json!({ "open": false })),
+                Some(ev) => Ok(json!({
+                    "open": true,
+                    "type": ev.pointer("/params/type"),
+                    "message": ev.pointer("/params/message"),
+                    "defaultPrompt": ev.pointer("/params/defaultPrompt"),
+                })),
+            },
+            "dialogAccept" | "dialogDismiss" => {
+                let accept = name == "dialogAccept";
+                let ev = self
+                    .session
+                    .pending_dialog()
+                    .await
+                    .ok_or_else(|| anyhow!(
+                        "当前没有打开的对话框（alert/beforeunload 已被自动接受）；下一步：confirm/prompt 由页面触发，先 return await dialogStatus() 确认"
+                    ))?;
+                let sid = ev
+                    .get("sessionId")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| anyhow!("对话框事件缺 sessionId"))?
+                    .to_string();
+                let mut params = json!({ "accept": accept });
+                if accept && let Some(t) = argv.first().and_then(Value::as_str) {
+                    params["promptText"] = json!(t);
+                }
+                self.session
+                    .call_on("Page.handleJavaScriptDialog", params, &sid)
+                    .await?;
+                self.session.clear_pending_dialog().await;
+                Ok(json!(true))
+            }
+            // ---- 存档：PDF（无头专属）----
+            "pdf" => {
+                let path = argv.first().and_then(Value::as_str).map(str::to_string);
+                crate::semantic::pdf(&self.session, path.as_deref()).await
             }
             // ---- 录制（Page.startScreencast 帧流落盘）----
             "recordStart" => {
@@ -445,7 +512,7 @@ impl JsHost {
                 crate::record::stop(&self.session, rec).await
             }
             other => bail!(
-                "未知函数 {other}；下一步：可用全局 listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/snapshot()/screenshot(path?, full?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/clickAt(x,y)/fillInput(sel,text)/clickRef(ref)/fillRef(ref,text)/pressKey(key)/waitLoad(ms?)/waitIdle(ms?)/recordStart(opts?)/recordStop()/print(x)；CDP 走 session.<Domain>.<method>(params)"
+                "未知函数 {other}；下一步：可用全局 listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/snapshot()/screenshot(path?, full?)/pdf(path?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/clickAt(x,y)/fillInput(sel,text)/clickRef(ref)/fillRef(ref,text)/selectOption(ref,value)/pressKey(key)/dialogStatus()/dialogAccept(text?)/dialogDismiss()/waitLoad(ms?)/waitIdle(ms?)/recordStart(opts?)/recordStop()/print(x)；CDP 走 session.<Domain>.<method>(params)"
             ),
         }
     }
@@ -639,6 +706,52 @@ impl JsHost {
             ),
         }
     }
+}
+
+/// 对话框 watcher（吸收 agent-browser 语义，游离常驻任务）：给新活动
+/// session 补 `Page.enable`（对话框事件需要域开启才流动），`alert`/
+/// `beforeunload` 自动接受（`BROWSE_NO_AUTO_DIALOG=1` 关掉），永不阻塞
+/// agent；`confirm`/`prompt` 留给显式 `dialogAccept/dialogDismiss`。
+/// 状态由 cdp `route()` 截获维护（[`cdp::Session::pending_dialog`]）。
+fn spawn_dialog_watcher(session: Arc<Session>) {
+    tokio::spawn(async move {
+        let auto =
+            !std::env::var_os("BROWSE_NO_AUTO_DIALOG").is_some_and(|v| v == "1" || v == "true");
+        let mut enabled: HashSet<String> = HashSet::new();
+        loop {
+            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+            // 活动路由换 session 后补开域（幂等）
+            if let Some(sid) = session.get_active_session().await
+                && !enabled.contains(&sid)
+                && session
+                    .call_on("Page.enable", json!({}), &sid)
+                    .await
+                    .is_ok()
+            {
+                enabled.insert(sid);
+            }
+            if !auto {
+                continue;
+            }
+            if let Some(ev) = session.pending_dialog().await {
+                let ty = ev
+                    .pointer("/params/type")
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                if matches!(ty, "alert" | "beforeunload")
+                    && let Some(sid) = ev.get("sessionId").and_then(Value::as_str)
+                {
+                    let _ = session
+                        .call_on(
+                            "Page.handleJavaScriptDialog",
+                            json!({ "accept": true }),
+                            sid,
+                        )
+                        .await;
+                }
+            }
+        }
+    });
 }
 
 fn tab_json(t: PageTarget) -> Value {

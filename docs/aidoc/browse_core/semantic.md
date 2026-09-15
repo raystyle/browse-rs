@@ -14,13 +14,15 @@
 ## Functions
 
 - `click_at` — 真点击：`Input.dispatchMouseEvent` pressed+released 于视口坐标 (x,y)。
-- `click_ref` — 按短 ref 点击：滚动可见 -> 量视口中心 -> 复用 [`click_at`] 的 trusted
+- `click_ref` — 按短 ref 点击：滚动可见 -> 量视口中心 -> **遮挡命中测试** -> 复用
 - `close_tab` — 关 tab；缺省关当前活动 tab。守卫层只放行本会话自建 tab——用户 tab 一律拒绝。
 - `current_tab` — 当前活动 tab 简表 `{targetId,title,url}`；无活动 tab 返回 `null`。
 - `fill_input` — 按 CSS 选择器填输入框：focus -> 全选（commands，不发 Ctrl+A）-> 可选
 - `fill_ref` — 按短 ref 填输入框：objectId 上 focus -> 探测控件（SELECT/readOnly 拒收
 - `new_tab` — 新开 tab 并设为活动路由。给了 `url` 则先建 about:blank 附着后再导航
+- `pdf` — 当前页存 PDF（`Page.printToPDF`，`printBackground`+`preferCSSPageSize`）。
 - `press_key` — 按一个键：`Input.dispatchKeyEvent` keyDown(+text)+keyUp。Enter 的 text
+- `select_option` — 按短 ref 选下拉框选项：value 或可见 label 匹配，设值并派发 input+change
 - `switch_tab` — 切换活动路由到既有 tab（不改 Chrome 可见前景），返回该 tab 简表。
 - `wait_idle` — 等 network 静默：从调用时刻起观察 `Network.requestWillBeSent` 与
 - `wait_load` — 等 load：先宽容地等一次 frameNavigated（导航可能已完成，超时忽略），

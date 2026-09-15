@@ -150,7 +150,7 @@
     {
       "path": "browse_core::semantic::click_ref",
       "kind": "function",
-      "docs": "按短 ref 点击：滚动可见 -> 量视口中心 -> 复用 [`click_at`] 的 trusted\n鼠标事件。比 `clickAt` 省掉手工量坐标，页面重排后 ref 仍指同一节点。\n\n# Errors\n\nref 失效（节点没了）、取不到中心（不可见）、派发失败。"
+      "docs": "按短 ref 点击：滚动可见 -> 量视口中心 -> **遮挡命中测试** -> 复用\n[`click_at`] 的 trusted 鼠标事件。命中测试（吸收 agent-browser 的\nblocker 思路）：`elementFromPoint` 看点击点实际落谁头上，落点与目标\n无祖孙/label 关联即判被遮挡（consent banner、modal 场景），报遮挡\n元素描述并拒绝点击——绝不静默点错位置。`clickAt` 是显式「点可见物」，\n不做此检查。\n\n# Errors\n\nref 失效（节点没了）、取不到中心（不可见）、被遮挡（错误附遮挡元素）、\n派发失败。"
     },
     {
       "path": "browse_core::semantic::close_tab",
@@ -178,9 +178,19 @@
       "docs": "新开 tab 并设为活动路由。给了 `url` 则先建 about:blank 附着后再导航\n（防竞速假完成），返回 `{targetId,title,url}`。\n\n# Errors\n\n未连接、createTarget/navigate 失败（域策略拦截同 `Page.navigate`）。"
     },
     {
+      "path": "browse_core::semantic::pdf",
+      "kind": "function",
+      "docs": "当前页存 PDF（`Page.printToPDF`，`printBackground`+`preferCSSPageSize`）。\n仅无头 chrome 支持（Chromium 限制）。路径缺省落 `<state>/pdf-<ts>.pdf`，\n回 `{path,bytes}`——screenshot 的姊妹件，agent 存档页面用。\n\n# Errors\n\n有头 chrome（CTP 拒绝）、PDF 生成或写盘失败。"
+    },
+    {
       "path": "browse_core::semantic::press_key",
       "kind": "function",
       "docs": "按一个键：`Input.dispatchKeyEvent` keyDown(+text)+keyUp。Enter 的 text\n是 `\\r`（CDP 契约）；可打印单字符带自身为 text。\n\n# Errors\n\n未连接或派发失败。"
+    },
+    {
+      "path": "browse_core::semantic::select_option",
+      "kind": "function",
+      "docs": "按短 ref 选下拉框选项：value 或可见 label 匹配，设值并派发 input+change\n（不发鼠标事件，确定性路径）。回 `{value,label}`。选择器版的入口是\n`fillInput` 的 SELECT CTA（指向本函数先 snapshot 取 ref）。\n\n# Errors\n\nref 失效、目标不是 `<select>`、没有匹配选项（错误附全部可选 value）。"
     },
     {
       "path": "browse_core::semantic::switch_tab",

@@ -77,6 +77,9 @@ pub struct Session {
     own_targets: Arc<Mutex<HashSet<String>>>,
     connected: AtomicBool,
     next_seq: Arc<AtomicI64>,
+    /// 当前打开的 `Page.javascriptDialogOpening` 事件（route 截获维护，
+    /// Closed 清空）。对话框会挂起 Input/evaluate，消费方要能先看它。
+    pending_dialog: Arc<Mutex<Option<Value>>>,
 }
 
 impl Session {
@@ -99,6 +102,7 @@ impl Session {
             own_targets: Arc::new(Mutex::new(HashSet::new())),
             connected: AtomicBool::new(false),
             next_seq: Arc::new(AtomicI64::new(1)),
+            pending_dialog: Arc::new(Mutex::new(None)),
         })
     }
 
@@ -171,6 +175,18 @@ impl Session {
         self.target_id.lock().await.clone()
     }
 
+    /// 当前打开的 JS 对话框事件（`Page.javascriptDialogOpening` 全量，
+    /// 无则 `None`）。对话框会挂起 Input/evaluate，调用方应先看它再行动。
+    pub async fn pending_dialog(&self) -> Option<Value> {
+        self.pending_dialog.lock().await.clone()
+    }
+
+    /// 手动清掉对话框状态（`dialogAccept/Dismiss` 应答后 Closed 事件
+    /// 可能迟到，先清防竞速误报）。
+    pub async fn clear_pending_dialog(&self) {
+        *self.pending_dialog.lock().await = None;
+    }
+
     async fn open_ws(self: &Arc<Self>, ws_url: &str) -> Result<()> {
         let (ws, _) = connect_async(ws_url)
             .await
@@ -189,12 +205,13 @@ impl Session {
         let pending_r = self.pending.clone();
         let events_r = self.events.clone();
         let seq_r = self.next_seq.clone();
+        let dialog_r = self.pending_dialog.clone();
         let connected = Arc::new(AtomicBool::new(true));
         let flag = connected.clone();
         tokio::spawn(async move {
             while let Some(Ok(Message::Text(t))) = read.next().await {
                 if let Ok(v) = serde_json::from_str::<Value>(&t) {
-                    route(v, &pending_r, &events_r, &seq_r).await;
+                    route(v, &pending_r, &events_r, &seq_r, &dialog_r).await;
                 }
             }
             flag.store(false, Ordering::Relaxed);
@@ -256,6 +273,7 @@ impl Session {
         let pending_r = self.pending.clone();
         let events_r = self.events.clone();
         let seq_r = self.next_seq.clone();
+        let dialog_r = self.pending_dialog.clone();
         let connected = Arc::new(AtomicBool::new(true));
         let flag = connected.clone();
         let (chunk_tx, mut chunk_rx) = mpsc::unbounded_channel::<Vec<u8>>();
@@ -282,7 +300,7 @@ impl Session {
                 while let Some(pos) = carry.iter().position(|&c| c == 0) {
                     let frame: Vec<u8> = carry.drain(..=pos).collect();
                     if let Ok(v) = serde_json::from_slice(&frame[..frame.len() - 1]) {
-                        route(v, &pending_r, &events_r, &seq_r).await;
+                        route(v, &pending_r, &events_r, &seq_r, &dialog_r).await;
                     }
                 }
             }
@@ -642,18 +660,30 @@ impl Session {
 
 /// 把一条入站 JSON-RPC 消息路由到 pending 应答或事件缓冲（WS/管道共用）。
 /// 进缓冲的事件盖上单调 `seq`（从 1 起）：`waitFor`/`peek` 拿到的事件自带
-/// 游标，供 [`Session::peek_events_since`] 增量轮询。
+/// 游标，供 [`Session::peek_events_since`] 增量轮询。顺带截获对话框事件
+/// 维护 [`Session::pending_dialog`]（开着对话框时 Input/evaluate 会挂起，
+/// 消费方必须能不等 CDP 就看到它）。
 async fn route(
     mut v: Value,
     pending: &Arc<Mutex<HashMap<i64, oneshot::Sender<Value>>>>,
     events: &Arc<Mutex<VecDeque<Value>>>,
     next_seq: &AtomicI64,
+    dialog: &Arc<Mutex<Option<Value>>>,
 ) {
     if let Some(id) = v.get("id").and_then(|x| x.as_i64()) {
         if let Some(tx) = pending.lock().await.remove(&id) {
             let _ = tx.send(v);
         }
     } else if v.get("method").is_some() {
+        match v.get("method").and_then(|m| m.as_str()) {
+            Some("Page.javascriptDialogOpening") => {
+                *dialog.lock().await = Some(v.clone());
+            }
+            Some("Page.javascriptDialogClosed") => {
+                *dialog.lock().await = None;
+            }
+            _ => {}
+        }
         let seq = next_seq.fetch_add(1, Ordering::Relaxed);
         if let Value::Object(map) = &mut v {
             map.insert("seq".into(), json!(seq));
@@ -816,7 +846,14 @@ mod tests {
         let s = Session::new();
         let pending = Arc::new(Mutex::new(HashMap::new()));
         for i in 0..(EVENT_BUFFER_CAP + 10) {
-            route(ev("X.y", i as f64), &pending, &s.events, &s.next_seq).await;
+            route(
+                ev("X.y", i as f64),
+                &pending,
+                &s.events,
+                &s.next_seq,
+                &s.pending_dialog,
+            )
+            .await;
         }
         let len = s.events.lock().await.len();
         assert_eq!(len, EVENT_BUFFER_CAP, "容量封顶");
@@ -852,7 +889,7 @@ mod tests {
     async fn route_all(s: &Session, events: Vec<Value>) {
         let pending = Arc::new(Mutex::new(HashMap::new()));
         for e in events {
-            route(e, &pending, &s.events, &s.next_seq).await;
+            route(e, &pending, &s.events, &s.next_seq, &s.pending_dialog).await;
         }
     }
 
