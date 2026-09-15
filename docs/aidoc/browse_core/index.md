@@ -33,5 +33,6 @@ assert_eq!(render(&stmts), "const tabs = await listPageTargets()");
 - [`engine`](engine.md): 引擎策略：附着优先，缺则自起（ADR-0003）。
 - [`js_host`](js_host.md): 方言求值器：把 [`crate::parser`] 的语句树跑在宿主侧。
 - [`parser`](parser.md): browser-harness-js 片段方言的语法分析器（纯函数）。
+- [`semantic`](semantic.md): 语义层近期面：tab 族、交互三件、等待判官。
 - [`server`](server.md): daemon 的 HTTP API：常驻会话 + 方言求值 + 引擎生命周期。
 

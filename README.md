@@ -17,7 +17,17 @@ browse '<方言片段>' ──HTTP POST /eval──> daemon（browse.exe --serve
 3. 都没有就 spawn 专属实例：独立 profile、`--no-sandbox`、可 `--headless`。
 4. `--pipe`：spawn 走 CDP 管道通道（`CLEAN_CHROME_DEBUG=pipe`，clean-chrome S005 契约），零 TCP 面、断管即关浏览器（ADR-0005，Windows 先行）。
 
-安全守卫（程序级强制，`Session::call` 层）：`Browser.close` / `Browser.setWindowBounds` 一律拒绝；`Target.closeTarget` 只放行自建 tab。
+安全守卫（程序级强制，`Session::call` 层，错误一律带 CTA「下一步」）：
+`Browser.close` / `Browser.setWindowBounds` 一律拒绝；`Target.closeTarget`
+只放行自建 tab——`listPageTargets()` / `currentTab()` 带 `own` 字段标注
+哪些能关（chrome 启动初始页与用户 tab 恒 `own:false`，用 `switchTab` 切走）。
+
+语义层近期面（对齐 harness(py) 高频操作，坑表教训落地）：
+`newTab(url?)`（先 about:blank 再 goto，回 `{targetId,title,url,own}`）、
+`switchTab(id)`、`currentTab()`、`closeTab(id?)`（守卫同 `Target.closeTarget`）、
+`clickAt(x,y)`（trusted 鼠标事件）、`fillInput(sel,text)`（SelectAll 不发
+Ctrl+A、回读严格验证）、`pressKey(key)`、`waitLoad(ms?)`、`waitIdle(ms?)`
+（network 静默窗口）。Input 派发撞后台 tab 挂起时自动 activate 自愈重试一次。
 
 ## 命令
 

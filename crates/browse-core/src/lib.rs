@@ -29,6 +29,7 @@
 pub mod engine;
 pub mod js_host;
 pub mod parser;
+pub mod semantic;
 pub mod server;
 
 pub use engine::{Engine, EngineSource, EngineSpec};

@@ -164,6 +164,124 @@ async fn exercise(engine: &Engine, host: &JsHost, expect_channel: &str) {
     assert!(meta.len() > 0);
     tokio::fs::remove_file(&path).await.ok();
 
+    eprintln!("[e2e] 语义面开始");
+    // ---- 语义层近期面 ----
+    // tab 族：newTab -> currentTab -> switchTab 往返 -> closeTab 自建
+    let t2 = host
+        .eval_snippet(r#"await newTab("data:text/html,<title>tab-two</title><input id=\"q\" value=\"old\">")"#)
+        .await
+        .expect("newTab");
+    assert_eq!(
+        t2.pointer("/title"),
+        Some(&json!("tab-two")),
+        "newTab 后活动 tab 即新 tab: {t2}"
+    );
+    let cur = host
+        .eval_snippet("return await currentTab()")
+        .await
+        .expect("currentTab");
+    eprintln!("[e2e] newTab+currentTab ok");
+    assert_eq!(cur.pointer("/targetId"), t2.pointer("/targetId"));
+    let t1_id = host
+        .eval_snippet("return (await listPageTargets())[0].targetId")
+        .await
+        .expect("列表")
+        .as_str()
+        .expect("targetId 应是字符串")
+        .to_string();
+    host.eval_snippet(&format!(r#"await switchTab("{t1_id}")"#))
+        .await
+        .expect("switchTab");
+    let back = host
+        .eval_snippet("return await currentTab()")
+        .await
+        .expect("currentTab2");
+    eprintln!("[e2e] switchTab 往返 ok");
+    assert_eq!(back.pointer("/targetId"), Some(&json!(t1_id)));
+    host.eval_snippet("await switchTab((await listPageTargets())[1].targetId)")
+        .await
+        .expect("切回 t2");
+
+    eprintln!("[e2e] fillInput 开始");
+    // fillInput：清空旧值 + 回读验证
+    let filled = host
+        .eval_snippet(r##"await fillInput("#q", "hello rust")"##)
+        .await
+        .expect("fillInput");
+    assert_eq!(filled, json!("hello rust"), "fillInput 返回回读值");
+
+    eprintln!("[e2e] pressKey 开始");
+    // pressKey：追加字符 + Enter
+    host.eval_snippet(
+        r#"await session.Runtime.evaluate({expression:"document.querySelector('#q').focus()"})"#,
+    )
+    .await
+    .expect("focus");
+    host.eval_snippet("await pressKey(\"!\")")
+        .await
+        .expect("pressKey");
+    let val = host
+        .eval_snippet(r#"return (await session.Runtime.evaluate({expression:"document.querySelector('#q').value", returnByValue:true})).result.value"#)
+        .await
+        .expect("回读");
+    assert_eq!(val, json!("hello rust!"), "pressKey 追加: {val}");
+
+    eprintln!("[e2e] clickAt 开始");
+    // clickAt：按钮点击置 window.clicked
+    host.eval_snippet(
+        r#"await session.Page.navigate({url:"data:text/html,<button onclick=\"window.clicked = 7\">Hit</button>"})"#,
+    )
+    .await
+    .expect("导航点击页");
+    let center = host
+        .eval_snippet(
+            r#"return (await session.Runtime.evaluate({expression:"(() => { const r = document.querySelector('button').getBoundingClientRect(); return JSON.stringify([r.x + r.width/2, r.y + r.height/2]) })()", returnByValue:true})).result.value"#,
+        )
+        .await
+        .expect("量中心");
+    let (cx, cy) = serde_json::from_str::<(i64, i64)>(center.as_str().unwrap_or("[10,10]"))
+        .unwrap_or((10, 10));
+    host.eval_snippet(&format!("await clickAt({cx}, {cy})"))
+        .await
+        .expect("clickAt");
+    let clicked = host
+        .eval_snippet(r#"await session.waitJs("window.clicked", 3000)"#)
+        .await
+        .expect("点击生效");
+    assert_eq!(clicked, json!(7));
+
+    eprintln!("[e2e] waitLoad 开始");
+    // waitLoad：已加载页面立即返回 complete
+    let wl = host
+        .eval_snippet("return await waitLoad(8000)")
+        .await
+        .expect("waitLoad");
+    assert_eq!(wl.pointer("/readyState"), Some(&json!("complete")), "{wl}");
+
+    eprintln!("[e2e] waitIdle 开始");
+    // waitIdle：无网络请求的页面静默即返回
+    let wi = host
+        .eval_snippet("return await waitIdle(5000)")
+        .await
+        .expect("waitIdle");
+    assert!(wi.get("requests").is_some(), "{wi}");
+
+    eprintln!("[e2e] closeTab 开始");
+    // closeTab：关当前活动 tab（newTab 建的 t2，自建 -> 守卫放行）
+    let closed = host
+        .eval_snippet("return await closeTab((await currentTab()).targetId)")
+        .await
+        .expect("closeTab 自建");
+    assert_eq!(closed, json!(true));
+    // chrome 启动自开的初始 tab 不是本会话自建：关它必须被守卫拦
+    let guarded = host
+        .eval_snippet("await closeTab((await listPageTargets())[0].targetId)")
+        .await;
+    assert!(
+        guarded.is_err() && format!("{guarded:#?}").contains("守卫拦截"),
+        "关非自建 tab 应被守卫拦截: {guarded:?}"
+    );
+
     // 守卫：Browser.close 必须被拦（程序级强制，与引擎来源无关）
     let blocked = host.eval_snippet("await session.Browser.close()").await;
     assert!(blocked.is_err(), "Browser.close 应被守卫拦截");

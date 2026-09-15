@@ -326,8 +326,51 @@ impl JsHost {
                 eprintln!("{}", preview(&argv.first().cloned().unwrap_or(Value::Null)));
                 Ok(Value::Null)
             }
+            // ---- 语义层近期面（crates/browse-core/src/semantic.rs）----
+            "newTab" => {
+                crate::semantic::new_tab(&self.session, argv.first().and_then(Value::as_str)).await
+            }
+            "switchTab" => {
+                let id = argv.first().and_then(Value::as_str).ok_or_else(|| anyhow!(
+                    "switchTab 缺 targetId；下一步：switchTab(tabs[0].targetId)，先 const tabs = await listPageTargets()"
+                ))?;
+                crate::semantic::switch_tab(&self.session, id).await
+            }
+            "currentTab" => crate::semantic::current_tab(&self.session).await,
+            "closeTab" => {
+                crate::semantic::close_tab(&self.session, argv.first().and_then(Value::as_str))
+                    .await
+            }
+            "clickAt" => {
+                let x = argv.first().and_then(Value::as_i64).ok_or_else(|| anyhow!(
+                    "clickAt 缺坐标；下一步：clickAt(x, y)（视口坐标，snapshot+DOM.getBoxModel 量中心）"
+                ))?;
+                let y = argv.get(1).and_then(Value::as_i64).unwrap_or(0);
+                crate::semantic::click_at(&self.session, x, y).await
+            }
+            "fillInput" => {
+                let sel = argv.first().and_then(Value::as_str).ok_or_else(|| anyhow!(
+                    "fillInput 缺选择器；下一步：fillInput(\"#q\", \"hello\")（CSS 选择器，填完回读验证）"
+                ))?;
+                let text = argv.get(1).and_then(Value::as_str).unwrap_or("");
+                crate::semantic::fill_input(&self.session, sel, text).await
+            }
+            "pressKey" => {
+                let key = argv.first().and_then(Value::as_str).ok_or_else(|| anyhow!(
+                    "pressKey 缺键名；下一步：pressKey(\"Enter\") / pressKey(\"Tab\") / pressKey(\"a\")"
+                ))?;
+                crate::semantic::press_key(&self.session, key).await
+            }
+            "waitLoad" => {
+                let ms = argv.first().and_then(Value::as_u64).unwrap_or(10_000);
+                crate::semantic::wait_load(&self.session, ms).await
+            }
+            "waitIdle" => {
+                let ms = argv.first().and_then(Value::as_u64).unwrap_or(10_000);
+                crate::semantic::wait_idle(&self.session, ms).await
+            }
             other => bail!(
-                "未知函数 {other}；下一步：可用全局 listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/snapshot()/screenshot(path?, full?)/print(x)；CDP 走 session.<Domain>.<method>(params)"
+                "未知函数 {other}；下一步：可用全局 listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/snapshot()/screenshot(path?, full?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/clickAt(x,y)/fillInput(sel,text)/pressKey(key)/waitLoad(ms?)/waitIdle(ms?)/print(x)；CDP 走 session.<Domain>.<method>(params)"
             ),
         }
     }
@@ -495,6 +538,7 @@ fn tab_json(t: PageTarget) -> Value {
         "title": t.title,
         "url": t.url,
         "type": t.type_,
+        "own": t.own,
     })
 }
 

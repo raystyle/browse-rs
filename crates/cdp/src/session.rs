@@ -44,6 +44,9 @@ pub struct PageTarget {
     /// target 类型（这里恒为 `page`）。
     #[serde(rename = "type")]
     pub type_: String,
+    /// 是否本会话自建（`Target.createTarget` 产物）：只有 `own` tab 能被
+    /// `Target.closeTarget` 关闭；chrome 启动自开的初始页与用户 tab 恒 false。
+    pub own: bool,
 }
 
 /// 连接线索三选一：`wsUrl` / `port` / `profileDir`。
@@ -150,6 +153,17 @@ impl Session {
             }
         };
         self.connect_opts(opts).await
+    }
+
+    /// 事件缓冲当前水位（最新事件的 seq，空缓冲为 0）。
+    /// `peek_events_since` 的增量起点用。
+    pub async fn last_seq(&self) -> u64 {
+        self.events
+            .lock()
+            .await
+            .back()
+            .and_then(|e| e.get("seq").and_then(Value::as_u64))
+            .unwrap_or(0)
     }
 
     /// 当前活动 tab 的 targetId（[`Session::use_target`] 设置）。
@@ -291,10 +305,10 @@ impl Session {
         match method {
             "Browser.close" => Err(anyhow!(
                 "browse: 守卫拦截 Browser.close（绝不关闭附着的浏览器）；\
-                 自起引擎用 browse down 退出"
+                 下一步：自起引擎用 browse down 退出"
             )),
             "Browser.setWindowBounds" => Err(anyhow!(
-                "browse: 守卫拦截 Browser.setWindowBounds（不动用户窗口）"
+                "browse: 守卫拦截 Browser.setWindowBounds（不动用户窗口）；下一步：无替代操作，调整窗口不属于自动化面"
             )),
             "Target.closeTarget" => {
                 let id = params.get("targetId").and_then(Value::as_str).unwrap_or("");
@@ -302,8 +316,9 @@ impl Session {
                     Ok(())
                 } else {
                     Err(anyhow!(
-                        "browse: 守卫拦截 Target.closeTarget：{id} 不是本会话自建 tab，\
-                         只关自己开的 tab（守卫在 Session::call 层，绕不过）"
+                        "browse: 守卫拦截 Target.closeTarget：{id} 不是本会话自建 tab；\
+                         下一步：只关 listPageTargets()/currentTab() 里 own=true 的 tab；\
+                         chrome 启动初始页与用户 tab 不关，用 switchTab 切走即可"
                     ))
                 }
             }
@@ -423,6 +438,7 @@ impl Session {
     /// 未连接或 `Target.getTargets` 失败。
     pub async fn list_page_targets(&self) -> Result<Vec<PageTarget>> {
         let r = self.send("Target.getTargets", json!({})).await?;
+        let own_now = self.own_targets.lock().await.clone();
         let infos = r
             .get("targetInfos")
             .and_then(|v| v.as_array())
@@ -431,6 +447,10 @@ impl Session {
         Ok(infos
             .into_iter()
             .filter_map(|t| {
+                let own = t
+                    .get("targetId")
+                    .and_then(Value::as_str)
+                    .is_some_and(|id| own_now.contains(id));
                 let type_ = t.get("type")?.as_str()?.to_string();
                 let url = t.get("url")?.as_str()?.to_string();
                 if type_ != "page" {
@@ -448,6 +468,7 @@ impl Session {
                         .to_string(),
                     url,
                     type_,
+                    own,
                 })
             })
             .collect())
@@ -887,6 +908,26 @@ mod tests {
         assert_eq!(url_host("http://a.b:8080/"), "a.b");
         assert_eq!(url_host("about:blank"), "about");
         assert_eq!(url_host("data:text/html,x"), "data");
+    }
+
+    /// 守卫错误的 CTA 契约：给「下一步」，不只给原因。
+    #[tokio::test]
+    async fn guard_errors_carry_next_step() {
+        let s = Session::new();
+        for (method, params, expect) in [
+            ("Browser.close", json!({}), "browse down"),
+            (
+                "Target.closeTarget",
+                json!({ "targetId": "NOT-OWN" }),
+                "own=true",
+            ),
+            ("Browser.setWindowBounds", json!({}), "无替代操作"),
+        ] {
+            let e = s.guard(method, &params).await.expect_err(method);
+            let msg = format!("{e:#}");
+            assert!(msg.contains("下一步"), "{method} 守卫错误应带 CTA: {msg}");
+            assert!(msg.contains(expect), "{method} 应含 {expect}: {msg}");
+        }
     }
 
     /// 后缀匹配语义：子域命中、同级不误伤。
