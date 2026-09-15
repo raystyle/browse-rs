@@ -105,8 +105,14 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 - 元素引用 D35-lite（snapshot 短 ref + clickRef/fillRef，backendNodeId 锚）
 - 录制（Page.startScreencast 帧流）
-- artifact/checkpoint 工件、多实例（bh `BH_NAME` 式）
+- 元素引用的进阶（代际失效）、录制剪辑
+- 多实例（bh `BH_NAME` 式）
 - POSIX 管道通道（fd 3/4 布线）
+
+大值保护（artifact/checkpoint 的降级实现，已落地）：片段结果序列化超
+32KB 时自动落盘 `%USERPROFILE%\.browse-rs\dropsalue-<ts>.{json,txt}`，
+stdout 只回 `{"__dropped":true,"bytes":N,"path":"...","preview":"前 160 字符"}`
+——防大 JSON 淹没 agent 上下文；daemon 与 vars 表不受影响。
 
 ## 明确不做（用户裁定，勿再提议）
 

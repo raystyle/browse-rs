@@ -51,6 +51,21 @@
       "path": "browse_cli::client::state_dir",
       "kind": "function",
       "docs": "daemon 日志与运行面目录：`%USERPROFILE%\\.browse-rs`。"
+    },
+    {
+      "path": "browse_cli::render",
+      "kind": "module",
+      "docs": "求值结果的打印面：大值自动落盘（artifact/checkpoint 的降级形态，\n用户裁定）。daemon 与 vars 表不动，只保护 agent 上下文不被 10MB JSON 淹没。"
+    },
+    {
+      "path": "browse_cli::render::DROP_THRESHOLD",
+      "kind": "constant",
+      "docs": "触发落盘的阈值（字节）。序列化后的打印串超过即落盘。"
+    },
+    {
+      "path": "browse_cli::render::render_or_drop_sync",
+      "kind": "function",
+      "docs": "渲染求值结果；超阈值时写文件并返回提示行（含路径与预览），\n未超阈值返回正常渲染。\n\n# Errors\n\n落盘失败（目录不可写）。\n\n# Examples\n\n```\nuse serde_json::json;\n// 小值正常渲染\nassert_eq!(browse_cli::render::render_or_drop_sync(&json!(\"hi\")).unwrap(), \"hi\");\n// 大值落盘（同步测试路径）\nlet big = json!(\"x\".repeat(browse_cli::render::DROP_THRESHOLD + 1));\nlet line = browse_cli::render::render_or_drop_sync(&big).unwrap();\nassert!(line.contains(\"__dropped\"), \"{line}\");\n```"
     }
   ]
 }

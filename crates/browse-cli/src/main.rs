@@ -166,7 +166,17 @@ async fn run_eval(
 async fn run_snip(snip: &str, new_tab: bool) {
     match client::eval(snip, new_tab).await {
         Ok(v) => {
-            let s = browse_core::render_result(&v);
+            // 大值落盘（artifact 降级形态）：stdout 只回路径与预览
+            let s = match browse_cli::render::render_or_drop_sync(&v) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("browse: 大值落盘失败（{e}），改打全量前 1KB");
+                    browse_core::render_result(&v)
+                        .chars()
+                        .take(1024)
+                        .collect::<String>()
+                }
+            };
             if !s.is_empty() {
                 println!("{s}");
             }

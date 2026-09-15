@@ -6,6 +6,7 @@
 
 - [browse-cli overview](browse_cli/index.md): browse CLI 的可测半边：daemon 客户端（HTTP 调用 + 自动拉起）。
 - [browse-cli::client](browse_cli/client.md): daemon 客户端：本地 HTTP 调用 + 首次使用自动拉起 detached daemon。
+- [browse-cli::render](browse_cli/render.md): 求值结果的打印面：大值自动落盘（artifact/checkpoint 的降级形态，
 
 ## browse-core 0.1.0
 
