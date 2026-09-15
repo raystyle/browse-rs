@@ -29,12 +29,14 @@ browse '<方言片段>' ──HTTP POST /eval──> daemon（browse.exe --serve
 Ctrl+A、回读严格验证）、`pressKey(key)`、`waitLoad(ms?)`、`waitIdle(ms?)`
 （network 静默窗口）。Input 派发撞后台 tab 挂起时自动 activate 自愈重试一次。
 
-元素引用（D35-lite）：`snapshot()` 给每个带 backendNodeId 的节点盖短
-`ref`（e1、e2…），`clickRef(ref)`（滚动可见->量中心->trusted 点击）与
-`fillRef(ref,text)`（objectId 上 focus->SelectAll+insertText->同节点回读
-严格验证）按 ref 操作——选择器会随页面重构漂移，backendNodeId 不会。
-引用表只保留最近一次 snapshot（整表替换）；导航后旧 ref 失效，
-`DOM.resolveNode`/零尺寸探测兜底报错并带「重新 snapshot」CTA，
+元素引用（D35-lite + 主动代际失效）：`snapshot()` 给每个带 backendNodeId
+的节点盖短 `ref`（e1、e2…），`clickRef(ref)`（滚动可见->量中心->trusted
+点击）与 `fillRef(ref,text)`（objectId 上 focus->SelectAll+insertText->
+同节点回读严格验证）按 ref 操作——选择器会随页面重构漂移，
+backendNodeId 不会。引用表只保留最近一次 snapshot（整表替换）；
+snapshot 时在页窗口盖 `__browse_ref_gen` 代标记，引用前核对：
+文档被导航重开即整表作废（SPA 同文档 pushState 不误伤），
+另有 `DOM.resolveNode`/零尺寸被动兜底——错误一律带「重新 snapshot」CTA，
 绝不静默点错位置。
 
 录制：`recordStart(opts?)` / `recordStop()`。`Page.startScreencast` 帧流
@@ -124,11 +126,11 @@ ubuntu-latest 编译并单测 cdp（POSIX 管道 fd 3/4 布线的平台门禁）
 
 ## Roadmap（v0.1 之外）
 
-- ~~元素引用 D35-lite（snapshot 短 ref + clickRef/fillRef，backendNodeId 锚）~~ 已落地（失效探测 + 重取 CTA）
+- ~~元素引用 D35-lite（snapshot 短 ref + clickRef/fillRef，backendNodeId 锚）~~ 已落地
 - ~~录制（Page.startScreencast 帧流）~~ 已落地（源端抽帧/限宽高当轻量剪辑）
-- 元素引用的进阶（主动代际失效）
+- ~~元素引用的进阶（主动代际失效）~~ 已落地（`__browse_ref_gen` 窗口代标记，SPA 不误伤）
 - ~~多实例（bh `BH_NAME` 式）~~ 已落地（BROWSE_NAME，ADR-0006）
-- ~~POSIX 管道通道（fd 3/4 布线）~~ 已落地（CI ubuntu 编译+单测门禁；真机 Linux 端到端待补）
+- ~~POSIX 管道通道（fd 3/4 布线）~~ 已落地（WSL 真 Linux 验证；CI ubuntu 门禁；真机 Linux 对 clean-chrome 端到端待补）
 
 大值保护（artifact/checkpoint 的降级实现，已落地）：片段结果序列化超
 32KB 时自动落盘 `%USERPROFILE%\.browse-rs\dropsalue-<ts>.{json,txt}`，

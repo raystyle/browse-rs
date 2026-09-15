@@ -21,11 +21,20 @@ use tokio::sync::Mutex;
 pub struct JsHost {
     session: Arc<Session>,
     vars: Mutex<HashMap<String, Value>>,
-    /// 元素引用表（D35-lite）：最近一次 `snapshot()` 的短 ref -> backendNodeId。
-    /// 换页/重开 snapshot 即整表替换；引用失效由 `DOM.resolveNode` 兜底报错。
-    refs: Mutex<HashMap<String, i64>>,
+    /// 元素引用表（D35-lite）：最近一次 `snapshot()` 的短 ref -> backendNodeId，
+    /// 连同页窗口的代标记（主动代际失效）。整表随 snapshot 替换。
+    refs: Mutex<Option<RefTable>>,
     /// 进行中的录制（至多一场；方言面 recordStart/recordStop 管理）。
     record: Mutex<Option<crate::record::Recorder>>,
+}
+
+/// 引用表：短 ref -> backendNodeId，加 snapshot 时刻的页窗口代标记。
+/// 代标记不匹配（文档被导航重开）即整表作废；SPA 同文档跳转（pushState）
+/// 不重开窗口、代不变，ref 继续有效——比 URL 对比零假阳性。
+#[derive(Clone)]
+struct RefTable {
+    generation: i64,
+    map: HashMap<String, i64>,
 }
 
 impl JsHost {
@@ -40,7 +49,7 @@ impl JsHost {
         Arc::new(Self {
             session,
             vars: Mutex::new(HashMap::new()),
-            refs: Mutex::new(HashMap::new()),
+            refs: Mutex::new(None),
             record: Mutex::new(None),
         })
     }
@@ -264,19 +273,26 @@ impl JsHost {
                     .call(
                         "Runtime.evaluate",
                         json!({
-                            "expression": "JSON.stringify([location.href, document.title])",
+                            "expression": "JSON.stringify([location.href, document.title, (() => { window.__browse_ref_gen = (window.__browse_ref_gen || 0) + 1; return window.__browse_ref_gen; })()])",
                             "returnByValue": true
                         }),
                     )
                     .await?;
-                let (url, title) = info
+                let (url, title, generation) = info
                     .pointer("/result/value")
                     .and_then(Value::as_str)
-                    .and_then(|s| serde_json::from_str::<Vec<String>>(s).ok())
+                    .and_then(|s| serde_json::from_str::<Vec<Value>>(s).ok())
                     .map(|v| {
                         (
-                            v.first().cloned().unwrap_or_default(),
-                            v.get(1).cloned().unwrap_or_default(),
+                            v.first()
+                                .and_then(Value::as_str)
+                                .unwrap_or_default()
+                                .to_string(),
+                            v.get(1)
+                                .and_then(Value::as_str)
+                                .unwrap_or_default()
+                                .to_string(),
+                            v.get(2).and_then(Value::as_i64).unwrap_or(0),
                         )
                     })
                     .unwrap_or_default();
@@ -336,7 +352,10 @@ impl JsHost {
                         Some(n)
                     })
                     .collect();
-                *self.refs.lock().await = refmap;
+                *self.refs.lock().await = Some(RefTable {
+                    generation,
+                    map: refmap,
+                });
                 Ok(json!({ "url": url, "title": title, "nodes": nodes }))
             }
             "print" => {
@@ -431,16 +450,37 @@ impl JsHost {
         }
     }
 
-    /// 查短 ref 对应的 backendNodeId（只认最近一次 snapshot 的表）。
+    /// 查短 ref 对应的 backendNodeId（只认最近一次 snapshot 的表），
+    /// 并做主动代际校验：snapshot 时在页窗口盖过 `__browse_ref_gen` 代标记，
+    /// 引用前核对——不匹配即文档已被导航重开，整表作废，给重取 CTA。
+    /// 标记取不到（evaluate 失败）不拦，退给被动失效（resolveNode/零尺寸）。
     async fn lookup_ref(&self, r: &str) -> Result<i64> {
-        self.refs
-            .lock()
+        let table = self.refs.lock().await.clone();
+        let Some(t) = table else {
+            bail!(
+                "还没有元素引用（引用表来自 snapshot()）；下一步：先 await snapshot()，用返回里 nodes[].ref"
+            );
+        };
+        let Some(bn) = t.map.get(r).copied() else {
+            bail!(
+                "未知 ref {r}（引用表只保留最近一次 snapshot()）；下一步：先 await snapshot()，用返回里 nodes[].ref"
+            );
+        };
+        if let Ok(resp) = self
+            .session
+            .call(
+                "Runtime.evaluate",
+                json!({ "expression": "window.__browse_ref_gen", "returnByValue": true }),
+            )
             .await
-            .get(r)
-            .copied()
-            .ok_or_else(|| anyhow!(
-                "未知 ref {r}（引用表只保留最近一次 snapshot()）；下一步：先 await snapshot()，用返回里 nodes[].ref（导航后旧 ref 全部作废）"
-            ))
+            && let Some(now) = resp.pointer("/result/value").and_then(Value::as_i64)
+            && now != t.generation
+        {
+            bail!(
+                "ref 已过期（页面文档已换代，旧 ref 全体作废）；下一步：重新 await snapshot() 取新 ref"
+            );
+        }
+        Ok(bn)
     }
 
     async fn call_session(&self, method: &str, argv: &[Value]) -> Result<Value> {
