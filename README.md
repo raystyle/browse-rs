@@ -134,7 +134,7 @@ ubuntu-latest 编译并单测 cdp（POSIX 管道 fd 3/4 布线的平台门禁）
 - ~~录制（Page.startScreencast 帧流）~~ 已落地（源端抽帧/限宽高当轻量剪辑）
 - ~~元素引用的进阶（主动代际失效）~~ 已落地（`__browse_ref_gen` 窗口代标记，SPA 不误伤）
 - ~~多实例（bh `BH_NAME` 式）~~ 已落地（BROWSE_NAME，ADR-0006）
-- ~~POSIX 管道通道（fd 3/4 布线）~~ 已落地（真机 macOS 端到端全绿 + WSL Linux 编译/单测 + CI ubuntu 门禁；真机 Linux 待 lan-ubuntu 工具链就绪同法补验）
+- ~~POSIX 管道通道（fd 3/4 布线）~~ 已落地（真机 Windows/macOS/Linux 三平台端到端全绿 + CI ubuntu 门禁）
 
 大值保护（artifact/checkpoint 的降级实现，已落地）：片段结果序列化超
 32KB 时自动落盘 `%USERPROFILE%\.browse-rs\drops\value-<ts>.{json,txt}`，

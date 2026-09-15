@@ -288,12 +288,25 @@ async fn exercise(engine: &Engine, host: &JsHost, expect_channel: &str) {
         .expect("currentTab");
     eprintln!("[e2e] newTab+currentTab ok");
     assert_eq!(cur.pointer("/targetId"), t2.pointer("/targetId"));
-    let t1_id = host
-        .eval_snippet("return (await listPageTargets())[0].targetId")
+    // 列表顺序跨平台不保证（Linux 的 Target.getTargets 顺序与 Win/mac 不同），
+    // 一律按 targetId 挑：t2 是刚开的，t1 是「不是 t2 的那个」
+    let t2_id = t2
+        .pointer("/targetId")
+        .and_then(Value::as_str)
+        .expect("t2 应带 targetId")
+        .to_string();
+    let tabs = host
+        .eval_snippet("return await listPageTargets()")
         .await
-        .expect("列表")
-        .as_str()
-        .expect("targetId 应是字符串")
+        .expect("列表");
+    let t1_id = tabs
+        .as_array()
+        .expect("tabs 数组")
+        .iter()
+        .find(|t| t.pointer("/targetId").and_then(Value::as_str) != Some(&t2_id))
+        .and_then(|t| t.pointer("/targetId"))
+        .and_then(Value::as_str)
+        .expect("应存在另一个 tab")
         .to_string();
     host.eval_snippet(&format!(r#"await switchTab("{t1_id}")"#))
         .await
@@ -304,7 +317,7 @@ async fn exercise(engine: &Engine, host: &JsHost, expect_channel: &str) {
         .expect("currentTab2");
     eprintln!("[e2e] switchTab 往返 ok");
     assert_eq!(back.pointer("/targetId"), Some(&json!(t1_id)));
-    host.eval_snippet("await switchTab((await listPageTargets())[1].targetId)")
+    host.eval_snippet(&format!(r#"await switchTab("{t2_id}")"#))
         .await
         .expect("切回 t2");
 
