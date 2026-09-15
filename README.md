@@ -103,8 +103,17 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 ## Roadmap（v0.1 之外）
 
-- 语义层助手（goto_url / click_ref / snapshot_interactives 等 snake_case 面）
+- 元素引用 D35-lite（snapshot 短 ref + clickRef/fillRef，backendNodeId 锚）
+- 录制（Page.startScreencast 帧流）
+- artifact/checkpoint 工件、多实例（bh `BH_NAME` 式）
 - POSIX 管道通道（fd 3/4 布线）
-- 多实例（bh `BH_NAME` 式）、看板、应用层
+
+## 明确不做（用户裁定，勿再提议）
+
+- MCP server（接口面就是 CLI + 方言）
+- 秘密脱敏（BROWSE_REDACT 输出层掩码）
+- 模型循环/观察循环（消费者是编码 agent，它自带循环与视觉）
+- 控制流/函数进方言（ADR-0002）
+- Cloud browser（与 clean-chrome 本地优先哲学相反）
 
 [browser-harness-rs]: https://github.com/browser-use/browser-harness-js
