@@ -19,7 +19,7 @@ browse '<方言片段>' ──HTTP POST /eval──> daemon（browse.exe --serve
 
 安全守卫（程序级强制，`Session::call` 层，错误一律带 CTA「下一步」）：
 `Browser.close` / `Browser.setWindowBounds` 一律拒绝；`Target.closeTarget`
-只放行自建 tab——`listPageTargets()` / `currentTab()` 带 `own` 字段标注
+只放行自建 tab：`listPageTargets()` / `currentTab()` 带 `own` 字段标注
 哪些能关（chrome 启动初始页与用户 tab 恒 `own:false`，用 `switchTab` 切走）。
 
 语义层近期面（对齐 harness(py) 高频操作，坑表教训落地）：
@@ -32,16 +32,16 @@ Ctrl+A、回读严格验证）、`pressKey(key)`、`waitLoad(ms?)`、`waitIdle(m
 元素引用（D35-lite + 主动代际失效）：`snapshot()` 给每个带 backendNodeId
 的节点盖短 `ref`（e1、e2…），`clickRef(ref)`（滚动可见->量中心->trusted
 点击）与 `fillRef(ref,text)`（objectId 上 focus->SelectAll+insertText->
-同节点回读严格验证）按 ref 操作——选择器会随页面重构漂移，
+同节点回读严格验证）按 ref 操作：选择器会随页面重构漂移，
 backendNodeId 不会。引用表只保留最近一次 snapshot（整表替换）；
 snapshot 时在页窗口盖 `__browse_ref_gen` 代标记，引用前核对：
 文档被导航重开即整表作废（SPA 同文档 pushState 不误伤），
-另有 `DOM.resolveNode`/零尺寸被动兜底——错误一律带「重新 snapshot」CTA，
+另有 `DOM.resolveNode`/零尺寸被动兜底，错误一律带「重新 snapshot」CTA，
 绝不静默点错位置。
 
 录制：`recordStart(opts?)` / `recordStop()`。`Page.startScreencast` 帧流
 由常驻泵任务落盘 `%USERPROFILE%\.browse-rs\record-<ts>\frame-NNNNNN.png`
-（opts 可 `everyNthFrame` 源端抽帧、`maxWidth`/`maxHeight` 限宽高——
+（opts 可 `everyNthFrame` 源端抽帧、`maxWidth`/`maxHeight` 限宽高，
 轻量剪辑面），stop 回 `{frames,bytes,dir}`。ack 按帧自带 sessionId
 路由；帧走事件缓冲（上限 1000），录短段、要完整事件流先 peek。
 
@@ -96,6 +96,10 @@ return (await session.Runtime.evaluate({expression:"document.title", returnByVal
 `findEvents(method, "params.requestId", <值>, n?)`（等值过滤）。事件进缓冲
 即盖单调 `seq`。方法拼错时 CDP `not found` 错误自动附相近建议
 （清单 652 条由 `tools/gen-cdp-methods.py` 生成，`crates/cdp/src/methods.txt`）。
+clean-chrome S006（50 锚）起 `Runtime.consoleAPICalled` 的 args 与
+`Runtime.exceptionThrown` 的 exception 不带 preview（objectId 保留），
+要对象细节走 `objectId + Runtime.getProperties`；`Runtime.evaluate`
+的 preview 两态不受影响。
 
 域策略（对齐 pi policy）：`BROWSE_DENY_DOMAINS` / `BROWSE_ALLOW_DOMAINS`
 （逗号分隔，后缀匹配含子域；deny 优先）在 `Page.navigate` /
@@ -133,9 +137,9 @@ ubuntu-latest 编译并单测 cdp（POSIX 管道 fd 3/4 布线的平台门禁）
 - ~~POSIX 管道通道（fd 3/4 布线）~~ 已落地（WSL 真 Linux 验证；CI ubuntu 门禁；真机 Linux 对 clean-chrome 端到端待补）
 
 大值保护（artifact/checkpoint 的降级实现，已落地）：片段结果序列化超
-32KB 时自动落盘 `%USERPROFILE%\.browse-rs\dropsalue-<ts>.{json,txt}`，
+32KB 时自动落盘 `%USERPROFILE%\.browse-rs\drops\value-<ts>.{json,txt}`，
 stdout 只回 `{"__dropped":true,"bytes":N,"path":"...","preview":"前 160 字符"}`
-——防大 JSON 淹没 agent 上下文；daemon 与 vars 表不受影响。
+（防大 JSON 淹没 agent 上下文；daemon 与 vars 表不受影响）
 
 ## 明确不做（用户裁定，勿再提议）
 
