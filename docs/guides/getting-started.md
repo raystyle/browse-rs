@@ -48,7 +48,29 @@ browse 'await session.use((await listPageTargets())[0].targetId)'
 
 铁律：附着来源绝不关浏览器、绝不关非自建 tab（守卫在 `Session::call` 层强制）。
 
-## 6. 批处理（stdin）
+## 6. 元素引用与录制（不写选择器）
+
+```bash
+browse 'const s = await snapshot()'          # nodes[].ref 是短引用（e1、e2…）
+browse 'await clickRef("e3")'                # 滚动可见->trusted 点击
+browse 'await fillRef("e2", "hello rust")'   # 填输入框并回读验证
+browse 'return await recordStart({everyNthFrame:2})'   # 录帧开始（可选抽帧/限宽）
+browse 'await recordStop()'                  # -> {frames,bytes,dir}（PNG 已落盘）
+```
+
+导航后旧 ref 失效（代标记主动拦 + resolveNode 被动兜底），错误自带
+「重新 snapshot」CTA——重新 `snapshot()` 拿新 ref 即可。
+
+## 7. 多实例（BROWSE_NAME）
+
+```bash
+BROWSE_NAME=work browse up --headless        # 独立端口(9900-9999)与状态目录
+BROWSE_NAME=work browse 'return 1+1'         # 与默认实例互不可见
+browse status                                # 默认实例不受影响
+BROWSE_NAME=work browse down
+```
+
+## 8. 批处理（stdin）
 
 ```bash
 printf '%s\n' \
@@ -61,5 +83,6 @@ printf '%s\n' \
 
 - 方言没有 `if/for/函数/模板字符串`：页面逻辑写进 `Runtime.evaluate` 的 `expression` 字符串（页内是真 V8）。
 - 多语句片段要 `return` 才有输出（与样例一致）。
-- E2E 测试共享 profile 会撞 chrome 单实例锁；测试已内置串行。
-- daemon 日志在 `%USERPROFILE%\.browse-rs\daemon.log`；`browse down` 幂等。
+- 大结果（>32KB）自动落盘：stdout 回 `{"__dropped":true,"path":…,"preview":…}`，按 path 取全量。
+- E2E 测试共享 profile 会撞 chrome 单实例锁；测试已内置串行（跑法带 `BROWSE_NO_ATTACH=1`，防误附着你的浏览器）。
+- daemon 日志在 `<state>/daemon.log`（命名实例在 `~/.browse-rs/<name>/`）；`browse down` 幂等。

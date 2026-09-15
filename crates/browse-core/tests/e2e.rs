@@ -371,8 +371,23 @@ async fn exercise(engine: &Engine, host: &JsHost, expect_channel: &str) {
         .expect("closeTab 自建");
     assert_eq!(closed, json!(true));
     // chrome 启动自开的初始 tab 不是本会话自建：关它必须被守卫拦
+    // （挑 own=false 的，别用 [0]——刚关掉的 t2 可能还在列表缓存里）
+    let foreign = host
+        .eval_snippet("return await listPageTargets()")
+        .await
+        .expect("列表2");
+    let foreign_id = foreign
+        .as_array()
+        .and_then(|a| {
+            a.iter()
+                .find(|t| t.get("own").and_then(Value::as_bool) == Some(false))
+        })
+        .and_then(|t| t.get("targetId"))
+        .and_then(Value::as_str)
+        .expect("应存在非自建 tab")
+        .to_string();
     let guarded = host
-        .eval_snippet("await closeTab((await listPageTargets())[0].targetId)")
+        .eval_snippet(&format!(r#"await closeTab("{foreign_id}")"#))
         .await;
     assert!(
         guarded.is_err() && format!("{guarded:#?}").contains("守卫拦截"),

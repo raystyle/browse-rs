@@ -466,6 +466,8 @@ impl JsHost {
                 "未知 ref {r}（引用表只保留最近一次 snapshot()）；下一步：先 await snapshot()，用返回里 nodes[].ref"
             );
         };
+        // 求值成功但代标记对不上（含 undefined=文档已被导航重开）：主动判整表作废；
+        // 求值失败（标记取不到）不拦，退给被动兜底（resolveNode/零尺寸）
         if let Ok(resp) = self
             .session
             .call(
@@ -473,8 +475,7 @@ impl JsHost {
                 json!({ "expression": "window.__browse_ref_gen", "returnByValue": true }),
             )
             .await
-            && let Some(now) = resp.pointer("/result/value").and_then(Value::as_i64)
-            && now != t.generation
+            && resp.pointer("/result/value").and_then(Value::as_i64) != Some(t.generation)
         {
             bail!(
                 "ref 已过期（页面文档已换代，旧 ref 全体作废）；下一步：重新 await snapshot() 取新 ref"
