@@ -21,6 +21,9 @@ use tokio::sync::Mutex;
 pub struct JsHost {
     session: Arc<Session>,
     vars: Mutex<HashMap<String, Value>>,
+    /// 元素引用表（D35-lite）：最近一次 `snapshot()` 的短 ref -> backendNodeId。
+    /// 换页/重开 snapshot 即整表替换；引用失效由 `DOM.resolveNode` 兜底报错。
+    refs: Mutex<HashMap<String, i64>>,
 }
 
 impl JsHost {
@@ -35,6 +38,7 @@ impl JsHost {
         Arc::new(Self {
             session,
             vars: Mutex::new(HashMap::new()),
+            refs: Mutex::new(HashMap::new()),
         })
     }
 
@@ -320,6 +324,24 @@ impl JsHost {
                         }))
                     })
                     .collect();
+                // D35-lite：给带 backendNodeId 的节点依次盖短 ref（e1、e2…），
+                // 并整表替换引用表——只有最近一次 snapshot 的 ref 有效
+                let mut refmap = HashMap::new();
+                let mut counter = 0usize;
+                let nodes: Vec<Value> = nodes
+                    .into_iter()
+                    .filter_map(|mut n| {
+                        let bn = n.get("backendNodeId").and_then(Value::as_i64)?;
+                        counter += 1;
+                        let r = format!("e{counter}");
+                        if let Value::Object(m) = &mut n {
+                            m.insert("ref".into(), json!(r));
+                        }
+                        refmap.insert(r, bn);
+                        Some(n)
+                    })
+                    .collect();
+                *self.refs.lock().await = refmap;
                 Ok(json!({ "url": url, "title": title, "nodes": nodes }))
             }
             "print" => {
@@ -369,10 +391,38 @@ impl JsHost {
                 let ms = argv.first().and_then(Value::as_u64).unwrap_or(10_000);
                 crate::semantic::wait_idle(&self.session, ms).await
             }
+            // ---- 元素引用（D35-lite）：ref 来自最近一次 snapshot() ----
+            "clickRef" => {
+                let r = argv.first().and_then(Value::as_str).ok_or_else(|| anyhow!(
+                    "clickRef 缺 ref；下一步：clickRef(\"e3\")，ref 在最近一次 snapshot() 返回的 nodes[].ref"
+                ))?;
+                let bn = self.lookup_ref(r).await?;
+                crate::semantic::click_ref(&self.session, bn).await
+            }
+            "fillRef" => {
+                let r = argv.first().and_then(Value::as_str).ok_or_else(|| anyhow!(
+                    "fillRef 缺 ref；下一步：fillRef(\"e2\", \"hello\")，ref 在最近一次 snapshot() 返回的 nodes[].ref"
+                ))?;
+                let text = argv.get(1).and_then(Value::as_str).unwrap_or("");
+                let bn = self.lookup_ref(r).await?;
+                crate::semantic::fill_ref(&self.session, bn, text).await
+            }
             other => bail!(
-                "未知函数 {other}；下一步：可用全局 listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/snapshot()/screenshot(path?, full?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/clickAt(x,y)/fillInput(sel,text)/pressKey(key)/waitLoad(ms?)/waitIdle(ms?)/print(x)；CDP 走 session.<Domain>.<method>(params)"
+                "未知函数 {other}；下一步：可用全局 listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/snapshot()/screenshot(path?, full?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/clickAt(x,y)/fillInput(sel,text)/clickRef(ref)/fillRef(ref,text)/pressKey(key)/waitLoad(ms?)/waitIdle(ms?)/print(x)；CDP 走 session.<Domain>.<method>(params)"
             ),
         }
+    }
+
+    /// 查短 ref 对应的 backendNodeId（只认最近一次 snapshot 的表）。
+    async fn lookup_ref(&self, r: &str) -> Result<i64> {
+        self.refs
+            .lock()
+            .await
+            .get(r)
+            .copied()
+            .ok_or_else(|| anyhow!(
+                "未知 ref {r}（引用表只保留最近一次 snapshot()）；下一步：先 await snapshot()，用返回里 nodes[].ref（导航后旧 ref 全部作废）"
+            ))
     }
 
     async fn call_session(&self, method: &str, argv: &[Value]) -> Result<Value> {

@@ -289,6 +289,139 @@ pub async fn wait_idle(s: &Session, ms: u64) -> Result<Value> {
 /// 派发一串 Input 域调用；撞 `cdp timeout`（从未激活的后台 tab 收 Input
 /// 的典型症状）时 `Target.activateTarget` 后整串重试一次——bh 内置激活
 /// 重试同款：只在挂起时自愈，不主动抢用户前台。
+/// 元素引用（D35-lite）：backendNodeId 锚定的真交互。ref 的短名映射在
+/// [`crate::js_host`]（每次 `snapshot()` 整表替换）；本层只管把
+/// backendNodeId 变成 focus/click。引用失效是被动发现的：导航后节点
+/// 没了，`DOM.resolveNode` 报错 -> CTA 重新 snapshot。
+///
+/// backendNodeId -> Runtime objectId（`DOM.resolveNode`）。节点已不在
+/// 当前页面（导航/移除）时报错并带重取 ref 的 CTA。
+async fn resolve_node_object(s: &Session, backend_node_id: i64) -> Result<String> {
+    match s
+        .call("DOM.resolveNode", json!({ "backendNodeId": backend_node_id }))
+        .await
+    {
+        Ok(v) => v
+            .pointer("/object/objectId")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .ok_or_else(|| anyhow!(
+                "DOM.resolveNode 未回 objectId（backendNodeId {backend_node_id}）；下一步：重新 await snapshot() 取新 ref"
+            )),
+        Err(e) => Err(anyhow!(
+            "ref 已失效（节点不在当前页面）：{e:#}；下一步：重新 await snapshot()（导航后旧 ref 全部作废）"
+        )),
+    }
+}
+
+/// 按短 ref 点击：滚动可见 -> 量视口中心 -> 复用 [`click_at`] 的 trusted
+/// 鼠标事件。比 `clickAt` 省掉手工量坐标，页面重排后 ref 仍指同一节点。
+///
+/// # Errors
+///
+/// ref 失效（节点没了）、取不到中心（不可见）、派发失败。
+pub async fn click_ref(s: &Session, backend_node_id: i64) -> Result<Value> {
+    let object_id = resolve_node_object(s, backend_node_id).await?;
+    let r = s
+        .call(
+            "Runtime.callFunctionOn",
+            json!({
+                "objectId": object_id,
+                "functionDeclaration": "function(){ this.scrollIntoView({block:'center'}); const r = this.getBoundingClientRect(); if (!this.isConnected || (!r.width && !r.height)) return null; return JSON.stringify([r.x + r.width/2, r.y + r.height/2]); }",
+                "returnByValue": true
+            }),
+        )
+        .await?;
+    let center = r
+        .pointer("/result/value")
+        .and_then(Value::as_str)
+        .and_then(|v| serde_json::from_str::<Vec<f64>>(v).ok())
+        .filter(|v| v.len() == 2)
+        .ok_or_else(|| anyhow!(
+            "clickRef 量不到元素中心（元素不可见，或已随导航/重排失效）；下一步：重新 await snapshot() 取新 ref，或 clickAt(x,y) 手点坐标"
+        ))?;
+    click_at(s, center[0].round() as i64, center[1].round() as i64).await
+}
+
+/// 按短 ref 填输入框：objectId 上 focus -> 探测控件（SELECT/readOnly 拒收
+/// 并给 CTA）-> SelectAll+insertText（与 [`fill_input`] 同款，不发 Ctrl+A）
+/// -> 同一 objectId 回读严格验证。选择器会随重构漂移，backendNodeId 不会。
+///
+/// # Errors
+///
+/// ref 失效、目标不是可填控件、回读不一致（错误附回读值）。
+pub async fn fill_ref(s: &Session, backend_node_id: i64, text: &str) -> Result<Value> {
+    let object_id = resolve_node_object(s, backend_node_id).await?;
+    let meta = s
+        .call(
+            "Runtime.callFunctionOn",
+            json!({
+                "objectId": object_id,
+                "functionDeclaration": "function(){ this.focus(); if (!this.isConnected || (this.offsetWidth === 0 && this.offsetHeight === 0)) return null; return JSON.stringify({tag: this.tagName, ro: this.readOnly === true}); }",
+                "returnByValue": true
+            }),
+        )
+        .await?;
+    let m = meta
+        .pointer("/result/value")
+        .and_then(Value::as_str)
+        .and_then(|v| serde_json::from_str::<Value>(v).ok())
+        .ok_or_else(|| anyhow!(
+            "fillRef 目标不可聚焦（不是表单控件，或已随导航失效）；下一步：重新 await snapshot() 取新 ref，或 fillInput(选择器, 文本)"
+        ))?;
+    if m.get("tag").and_then(Value::as_str) == Some("SELECT") {
+        bail!(
+            "fillRef 暂不支持 <select>；下一步：await session.Runtime.evaluate({{expression:\"document.querySelector('select').value='v'; document.querySelector('select').dispatchEvent(new Event('change',{{bubbles:true}}))\"}})"
+        );
+    }
+    if m.get("ro").and_then(Value::as_bool) == Some(true) {
+        bail!("fillRef 目标是 readOnly（backendNodeId {backend_node_id}）");
+    }
+    let mut seq: Vec<(&'static str, Value)> = vec![
+        (
+            "Input.dispatchKeyEvent",
+            json!({ "type": "rawKeyDown", "key": "a", "code": "KeyA", "commands": ["SelectAll"] }),
+        ),
+        (
+            "Input.dispatchKeyEvent",
+            json!({ "type": "keyUp", "key": "a", "code": "KeyA" }),
+        ),
+    ];
+    if text.is_empty() {
+        seq.push((
+            "Input.dispatchKeyEvent",
+            json!({ "type": "rawKeyDown", "key": "Backspace", "code": "Backspace" }),
+        ));
+        seq.push((
+            "Input.dispatchKeyEvent",
+            json!({ "type": "keyUp", "key": "Backspace", "code": "Backspace" }),
+        ));
+    } else {
+        seq.push(("Input.insertText", json!({ "text": text })));
+    }
+    dispatch_input_seq(s, seq).await?;
+    let read = s
+        .call(
+            "Runtime.callFunctionOn",
+            json!({
+                "objectId": object_id,
+                "functionDeclaration": "function(){ return this.value; }",
+                "returnByValue": true
+            }),
+        )
+        .await?;
+    let got = read
+        .pointer("/result/value")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if got != text {
+        bail!(
+            "fillRef 回读不一致：期望 {text:?} 实得 {got:?}（backendNodeId {backend_node_id}）；下一步：检查是否有 JS 覆写或格式化输入，或重新 snapshot() 取新 ref"
+        );
+    }
+    Ok(json!(text))
+}
+
 async fn dispatch_input_seq(s: &Session, seq: Vec<(&'static str, Value)>) -> Result<()> {
     match run_input_seq(s, &seq).await {
         Ok(()) => Ok(()),

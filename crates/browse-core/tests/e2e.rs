@@ -10,6 +10,9 @@ use serde_json::{Value, json};
 static SEQ: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 fn gated() -> bool {
+    // 跑法：BROWSE_E2E=1 BROWSE_NO_ATTACH=1 cargo test …
+    // （NO_ATTACH 跳过附着探测：本机 9222 上可能开着用户自己的
+    // clean-chrome，e2e 要的是自起隔离实例，不许撞上）
     std::env::var("BROWSE_E2E").ok().as_deref() == Some("1")
 }
 
@@ -126,7 +129,7 @@ async fn exercise(engine: &Engine, host: &JsHost, expect_channel: &str) {
 
     // snapshot：AX 树精简节点，含按钮
     host.eval_snippet(
-        r#"await session.Page.navigate({url:"data:text/html,<title>ax</title><button>GoGo</button><input value=\"hi\">"})"#,
+        r#"await session.Page.navigate({url:"data:text/html,<title>ax</title><button onclick='window.go=5'>GoGo</button><input value=\"hi\">"})"#,
     )
     .await
     .expect("导航到 snapshot 页");
@@ -146,6 +149,55 @@ async fn exercise(engine: &Engine, host: &JsHost, expect_channel: &str) {
             .any(|n| n.get("role") == Some(&json!("button"))
                 && n.get("name") == Some(&json!("GoGo"))),
         "snapshot 应含 role=button name=GoGo: {snap}"
+    );
+
+    eprintln!("[e2e] 元素引用 D35-lite 开始");
+    // ---- 元素引用（D35-lite）----
+    // fillRef：按 snapshot 短 ref 填输入框（value=hi 的那个），回读即验
+    let input_ref = nodes
+        .iter()
+        .find(|n| n.get("value") == Some(&json!("hi")))
+        .and_then(|n| n.get("ref"))
+        .and_then(Value::as_str)
+        .expect("输入框节点应带 ref")
+        .to_string();
+    let filled_ref = host
+        .eval_snippet(&format!(r#"await fillRef("{input_ref}", "ref filled")"#))
+        .await
+        .expect("fillRef");
+    assert_eq!(filled_ref, json!("ref filled"), "fillRef 返回回读值");
+    // clickRef：按 ref 点按钮，页内副作用可观察
+    let btn_ref = nodes
+        .iter()
+        .find(|n| n.get("role") == Some(&json!("button")))
+        .and_then(|n| n.get("ref"))
+        .and_then(Value::as_str)
+        .expect("按钮节点应带 ref")
+        .to_string();
+    host.eval_snippet(&format!(r#"await clickRef("{btn_ref}")"#))
+        .await
+        .expect("clickRef");
+    let go = host
+        .eval_snippet(r#"await session.waitJs("window.go", 3000)"#)
+        .await
+        .expect("clickRef 副作用");
+    assert_eq!(go, json!(5));
+    // 未知 ref：错误带「先 snapshot」CTA
+    let unknown = host.eval_snippet(r#"await clickRef("e9999")"#).await;
+    assert!(
+        unknown.is_err() && format!("{unknown:#?}").contains("snapshot"),
+        "未知 ref 应带 CTA: {unknown:?}"
+    );
+    // 导航后旧 ref 失效：报错引导重新 snapshot（不许静默点错位置）
+    host.eval_snippet(r#"await session.Page.navigate({url:"data:text/html,<title>gone</title>"})"#)
+        .await
+        .expect("导航离开");
+    let stale = host
+        .eval_snippet(&format!(r#"await clickRef("{btn_ref}")"#))
+        .await;
+    assert!(
+        stale.is_err() && format!("{stale:#?}").contains("snapshot"),
+        "导航后旧 ref 应失效并带重取 CTA: {stale:?}"
     );
 
     // screenshot：存文件、字节数为正、清场

@@ -29,6 +29,14 @@ browse '<方言片段>' ──HTTP POST /eval──> daemon（browse.exe --serve
 Ctrl+A、回读严格验证）、`pressKey(key)`、`waitLoad(ms?)`、`waitIdle(ms?)`
 （network 静默窗口）。Input 派发撞后台 tab 挂起时自动 activate 自愈重试一次。
 
+元素引用（D35-lite）：`snapshot()` 给每个带 backendNodeId 的节点盖短
+`ref`（e1、e2…），`clickRef(ref)`（滚动可见->量中心->trusted 点击）与
+`fillRef(ref,text)`（objectId 上 focus->SelectAll+insertText->同节点回读
+严格验证）按 ref 操作——选择器会随页面重构漂移，backendNodeId 不会。
+引用表只保留最近一次 snapshot（整表替换）；导航后旧 ref 失效，
+`DOM.resolveNode`/零尺寸探测兜底报错并带「重新 snapshot」CTA，
+绝不静默点错位置。
+
 ## 命令
 
 ```bash
@@ -103,9 +111,9 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 ## Roadmap（v0.1 之外）
 
-- 元素引用 D35-lite（snapshot 短 ref + clickRef/fillRef，backendNodeId 锚）
+- ~~元素引用 D35-lite（snapshot 短 ref + clickRef/fillRef，backendNodeId 锚）~~ 已落地（失效探测 + 重取 CTA）
 - 录制（Page.startScreencast 帧流）
-- 元素引用的进阶（代际失效）、录制剪辑
+- 元素引用的进阶（主动代际失效）、录制剪辑
 - 多实例（bh `BH_NAME` 式）
 - POSIX 管道通道（fd 3/4 布线）
 
