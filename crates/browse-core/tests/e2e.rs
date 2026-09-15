@@ -377,6 +377,46 @@ async fn exercise(engine: &Engine, host: &JsHost, expect_channel: &str) {
     mark("status2");
     assert_eq!(st2.pointer("/open"), Some(&json!(false)), "{st2}");
 
+    eprintln!("[e2e] network route 开始");
+    // mock：拦截即本地应答（假域名也行，请求根本不出门）
+    host.eval_snippet(
+        r#"await routeMock("http://mock.test/api*", "{\"ok\":1}", {contentType: "application/json"})"#,
+    )
+    .await
+    .expect("routeMock");
+    host.eval_snippet(
+        r#"await session.Page.navigate({url:"data:text/html,<script>fetch('http://mock.test/api/data').then(r => r.text()).then(t => window.got = t).catch(e => window.err = String(e))</script>"})"#,
+    )
+    .await
+    .expect("导航 mock 页");
+    let got = host
+        .eval_snippet(r#"await session.waitJs("window.got", 8000)"#)
+        .await
+        .expect("mock 应答应到达");
+    assert_eq!(got, json!("{\"ok\":1}"), "mock body 应原样到达: {got}");
+    // block：命中的请求直接失败
+    host.eval_snippet(r#"await routeBlock("http://block.test/*")"#)
+        .await
+        .expect("routeBlock");
+    host.eval_snippet(
+        r#"await session.Page.navigate({url:"data:text/html,<script>fetch('http://block.test/x').then(() => window.ok = 1).catch(e => window.err = String(e))</script>"})"#,
+    )
+    .await
+    .expect("导航 block 页");
+    let err = host
+        .eval_snippet(r#"await session.waitJs("window.err", 8000)"#)
+        .await
+        .expect("block 应让 fetch 失败");
+    assert!(
+        err.as_str()
+            .is_some_and(|s| s.to_lowercase().contains("block") || s.contains("Failed")),
+        "失败原因应是拦截: {err}"
+    );
+    // clear：恢复直连（mock 域名不再被应答，直接网络层失败）
+    host.eval_snippet("await routeClear()")
+        .await
+        .expect("routeClear");
+
     eprintln!("[e2e] 录制开始");
     // 录制：startScreencast 帧流落盘；导航触发重绘产帧
     let rec = host

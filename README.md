@@ -50,6 +50,13 @@ Input/evaluate 挂起会被 8 秒短超时拦下并给「先处理对话框」CT
 （设值+派发 input/change，未命中报全部可选值）、`pdf(path?)`
 无头专属存 PDF（回 `{path,bytes}`）。
 
+网络拦截（Fetch 域）：`routeBlock(pattern)` 拦死命中请求（glob 通配，
+BlockedByClient）、`routeMock(pattern, body, opts?)` 本地应答（status/
+contentType 可选；默认带 `Access-Control-Allow-Origin: *`，data: 测试页
+也读得到）、`routeClear()` 全清。`Fetch.requestPaused` 由常驻 watcher 按
+规则应答（未命中放行），规则作用于当前活动 tab。手动
+`session.Fetch.enable` 不受 watcher 打扰。
+
 录制：`recordStart(opts?)` / `recordStop()`。`Page.startScreencast` 帧流
 由常驻泵任务落盘 `%USERPROFILE%\.browse-rs\record-<ts>\frame-NNNNNN.png`
 （opts 可 `everyNthFrame` 源端抽帧、`maxWidth`/`maxHeight` 限宽高，

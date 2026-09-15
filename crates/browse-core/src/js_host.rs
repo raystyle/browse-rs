@@ -15,6 +15,7 @@ use cdp::{ConnectOptions, PageTarget, Session};
 use serde_json::{Map, Value, json};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use tokio::sync::Mutex;
 
 /// 方言宿主：一个 CDP [`Session`] + 一份跨片段持久的变量表。
@@ -26,6 +27,33 @@ pub struct JsHost {
     refs: Mutex<Option<RefTable>>,
     /// 进行中的录制（至多一场；方言面 recordStart/recordStop 管理）。
     record: Mutex<Option<crate::record::Recorder>>,
+    /// 网络拦截规则（routeBlock/routeMock 管理，watcher 应答 requestPaused）。
+    routes: Arc<Mutex<Vec<RouteRule>>>,
+    /// Fetch 域是否由本宿主开启（手动 `session.Fetch.enable` 不被 watcher 打扰）。
+    fetch_by_us: Arc<std::sync::atomic::AtomicBool>,
+}
+
+/// 一条网络拦截规则：glob 模式（`*` 通配）+ 命中动作。
+#[derive(Clone)]
+pub(crate) struct RouteRule {
+    pattern: String,
+    action: RouteAction,
+}
+
+/// 命中后的动作：直接失败（BlockedByClient）或本地应答。
+#[derive(Clone)]
+pub(crate) enum RouteAction {
+    /// `Fetch.failRequest`（BlockedByClient）。
+    Block,
+    /// `Fetch.fulfillRequest` 本地应答：body/status/contentType。
+    Mock {
+        /// 应答体（UTF-8）。
+        body: String,
+        /// HTTP 状态码（缺省 200）。
+        status: i64,
+        /// Content-Type（缺省 text/html）。
+        content_type: String,
+    },
 }
 
 /// 引用表：短 ref -> backendNodeId，加 snapshot 时刻的页窗口代标记。
@@ -47,12 +75,46 @@ impl JsHost {
     /// ```
     pub fn new(session: Arc<Session>) -> Arc<Self> {
         spawn_dialog_watcher(session.clone());
+        let routes = Arc::new(Mutex::new(Vec::new()));
+        let fetch_by_us = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        spawn_route_watcher(session.clone(), routes.clone(), fetch_by_us.clone());
         Arc::new(Self {
             session,
             vars: Mutex::new(HashMap::new()),
             refs: Mutex::new(None),
             record: Mutex::new(None),
+            routes,
+            fetch_by_us,
         })
+    }
+
+    /// 规则变更后同步 `Fetch.enable` 的 pattern 集（去重；空则 disable）。
+    /// 拦截是 per-session 的：规则作用于当前活动 tab，换 tab 后重设规则。
+    async fn sync_fetch_patterns(&self) -> Result<()> {
+        let rules = self.routes.lock().await.clone();
+        if rules.is_empty() {
+            if self.fetch_by_us.load(Ordering::Relaxed) {
+                self.session
+                    .call("Fetch.disable", json!({}))
+                    .await
+                    .map_err(|e| e.context("Fetch.disable"))?;
+                self.fetch_by_us.store(false, Ordering::Relaxed);
+            }
+            return Ok(());
+        }
+        let mut seen = std::collections::BTreeSet::new();
+        let patterns: Vec<Value> = rules
+            .iter()
+            .map(|r| r.pattern.clone())
+            .filter(|p| seen.insert(p.clone()))
+            .map(|p| json!({ "urlPattern": p }))
+            .collect();
+        self.session
+            .call("Fetch.enable", json!({ "patterns": patterns }))
+            .await
+            .map_err(|e| e.context("Fetch.enable"))?;
+        self.fetch_by_us.store(true, Ordering::Relaxed);
+        Ok(())
     }
 
     /// 交互/求值族调用前的快失败：有未处理的 confirm/prompt 时 Input 与
@@ -483,6 +545,50 @@ impl JsHost {
                 self.session.clear_pending_dialog().await;
                 Ok(json!(true))
             }
+            // ---- 网络拦截（Fetch 域，watcher 应答 requestPaused）----
+            "routeBlock" => {
+                let pattern = argv.first().and_then(Value::as_str).ok_or_else(|| anyhow!(
+                    "routeBlock 缺模式；下一步：routeBlock(\"*://ads.example.com/*\")（glob，* 通配）"
+                ))?;
+                self.routes.lock().await.push(RouteRule {
+                    pattern: pattern.to_string(),
+                    action: RouteAction::Block,
+                });
+                self.sync_fetch_patterns().await?;
+                Ok(json!({ "rules": self.routes.lock().await.len() }))
+            }
+            "routeMock" => {
+                let pattern = argv.first().and_then(Value::as_str).ok_or_else(|| anyhow!(
+                    "routeMock 缺模式；下一步：routeMock(\"http://mock.test/api*\", \"<body>\", {{status:200, contentType:\"application/json\"}})"
+                ))?;
+                let body = argv.get(1).and_then(Value::as_str).ok_or_else(|| anyhow!(
+                    "routeMock 缺应答体；下一步：第二参给 body 字符串（第三参可省：{{status, contentType}}）"
+                ))?;
+                let opts = argv.get(2);
+                let action = RouteAction::Mock {
+                    body: body.to_string(),
+                    status: opts
+                        .and_then(|o| o.get("status"))
+                        .and_then(Value::as_i64)
+                        .unwrap_or(200),
+                    content_type: opts
+                        .and_then(|o| o.get("contentType"))
+                        .and_then(Value::as_str)
+                        .unwrap_or("text/html")
+                        .to_string(),
+                };
+                self.routes.lock().await.push(RouteRule {
+                    pattern: pattern.to_string(),
+                    action,
+                });
+                self.sync_fetch_patterns().await?;
+                Ok(json!({ "rules": self.routes.lock().await.len() }))
+            }
+            "routeClear" => {
+                self.routes.lock().await.clear();
+                self.sync_fetch_patterns().await?;
+                Ok(json!(true))
+            }
             // ---- 存档：PDF（无头专属）----
             "pdf" => {
                 let path = argv.first().and_then(Value::as_str).map(str::to_string);
@@ -512,7 +618,7 @@ impl JsHost {
                 crate::record::stop(&self.session, rec).await
             }
             other => bail!(
-                "未知函数 {other}；下一步：可用全局 listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/snapshot()/screenshot(path?, full?)/pdf(path?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/clickAt(x,y)/fillInput(sel,text)/clickRef(ref)/fillRef(ref,text)/selectOption(ref,value)/pressKey(key)/dialogStatus()/dialogAccept(text?)/dialogDismiss()/waitLoad(ms?)/waitIdle(ms?)/recordStart(opts?)/recordStop()/print(x)；CDP 走 session.<Domain>.<method>(params)"
+                "未知函数 {other}；下一步：可用全局 listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/snapshot()/screenshot(path?, full?)/pdf(path?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/clickAt(x,y)/fillInput(sel,text)/clickRef(ref)/fillRef(ref,text)/selectOption(ref,value)/pressKey(key)/dialogStatus()/dialogAccept(text?)/dialogDismiss()/routeBlock(pattern)/routeMock(pattern,body,opts?)/routeClear()/waitLoad(ms?)/waitIdle(ms?)/recordStart(opts?)/recordStop()/print(x)；CDP 走 session.<Domain>.<method>(params)"
             ),
         }
     }
@@ -754,6 +860,137 @@ fn spawn_dialog_watcher(session: Arc<Session>) {
     });
 }
 
+/// 网络拦截 watcher（游离常驻任务）：`Fetch.requestPaused` 是必须应答的
+/// 事件（不应答页面就挂着），由 watcher 按 [`RouteRule`] 应答——命中的
+/// failRequest/fulfillRequest，未命中的 continueRequest 放行。只在我们
+/// 自己 `Fetch.enable` 时才接管（手动开 Fetch 域的 requestPaused 不动，
+/// 留给 agent 自己 peekEvents 处理）。
+fn spawn_route_watcher(
+    session: Arc<Session>,
+    routes: Arc<Mutex<Vec<RouteRule>>>,
+    fetch_by_us: Arc<std::sync::atomic::AtomicBool>,
+) {
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+            if !fetch_by_us.load(Ordering::Relaxed) {
+                continue;
+            }
+            for ev in session.drain_events("Fetch.requestPaused").await {
+                let Some(sid) = ev.get("sessionId").and_then(Value::as_str) else {
+                    continue;
+                };
+                let Some(rid) = ev
+                    .pointer("/params/requestId")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                else {
+                    continue;
+                };
+                let url = ev
+                    .pointer("/params/request/url")
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                let action = routes
+                    .lock()
+                    .await
+                    .iter()
+                    .find(|r| glob_match(&r.pattern, url))
+                    .map(|r| r.action.clone());
+                match action {
+                    Some(RouteAction::Block) => {
+                        let _ = session
+                            .call_on(
+                                "Fetch.failRequest",
+                                json!({ "requestId": rid, "errorReason": "BlockedByClient" }),
+                                sid,
+                            )
+                            .await;
+                    }
+                    Some(RouteAction::Mock {
+                        body,
+                        status,
+                        content_type,
+                    }) => {
+                        // mock 是测试原语：默认带 ACAO，跨源页（data: 测试页）也读得到
+                        let _ = session
+                            .call_on(
+                                "Fetch.fulfillRequest",
+                                json!({
+                                    "requestId": rid,
+                                    "responseCode": status,
+                                    "body": base64_encode(body.as_bytes()),
+                                    "responseHeaders": [
+                                        { "name": "Content-Type", "value": content_type },
+                                        { "name": "Access-Control-Allow-Origin", "value": "*" },
+                                    ],
+                                }),
+                                sid,
+                            )
+                            .await;
+                    }
+                    None => {
+                        let _ = session
+                            .call_on("Fetch.continueRequest", json!({ "requestId": rid }), sid)
+                            .await;
+                    }
+                }
+            }
+        }
+    });
+}
+
+/// 极简 glob：`*` 任意串（可多个），无 `*` 即等值；首段锚头、末段锚尾。
+fn glob_match(pat: &str, text: &str) -> bool {
+    let segs: Vec<&str> = pat.split('*').collect();
+    if segs.len() == 1 {
+        return pat == text;
+    }
+    let head = segs[0];
+    let tail = segs[segs.len() - 1];
+    let Some(rest) = text.strip_prefix(head) else {
+        return false;
+    };
+    let Some(body) = rest.strip_suffix(tail) else {
+        return false;
+    };
+    let mut cur = body;
+    for seg in &segs[1..segs.len() - 1] {
+        if seg.is_empty() {
+            continue;
+        }
+        match cur.find(seg) {
+            Some(i) => cur = &cur[i + seg.len()..],
+            None => return false,
+        }
+    }
+    true
+}
+
+/// 极简 base64 编码（标准字母表 + padding；与 [`base64_decode`] 对偶）。
+pub(crate) fn base64_encode(data: &[u8]) -> String {
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
+    for chunk in data.chunks(3) {
+        let n = (u32::from(chunk[0]) << 16)
+            | (u32::from(*chunk.get(1).unwrap_or(&0)) << 8)
+            | u32::from(*chunk.get(2).unwrap_or(&0));
+        out.push(TABLE[(n >> 18 & 63) as usize] as char);
+        out.push(TABLE[(n >> 12 & 63) as usize] as char);
+        out.push(if chunk.len() > 1 {
+            TABLE[(n >> 6 & 63) as usize] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            TABLE[(n & 63) as usize] as char
+        } else {
+            '='
+        });
+    }
+    out
+}
+
 fn tab_json(t: PageTarget) -> Value {
     json!({
         "targetId": t.target_id,
@@ -844,4 +1081,44 @@ pub(crate) fn base64_decode(s: &str) -> Result<Vec<u8>> {
         }
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// glob 语义：等值、前中后缀通配、多段、锚定不误伤。
+    #[test]
+    fn glob_matches() {
+        assert!(
+            glob_match("http://a.test/x", "http://a.test/x"),
+            "无 * 即等值"
+        );
+        assert!(!glob_match("http://a.test/x", "http://a.test/y"));
+        assert!(glob_match(
+            "http://mock.test/api*",
+            "http://mock.test/api/data?v=1"
+        ));
+        assert!(glob_match(
+            "*://ads.example.com/*",
+            "https://ads.example.com/pixel.js"
+        ));
+        assert!(glob_match("http://*middle*", "http://a-middle-b"));
+        assert!(
+            !glob_match("http://mock.test/api*", "http://mock.test/other"),
+            "前缀锚定"
+        );
+        assert!(!glob_match("*api", "http://mock.test/api/x"), "末段锚尾");
+        assert!(glob_match("*", "anything at all"));
+    }
+
+    /// base64 编解码往返（含 padding 两态）。
+    #[test]
+    fn base64_roundtrip() {
+        for s in ["", "a", "ab", "abc", "{\"ok\":1} 你好"] {
+            let enc = base64_encode(s.as_bytes());
+            let dec = base64_decode(&enc).unwrap();
+            assert_eq!(dec, s.as_bytes(), "{s:?} 往返失败");
+        }
+    }
 }
