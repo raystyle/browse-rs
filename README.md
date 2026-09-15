@@ -15,7 +15,7 @@ browse '<方言片段>' ──HTTP POST /eval──> daemon（browse.exe --serve
 1. 显式 `--ws` / `--port` / `BROWSE_CDP_WS` 直连。
 2. 否则探测本机已开调试口（`/json/version`@9222 -> 默认 profile 的 `DevToolsActivePort`），命中即附着（绝不关用户的浏览器）。
 3. 都没有就 spawn 专属实例：独立 profile、`--no-sandbox`、可 `--headless`。
-4. `--pipe`：spawn 走 CDP 管道通道（`CLEAN_CHROME_DEBUG=pipe`，clean-chrome S005 契约），零 TCP 面、断管即关浏览器（ADR-0005，Windows 先行）。
+4. `--pipe`：spawn 走 CDP 管道通道（`CLEAN_CHROME_DEBUG=pipe`，clean-chrome S005 契约），零 TCP 面、断管即关浏览器（ADR-0005；Windows 句柄继承与 POSIX fd 3/4 布线双实现，POSIX 侧由 CI ubuntu 门禁）。
 
 安全守卫（程序级强制，`Session::call` 层，错误一律带 CTA「下一步」）：
 `Browser.close` / `Browser.setWindowBounds` 一律拒绝；`Target.closeTarget`
@@ -113,9 +113,12 @@ return (await session.Runtime.evaluate({expression:"document.title", returnByVal
 
 ```bash
 cargo test --workspace                    # 单元 + 契约（含 doctest）
-BROWSE_E2E=1 cargo test -p browse-core --test e2e   # 真 chrome 端到端（需本机 clean-chrome）
+BROWSE_E2E=1 BROWSE_NO_ATTACH=1 cargo test -p browse-core --test e2e   # 真 chrome 端到端（需本机 clean-chrome；NO_ATTACH 防误附着用户浏览器）
 cargo clippy --workspace --all-targets -- -D warnings
 ```
+
+CI 两个作业：windows-latest 跑全量门禁（fmt/clippy/test/doc/aidoc），
+ubuntu-latest 编译并单测 cdp（POSIX 管道 fd 3/4 布线的平台门禁）。
 
 详读 `AGENTS.md`（命令与门禁）、`docs/architecture.md`（现在怎么拼）、`docs/adr/`（为什么）。
 
@@ -125,7 +128,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 - ~~录制（Page.startScreencast 帧流）~~ 已落地（源端抽帧/限宽高当轻量剪辑）
 - 元素引用的进阶（主动代际失效）
 - ~~多实例（bh `BH_NAME` 式）~~ 已落地（BROWSE_NAME，ADR-0006）
-- POSIX 管道通道（fd 3/4 布线）
+- ~~POSIX 管道通道（fd 3/4 布线）~~ 已落地（CI ubuntu 编译+单测门禁；真机 Linux 端到端待补）
 
 大值保护（artifact/checkpoint 的降级实现，已落地）：片段结果序列化超
 32KB 时自动落盘 `%USERPROFILE%\.browse-rs\dropsalue-<ts>.{json,txt}`，

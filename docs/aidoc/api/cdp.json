@@ -80,7 +80,7 @@
     {
       "path": "cdp::pipe",
       "kind": "module",
-      "docs": "匿名管道薄封装。std 的 anonymous pipe（`std::io::pipe`）至 1.98 仍未稳定，\nWindows 直接用 `CreatePipe`；POSIX 留桩（管道通道暂仅 Windows，走端口态）。\n\n句柄存 `usize` 以获得 `Send + Sync`；阻塞 IO 由 [`crate::Session`] 的\n管道泵在 blocking 线程池上跑。"
+      "docs": "匿名管道薄封装。std 的 anonymous pipe（`std::io::pipe`）至 1.98 仍未稳定，\nWindows 直接用 `CreatePipe`，POSIX 用 `pipe(2)`。\n\n句柄/fd 存 `usize` 以获得 `Send + Sync`；阻塞 IO 由 [`crate::Session`] 的\n管道泵在 blocking 线程池上跑。"
     },
     {
       "path": "cdp::pipe::PipeReader",
@@ -155,7 +155,7 @@
     {
       "path": "cdp::spawn::spawn_engine_pipes",
       "kind": "function",
-      "docs": "按管道契约拉起 clean-chrome（S005 / D02-6，当前仅 Windows）。\n\n启动器建两条匿名管道，把「子读端,子写端」句柄经\n`--remote-debugging-io-pipes=<in>,<out>` 传入（十进制），两枚句柄标\n可继承；`CLEAN_CHROME_DEBUG=pipe|both` 决定端口段开否。协议 ASCIIZ。\n断管即关浏览器（clean-chrome 行为），生命周期与本进程绑定。\n\n# Errors\n\n- 非 Windows 平台（POSIX 需 fd 3/4 布线，未实现，走端口态）。\n- 建管道 / 设可继承 / spawn 失败。"
+      "docs": "按管道契约拉起 clean-chrome（S005 / D02-6；Windows 句柄态与 POSIX\nfd 3/4 布线两实现）。\n\n启动器建两条匿名管道，把「子读端,子写端」经\n`--remote-debugging-io-pipes=<in>,<out>` 传入（十进制）。Windows：\n两枚句柄标可继承；POSIX：pre_exec 里 `dup2` 布到固定 fd 3/4（只用\nasync-signal-safe 的 dup2/close）后关原件。`CLEAN_CHROME_DEBUG=pipe|both`\n决定端口段开否。协议 ASCIIZ。断管即关浏览器（clean-chrome 行为），\n生命周期与本进程绑定。\n\n# Errors\n\n建管道 / spawn 失败（POSIX：dup2 失败进 pre_exec 错误）。"
     },
     {
       "path": "cdp::spawn::terminate_pid",

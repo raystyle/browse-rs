@@ -160,27 +160,83 @@ impl PipeMode {
     }
 }
 
-/// 按管道契约拉起 clean-chrome（S005 / D02-6，当前仅 Windows）。
+/// 按管道契约拉起 clean-chrome（S005 / D02-6；Windows 句柄态与 POSIX
+/// fd 3/4 布线两实现）。
 ///
-/// 启动器建两条匿名管道，把「子读端,子写端」句柄经
-/// `--remote-debugging-io-pipes=<in>,<out>` 传入（十进制），两枚句柄标
-/// 可继承；`CLEAN_CHROME_DEBUG=pipe|both` 决定端口段开否。协议 ASCIIZ。
-/// 断管即关浏览器（clean-chrome 行为），生命周期与本进程绑定。
+/// 启动器建两条匿名管道，把「子读端,子写端」经
+/// `--remote-debugging-io-pipes=<in>,<out>` 传入（十进制）。Windows：
+/// 两枚句柄标可继承；POSIX：pre_exec 里 `dup2` 布到固定 fd 3/4（只用
+/// async-signal-safe 的 dup2/close）后关原件。`CLEAN_CHROME_DEBUG=pipe|both`
+/// 决定端口段开否。协议 ASCIIZ。断管即关浏览器（clean-chrome 行为），
+/// 生命周期与本进程绑定。
 ///
 /// # Errors
 ///
-/// - 非 Windows 平台（POSIX 需 fd 3/4 布线，未实现，走端口态）。
-/// - 建管道 / 设可继承 / spawn 失败。
+/// 建管道 / spawn 失败（POSIX：dup2 失败进 pre_exec 错误）。
 pub fn spawn_engine_pipes(
     chrome: &Path,
     profile_dir: &Path,
     headless: bool,
     mode: PipeMode,
 ) -> Result<PipeEngine> {
-    #[cfg(not(windows))]
+    #[cfg(unix)]
     {
-        let _ = (chrome, profile_dir, headless, mode);
-        bail!("pipe 通道当前仅 Windows（io-pipes 句柄契约）；POSIX 走默认端口态");
+        use crate::pipe::anon_pair;
+        use std::os::unix::process::CommandExt;
+
+        if let Some(parent) = profile_dir.parent() {
+            std::fs::create_dir_all(parent).ok();
+        }
+        // 对齐 Windows 侧：child 读 in、写 out；本侧持有 in_w / out_r
+        let (in_r, in_w) = anon_pair().context("pipe(in)")?;
+        let (out_r, out_w) = anon_pair().context("pipe(out)")?;
+        let in_fd = in_r.h as i32;
+        let out_fd = out_w.h as i32;
+
+        let mut cmd = Command::new(chrome);
+        cmd.arg(format!("--user-data-dir={}", profile_dir.display()))
+            .arg("--remote-debugging-io-pipes=3,4")
+            .arg("--no-first-run")
+            .arg("--no-default-browser-check")
+            .arg("--no-sandbox")
+            .arg("about:blank")
+            .env("CLEAN_CHROME_DEBUG", mode.as_env())
+            .stderr(std::process::Stdio::inherit());
+        if headless {
+            cmd.arg("--headless");
+        }
+        // fork 后 exec 前：把两端布到固定 fd 3/4（clean-chrome POSIX 契约）。
+        // 闭包里只有 dup2/close（async-signal-safe）
+        unsafe {
+            cmd.pre_exec(move || {
+                // 外层 unsafe 已覆盖（edition 2024 的 unsafe_op_in_unsafe_fn 不适用于
+                // 闭包体内的调用，这里嵌套块会被 clippy 判多余）
+                let wire = |src: i32, dst: i32| -> std::io::Result<()> {
+                    if src == dst {
+                        return Ok(());
+                    }
+                    if libc::dup2(src, dst) < 0 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                    libc::close(src);
+                    Ok(())
+                };
+                wire(in_fd, 3)?;
+                wire(out_fd, 4)?;
+                Ok(())
+            });
+        }
+        let child = cmd
+            .spawn()
+            .with_context(|| format!("spawn {} (pipes fd3/4)", chrome.display()))?;
+        // 子进程已持有 3/4；本侧关掉子侧副本防泄漏
+        drop(in_r);
+        drop(out_w);
+        Ok(PipeEngine {
+            child,
+            read: out_r,
+            write: in_w,
+        })
     }
     #[cfg(windows)]
     {

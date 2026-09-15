@@ -10,7 +10,7 @@
 
 - `find_chrome` — 依优先序找 Chrome 可执行文件：`BROWSE_CHROME` 环境变量 ->
 - `spawn_engine` — 拉起专属引擎实例。参数：可执行文件、独立 profile 目录、是否无头。
-- `spawn_engine_pipes` — 按管道契约拉起 clean-chrome（S005 / D02-6，当前仅 Windows）。
+- `spawn_engine_pipes` — 按管道契约拉起 clean-chrome（S005 / D02-6；Windows 句柄态与 POSIX
 - `terminate_pid` — 强杀进程树（优雅退出 `Browser.close` 失败后的兜底）。
 - `wait_devtools_ready` — 等 spawn 出来的实例调试口就绪（读它 profile 下的 `DevToolsActivePort`），
 

@@ -16,3 +16,13 @@ jobs:
       - run: cargo install cargo-aidoc --locked
       - run: rustup toolchain install nightly-2026-07-07 --profile minimal
       - run: cargo aidoc --check --strict
+  # POSIX 管道通道（fd 3/4 布线）只在 unix 编译；CI ubuntu 当编译+单测门禁
+  posix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - run: cargo clippy -p cdp --all-targets -- -D warnings
+      - run: cargo test -p cdp
