@@ -14,6 +14,8 @@
 //!   自己 spawn 的）与引擎状态。
 //! - [`record`]：录制——`Page.startScreencast` 帧流由泵任务落盘
 //!   （`recordStart` / `recordStop`）。
+//! - [`paths`]：实例命名空间（`BROWSE_NAME` -> 状态目录与 daemon 端口，
+//!   多实例的落点，ADR-0006）。
 //! - [`server`]：daemon 的 HTTP API（POST /eval、GET /health、POST /engine/up、
 //!   POST /quit），常驻会话与全局变量跨 CLI 调用保持。
 //!
@@ -31,6 +33,7 @@
 pub mod engine;
 pub mod js_host;
 pub mod parser;
+pub mod paths;
 pub mod record;
 pub mod semantic;
 pub mod server;

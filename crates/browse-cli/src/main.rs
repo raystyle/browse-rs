@@ -240,6 +240,10 @@ fn print_health(h: &serde_json::Value, json: bool) {
     };
     println!("daemon      http://{}", client::daemon_bind());
     println!(
+        "instance    {}",
+        h.get("name").and_then(|v| v.as_str()).unwrap_or("default")
+    );
+    println!(
         "uptime      {}s",
         h.get("uptime").and_then(|v| v.as_u64()).unwrap_or(0)
     );
@@ -354,8 +358,10 @@ browse — 给 agent 用的 browse CLI（clean-chrome 专属）
 支持：字面量/对象/数组/成员/下标/await/const-let-var/return。
 不支持：函数字面量、if/for、模板字符串——页面逻辑放 Runtime.evaluate 的 expression。
 
-环境：BROWSE_PORT（daemon 端口，默认 9880）、BROWSE_CHROME（chrome.exe 路径）、
-      BROWSE_CDP_WS（钉死连接）、BROWSE_EVAL_TIMEOUT（秒，默认 300）。
+环境：BROWSE_PORT（daemon 端口，默认 9880）、BROWSE_NAME（命名实例：状态目录与
+      派生端口 9900-9999 隔离，多实例并行）、BROWSE_CHROME（chrome.exe 路径）、
+      BROWSE_CDP_WS（钉死连接）、BROWSE_NO_ATTACH=1（跳过附着探测强制 spawn）、
+      BROWSE_EVAL_TIMEOUT（秒，默认 300）。
       --pipe：spawn 引擎走 CDP 管道通道（CLEAN_CHROME_DEBUG=pipe，零 TCP 面）。
 退出码：0 成功 / 1 执行失败 / 2 用法错。"
     );

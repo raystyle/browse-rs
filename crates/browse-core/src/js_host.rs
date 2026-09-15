@@ -239,15 +239,7 @@ impl JsHost {
                 let path = match path {
                     Some(p) => std::path::PathBuf::from(p),
                     None => {
-                        let dir = std::env::var_os("USERPROFILE")
-                            .or_else(|| std::env::var_os("HOME"))
-                            .map(|h| {
-                                let mut p = std::path::PathBuf::from(h);
-                                p.push(".browse-rs");
-                                p.push("screenshots");
-                                p
-                            })
-                            .unwrap_or_else(|| std::path::PathBuf::from("."));
+                        let dir = crate::paths::state_dir().join("screenshots");
                         tokio::fs::create_dir_all(&dir).await.ok();
                         let ts = std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)

@@ -55,15 +55,11 @@ pub async fn start(s: Arc<Session>, opts: &Value) -> Result<Recorder> {
         }
     }
     s.call("Page.startScreencast", params).await?;
-    let home = std::env::var_os("USERPROFILE")
-        .or_else(|| std::env::var_os("HOME"))
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."));
     let ts = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis())
         .unwrap_or(0);
-    let dir = home.join(".browse-rs").join(format!("record-{ts}"));
+    let dir = crate::paths::state_dir().join(format!("record-{ts}"));
     tokio::fs::create_dir_all(&dir).await?;
     let frames = Arc::new(AtomicU64::new(0));
     let bytes = Arc::new(AtomicU64::new(0));

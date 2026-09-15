@@ -23,11 +23,6 @@
       "docs": "引擎指令：CLI 旗标 / 环境变量解析出的意图。"
     },
     {
-      "path": "browse_core::engine::engine_profile_dir",
-      "kind": "function",
-      "docs": "spawn 引擎的独立 profile 目录：`%USERPROFILE%\\.browse-rs\\engine-profile`。\n\n# Examples\n\n```\nlet dir = browse_core::engine::engine_profile_dir();\nassert!(dir.ends_with(\"engine-profile\"));\n```"
-    },
-    {
       "path": "browse_core::js_host",
       "kind": "module",
       "docs": "方言求值器：把 [`crate::parser`] 的语句树跑在宿主侧。\n\n移植自 browser-harness-rs `src/js_host.rs` 的求值半边：\n\n- `session.<Domain>.<method>(params)` 直接转发 CDP 字符串调用（无 652 个\n  typed wrapper，新 Chrome 方法不用 codegen）。\n- 宿主全局：`listPageTargets()`、`resolveWsUrl(opts?)`、`print(x)`。\n- `session.connect / use / waitFor / call / isConnected / getActiveSession`。\n- `vars` 在 daemon 内跨片段持久（`const tabs = ...` 之后的片段还能用 `tabs`）。"
@@ -81,6 +76,46 @@
       "path": "browse_core::parser::strip_comments",
       "kind": "function",
       "docs": "剥掉 `//` 行注释（保留字符串字面量里的 `//`）。\n\n# Examples\n\n```\nassert_eq!(browse_core::parser::strip_comments(\"a // 尾注\\nb\"), \"a \\nb\");\nassert_eq!(browse_core::parser::strip_comments(r#\"\"http://x\"\"#), r#\"\"http://x\"\"#);\n```"
+    },
+    {
+      "path": "browse_core::paths",
+      "kind": "module",
+      "docs": "实例命名空间（多实例，ADR-0006）：`BROWSE_NAME` 一个名字同时决定\n状态目录与 daemon 端口。\n\n与 bh 的 `BH_NAME` 同型：默认实例一切照旧（`~/.browse-rs`、9880）；\n命名实例的状态（daemon 日志、drops、screenshots、录制、engine-profile）\n全进 `~/.browse-rs/<name>/`，端口由名字稳定派生（9900-9999）——\n引擎 profile 独占，命名实例可各自 spawn chrome 互不锁。"
+    },
+    {
+      "path": "browse_core::paths::DERIVED_PORT_MIN",
+      "kind": "constant",
+      "docs": "命名实例缺省端口下界（派生区间 9900..=9999，避开默认 9880 与 bh 的 9876）。"
+    },
+    {
+      "path": "browse_core::paths::daemon_port",
+      "kind": "function",
+      "docs": "本实例 daemon 端口：`BROWSE_PORT` 显式优先，其次按 `BROWSE_NAME`\n派生，缺省 9880。\n\n# Examples\n\n```\n// 未设任何变量时是默认口\nif std::env::var_os(\"BROWSE_PORT\").is_none() && std::env::var_os(\"BROWSE_NAME\").is_none() {\n    assert_eq!(browse_core::paths::daemon_port(), 9880);\n}\n```"
+    },
+    {
+      "path": "browse_core::paths::derived_port",
+      "kind": "function",
+      "docs": "名字稳定派生端口（9900..=9999）。同名恒同口（重启不变）；\n异名可能碰撞（~1% 概率），撞上用 `BROWSE_PORT` 显式指定。\n\n# Examples\n\n```\nlet p = browse_core::paths::derived_port(\"worker-1\");\nassert!((9900..=9999).contains(&p));\nassert_eq!(p, browse_core::paths::derived_port(\"worker-1\"), \"同名同口\");\nassert_ne!(p, browse_core::paths::derived_port(\"worker-2\"));\n```"
+    },
+    {
+      "path": "browse_core::paths::engine_profile_dir",
+      "kind": "function",
+      "docs": "本实例引擎 profile：`<state>/engine-profile`（命名实例各自独占，\n可同时 spawn chrome 不互锁）。\n\n# Examples\n\n```\nlet dir = browse_core::paths::engine_profile_dir();\nassert!(dir.ends_with(\"engine-profile\"));\n```"
+    },
+    {
+      "path": "browse_core::paths::instance_name",
+      "kind": "function",
+      "docs": "实例名：`BROWSE_NAME` 的非空值；未设即默认实例（`None`）。\n\n# Examples\n\n```\n// 未设 BROWSE_NAME 时是默认实例\nif std::env::var_os(\"BROWSE_NAME\").is_none() {\n    assert_eq!(browse_core::paths::instance_name(), None);\n}\n```"
+    },
+    {
+      "path": "browse_core::paths::state_dir",
+      "kind": "function",
+      "docs": "本实例状态目录：`%USERPROFILE%\\.browse-rs[\\<name>]`。"
+    },
+    {
+      "path": "browse_core::paths::state_dir_for",
+      "kind": "function",
+      "docs": "按名取状态目录（纯函数，可单测）。\n\n# Examples\n\n```\nlet d = browse_core::paths::state_dir_for(&Some(\"t1\".into()));\nassert!(d.ends_with(r\".browse-rs\\t1\") || d.ends_with(\".browse-rs/t1\"));\n```"
     },
     {
       "path": "browse_core::record",

@@ -6,36 +6,30 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
 
-/// daemon 缺省端口（`BROWSE_PORT` 可覆盖）。避开 bh 的 9876。
+/// daemon 缺省端口（`BROWSE_PORT` / `BROWSE_NAME` 派生可覆盖）。避开 bh 的 9876。
 pub const DEFAULT_PORT: u16 = 9880;
 
-/// daemon 的 `host:port` 绑定串。
+/// daemon 的 `host:port` 绑定串（多实例：`BROWSE_NAME` 派生端口，见 ADR-0006）。
 ///
 /// # Examples
 ///
 /// ```
-/// let port = std::env::var("BROWSE_PORT").unwrap_or_else(|_| "9880".into());
-/// assert_eq!(browse_cli::client::daemon_bind(), format!("127.0.0.1:{port}"));
+/// # // BROWSE_PORT/BROWSE_NAME 均未设时才是默认口（CI 干净环境成立）
+/// if std::env::var_os("BROWSE_PORT").is_none() && std::env::var_os("BROWSE_NAME").is_none() {
+///     assert_eq!(browse_cli::client::daemon_bind(), "127.0.0.1:9880");
+/// }
 /// ```
 pub fn daemon_bind() -> String {
-    let port = std::env::var("BROWSE_PORT")
-        .ok()
-        .and_then(|p| p.parse::<u16>().ok())
-        .unwrap_or(DEFAULT_PORT);
-    format!("127.0.0.1:{port}")
+    format!("127.0.0.1:{}", browse_core::paths::daemon_port())
 }
 
 fn http() -> String {
     format!("http://{}", daemon_bind())
 }
 
-/// daemon 日志与运行面目录：`%USERPROFILE%\.browse-rs`。
+/// daemon 日志与运行面目录：`%USERPROFILE%\.browse-rs[\<name>]`（多实例）。
 pub fn state_dir() -> PathBuf {
-    let home = std::env::var_os("USERPROFILE")
-        .or_else(|| std::env::var_os("HOME"))
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."));
-    home.join(".browse-rs")
+    browse_core::paths::state_dir()
 }
 
 fn client() -> reqwest::Client {

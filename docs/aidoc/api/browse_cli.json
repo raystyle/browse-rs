@@ -10,7 +10,7 @@
     {
       "path": "browse_cli::client::DEFAULT_PORT",
       "kind": "constant",
-      "docs": "daemon 缺省端口（`BROWSE_PORT` 可覆盖）。避开 bh 的 9876。"
+      "docs": "daemon 缺省端口（`BROWSE_PORT` / `BROWSE_NAME` 派生可覆盖）。避开 bh 的 9876。"
     },
     {
       "path": "browse_cli::client::daemon_alive",
@@ -20,7 +20,7 @@
     {
       "path": "browse_cli::client::daemon_bind",
       "kind": "function",
-      "docs": "daemon 的 `host:port` 绑定串。\n\n# Examples\n\n```\nlet port = std::env::var(\"BROWSE_PORT\").unwrap_or_else(|_| \"9880\".into());\nassert_eq!(browse_cli::client::daemon_bind(), format!(\"127.0.0.1:{port}\"));\n```"
+      "docs": "daemon 的 `host:port` 绑定串（多实例：`BROWSE_NAME` 派生端口，见 ADR-0006）。\n\n# Examples\n\n```\n# // BROWSE_PORT/BROWSE_NAME 均未设时才是默认口（CI 干净环境成立）\nif std::env::var_os(\"BROWSE_PORT\").is_none() && std::env::var_os(\"BROWSE_NAME\").is_none() {\n    assert_eq!(browse_cli::client::daemon_bind(), \"127.0.0.1:9880\");\n}\n```"
     },
     {
       "path": "browse_cli::client::engine_up",
@@ -50,7 +50,7 @@
     {
       "path": "browse_cli::client::state_dir",
       "kind": "function",
-      "docs": "daemon 日志与运行面目录：`%USERPROFILE%\\.browse-rs`。"
+      "docs": "daemon 日志与运行面目录：`%USERPROFILE%\\.browse-rs[\\<name>]`（多实例）。"
     },
     {
       "path": "browse_cli::render",

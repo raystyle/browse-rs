@@ -16,10 +16,6 @@ clean-chrome 专为自动化而生（`--auto-allow-devtools-connections` 免确�
 让 agent 一条命令即可 `session.Page.navigate(...)`（ADR-0004）；
 片段里的显式 `session.connect` / `session.use` 仍然可覆盖。
 
-## Functions
-
-- `engine_profile_dir` — spawn 引擎的独立 profile 目录：`%USERPROFILE%\.browse-rs\engine-profile`。
-
 ## Types
 
 - `Engine` — 引擎状态机：确保连接、报告来源、只终结自己 spawn 的。

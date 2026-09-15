@@ -32,7 +32,7 @@ async fn clean_profile() {
     })
     .await;
     tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
-    let dir = browse_core::engine::engine_profile_dir();
+    let dir = browse_core::paths::engine_profile_dir();
     let _ = tokio::task::spawn_blocking(move || {
         std::fs::remove_dir_all(dir).ok();
     })

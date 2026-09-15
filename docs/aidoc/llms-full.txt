@@ -22,17 +22,17 @@ daemon 客户端：本地 HTTP 调用 + 首次使用自动拉起 detached daemon
 ## Functions
 
 - `daemon_alive` — daemon 是否在跑（GET /health 通即为在）。
-- `daemon_bind` — daemon 的 `host:port` 绑定串。
+- `daemon_bind` — daemon 的 `host:port` 绑定串（多实例：`BROWSE_NAME` 派生端口，见 ADR-0006）。
 - `engine_up` — POST /engine/up（显式起引擎）。
 - `ensure_daemon` — 确保 daemon 在跑：不通就 detached 拉起 `browse --serve`，再探活。
 - `eval` — POST /eval。返回片段求值结果；daemon 侧错误进 `Err`（错误串已是给人/agent 的下一步指令形态）。
 - `health` — GET /health。
 - `quit` — POST /quit（退 daemon；daemon 侧顺带只终结自起引擎）。
-- `state_dir` — daemon 日志与运行面目录：`%USERPROFILE%\.browse-rs`。
+- `state_dir` — daemon 日志与运行面目录：`%USERPROFILE%\.browse-rs[\<name>]`（多实例）。
 
 ## Constants
 
-- `DEFAULT_PORT` — daemon 缺省端口（`BROWSE_PORT` 可覆盖）。避开 bh 的 9876。
+- `DEFAULT_PORT` — daemon 缺省端口（`BROWSE_PORT` / `BROWSE_NAME` 派生可覆盖）。避开 bh 的 9876。
 
 
 <!-- browse_cli/render.md -->
@@ -69,6 +69,8 @@ browse CLI 的核心库：方言宿主、引擎策略、daemon HTTP API。
   自己 spawn 的）与引擎状态。
 - [`record`]：录制——`Page.startScreencast` 帧流由泵任务落盘
   （`recordStart` / `recordStop`）。
+- [`paths`]：实例命名空间（`BROWSE_NAME` -> 状态目录与 daemon 端口，
+  多实例的落点，ADR-0006）。
 - [`server`]：daemon 的 HTTP API（POST /eval、GET /health、POST /engine/up、
   POST /quit），常驻会话与全局变量跨 CLI 调用保持。
 
@@ -88,6 +90,7 @@ assert_eq!(render(&stmts), "const tabs = await listPageTargets()");
 - [`engine`](engine.md): 引擎策略：附着优先，缺则自起（ADR-0003）。
 - [`js_host`](js_host.md): 方言求值器：把 [`crate::parser`] 的语句树跑在宿主侧。
 - [`parser`](parser.md): browser-harness-js 片段方言的语法分析器（纯函数）。
+- [`paths`](paths.md): 实例命名空间（多实例，ADR-0006）：`BROWSE_NAME` 一个名字同时决定
 - [`record`](record.md): 录制：`Page.startScreencast` 帧流落盘（方言无回调，泵任务代收）。
 - [`semantic`](semantic.md): 语义层近期面：tab 族、交互三件、等待判官。
 - [`server`](server.md): daemon 的 HTTP API：常驻会话 + 方言求值 + 引擎生命周期。
@@ -111,10 +114,6 @@ clean-chrome 专为自动化而生（`--auto-allow-devtools-connections` 免确�
 连上后自动 attach 首个 page target（没有就开 about:blank），
 让 agent 一条命令即可 `session.Page.navigate(...)`（ADR-0004）；
 片段里的显式 `session.connect` / `session.use` 仍然可覆盖。
-
-## Functions
-
-- `engine_profile_dir` — spawn 引擎的独立 profile 目录：`%USERPROFILE%\.browse-rs\engine-profile`。
 
 ## Types
 
@@ -167,6 +166,31 @@ browser-harness-js 片段方言的语法分析器（纯函数）。
 
 - `Expr` — 表达式节点。
 - `Stmt` — 语句：声明、表达式或 return。
+
+
+<!-- browse_core/paths.md -->
+# browse-core::paths
+
+实例命名空间（多实例，ADR-0006）：`BROWSE_NAME` 一个名字同时决定
+状态目录与 daemon 端口。
+
+与 bh 的 `BH_NAME` 同型：默认实例一切照旧（`~/.browse-rs`、9880）；
+命名实例的状态（daemon 日志、drops、screenshots、录制、engine-profile）
+全进 `~/.browse-rs/<name>/`，端口由名字稳定派生（9900-9999）——
+引擎 profile 独占，命名实例可各自 spawn chrome 互不锁。
+
+## Functions
+
+- `daemon_port` — 本实例 daemon 端口：`BROWSE_PORT` 显式优先，其次按 `BROWSE_NAME`
+- `derived_port` — 名字稳定派生端口（9900..=9999）。同名恒同口（重启不变）；
+- `engine_profile_dir` — 本实例引擎 profile：`<state>/engine-profile`（命名实例各自独占，
+- `instance_name` — 实例名：`BROWSE_NAME` 的非空值；未设即默认实例（`None`）。
+- `state_dir` — 本实例状态目录：`%USERPROFILE%\.browse-rs[\<name>]`。
+- `state_dir_for` — 按名取状态目录（纯函数，可单测）。
+
+## Constants
+
+- `DERIVED_PORT_MIN` — 命名实例缺省端口下界（派生区间 9900..=9999，避开默认 9880 与 bh 的 9876）。
 
 
 <!-- browse_core/record.md -->

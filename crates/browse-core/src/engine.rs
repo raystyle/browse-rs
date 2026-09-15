@@ -24,22 +24,6 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 
-/// spawn 引擎的独立 profile 目录：`%USERPROFILE%\.browse-rs\engine-profile`。
-///
-/// # Examples
-///
-/// ```
-/// let dir = browse_core::engine::engine_profile_dir();
-/// assert!(dir.ends_with("engine-profile"));
-/// ```
-pub fn engine_profile_dir() -> PathBuf {
-    let home = std::env::var_os("USERPROFILE")
-        .or_else(|| std::env::var_os("HOME"))
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."));
-    home.join(".browse-rs").join("engine-profile")
-}
-
 /// 引擎指令：CLI 旗标 / 环境变量解析出的意图。
 #[derive(Debug, Clone)]
 pub enum EngineSpec {
@@ -262,7 +246,7 @@ impl Engine {
                 "browse: 找不到 chrome；用 --chrome <path> 或设 BROWSE_CHROME 指向 clean-chrome 的 chrome.exe"
             )
         })?;
-        let profile = engine_profile_dir();
+        let profile = crate::paths::engine_profile_dir();
         let child = cdp_spawn::spawn_engine(&chrome, &profile, headless)?;
         let pid = child.id();
         // spawn 之后的任何失败都必须杀掉 child：std Child 的 Drop 不杀进程，
@@ -313,7 +297,7 @@ impl Engine {
                 "browse: 找不到 chrome；用 --chrome <path> 或设 BROWSE_CHROME 指向 clean-chrome 的 chrome.exe"
             )
         })?;
-        let profile = engine_profile_dir();
+        let profile = crate::paths::engine_profile_dir();
         let engine =
             cdp_spawn::spawn_engine_pipes(&chrome, &profile, headless, cdp_spawn::PipeMode::Pipe)
                 .context("管道态 spawn")?;
@@ -408,6 +392,7 @@ impl Engine {
         let source = self.source().await;
         let mut v = json!({
             "ok": true,
+            "name": crate::paths::instance_name().unwrap_or_else(|| "default".into()),
             "uptime": uptime.as_secs(),
             "connected": self.session.is_connected(),
             "activeTargetId": self.session.active_target().await,

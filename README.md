@@ -56,7 +56,11 @@ browse status [--json]
 browse --serve [--bind host:port]    # 前台跑 daemon
 ```
 
-环境变量：`BROWSE_PORT`（daemon 端口，默认 9880）、`BROWSE_CHROME`（chrome.exe 路径）、`BROWSE_CDP_WS`（钉死连接）、`BROWSE_EVAL_TIMEOUT`（秒，默认 300）。
+环境变量：`BROWSE_PORT`（daemon 端口，默认 9880）、`BROWSE_NAME`（命名实例，
+ADR-0006：状态目录与派生端口 9900-9999 全隔离，`BROWSE_NAME=work browse up`
+即起一个与默认实例并行的引擎）、`BROWSE_CHROME`（chrome.exe 路径）、
+`BROWSE_CDP_WS`（钉死连接）、`BROWSE_NO_ATTACH=1`（跳过附着探测强制 spawn）、
+`BROWSE_EVAL_TIMEOUT`（秒，默认 300）。
 
 退出码：`0` 成功 / `1` 执行失败 / `2` 用法错；错误串形态 `browse: <下一步指令>` 进 stderr。
 方言错误一律 CTA 三段式：`诊断（行L:列C）；下一步：<可照抄的写法或命令>`
@@ -119,8 +123,8 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 - ~~元素引用 D35-lite（snapshot 短 ref + clickRef/fillRef，backendNodeId 锚）~~ 已落地（失效探测 + 重取 CTA）
 - ~~录制（Page.startScreencast 帧流）~~ 已落地（源端抽帧/限宽高当轻量剪辑）
-- 元素引用的进阶（主动代际失效）、录制剪辑
-- 多实例（bh `BH_NAME` 式）
+- 元素引用的进阶（主动代际失效）
+- ~~多实例（bh `BH_NAME` 式）~~ 已落地（BROWSE_NAME，ADR-0006）
 - POSIX 管道通道（fd 3/4 布线）
 
 大值保护（artifact/checkpoint 的降级实现，已落地）：片段结果序列化超

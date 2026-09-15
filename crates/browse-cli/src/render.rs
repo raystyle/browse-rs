@@ -10,13 +10,9 @@ pub const DROP_THRESHOLD: usize = 32 * 1024;
 /// 预览长度（字符）。
 const PREVIEW_CHARS: usize = 160;
 
-/// 落盘目录：`%USERPROFILE%\.browse-rs\drops`。
+/// 落盘目录：`<state>/drops`（命名实例见 [`browse_core::paths`]）。
 fn drops_dir() -> PathBuf {
-    let home = std::env::var_os("USERPROFILE")
-        .or_else(|| std::env::var_os("HOME"))
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."));
-    home.join(".browse-rs").join("drops")
+    browse_core::paths::state_dir().join("drops")
 }
 
 /// 渲染求值结果；超阈值时写文件并返回提示行（含路径与预览），
