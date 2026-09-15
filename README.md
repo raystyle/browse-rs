@@ -1,170 +1,161 @@
-# browse-rs
+# browse
 
-给 agent 用的 browse CLI（Rust）：JS 方言片段驱动 [clean-chrome](https://github.com/raystyle/clean-chrome)（自编 Chromium，`--auto-allow-devtools-connections` 免确认对话框）。以 [browser-harness-rs] 为样例忠实移植，按 rust-code-as-docs 规范组织（`///` + doctest 锁公开用法，ADR 锁 why）。
-
-```
-browse '<方言片段>' ──HTTP POST /eval──> daemon（browse.exe --serve，127.0.0.1:9880）
-   │                                       ├─ Session：CDP 通道（WS 或 S005 管道）+ flatten attach
-   │                                       ├─ JsHost：方言解释器（vars 跨调用持久）
-   │                                       └─ Engine：附着探测 -> spawn 兜底（只杀自己的）
-   └─ 首次使用自动拉起 daemon（detached），browse down 退出
-```
-
-## 引擎策略（ADR-0003）
-
-1. 显式 `--ws` / `--port` / `BROWSE_CDP_WS` 直连。
-2. 否则探测本机已开调试口（`/json/version`@9222 -> 默认 profile 的 `DevToolsActivePort`），命中即附着（绝不关用户的浏览器）。
-3. 都没有就 spawn 专属实例：独立 profile、`--no-sandbox`、可 `--headless`。
-4. `--pipe`：spawn 走 CDP 管道通道（`CLEAN_CHROME_DEBUG=pipe`，clean-chrome S005 契约），零 TCP 面、断管即关浏览器（ADR-0005；Windows 句柄继承与 POSIX fd 3/4 布线双实现，POSIX 侧由 CI ubuntu 门禁）。
-
-安全守卫（程序级强制，`Session::call` 层，错误一律带 CTA「下一步」）：
-`Browser.close` / `Browser.setWindowBounds` 一律拒绝；`Target.closeTarget`
-只放行自建 tab：`listPageTargets()` / `currentTab()` 带 `own` 字段标注
-哪些能关（chrome 启动初始页与用户 tab 恒 `own:false`，用 `switchTab` 切走）。
-
-语义层近期面（对齐 harness(py) 高频操作，坑表教训落地）：
-`newTab(url?)`（先 about:blank 再 goto，回 `{targetId,title,url,own}`）、
-`switchTab(id)`、`currentTab()`、`closeTab(id?)`（守卫同 `Target.closeTarget`）、
-`clickAt(x,y)`（trusted 鼠标事件）、`fillInput(sel,text)`（SelectAll 不发
-Ctrl+A、回读严格验证）、`pressKey(key)`、`waitLoad(ms?)`、`waitIdle(ms?)`
-（network 静默窗口）。Input 派发撞后台 tab 挂起时自动 activate 自愈重试一次。
-
-元素引用（D35-lite + 主动代际失效）：`snapshot()` 给每个带 backendNodeId
-的节点盖短 `ref`（e1、e2…），`clickRef(ref)`（滚动可见->量中心->trusted
-点击）与 `fillRef(ref,text)`（objectId 上 focus->SelectAll+insertText->
-同节点回读严格验证）按 ref 操作：选择器会随页面重构漂移，
-backendNodeId 不会。引用表只保留最近一次 snapshot（整表替换）；
-snapshot 时在页窗口盖 `__browse_ref_gen` 代标记，引用前核对：
-文档被导航重开即整表作废（SPA 同文档 pushState 不误伤），
-另有 `DOM.resolveNode`/零尺寸被动兜底，错误一律带「重新 snapshot」CTA，
-绝不静默点错位置。`clickRef` 带遮挡守卫（吸收 agent-browser 的 blocker
-思路）：`elementFromPoint` 命中测试，点击点被无关元素盖住（consent
-banner、modal）即拒绝并报遮挡物，同样不静默点错。
-
-对话框（吸收 agent-browser 语义）：`alert`/`beforeunload` 由常驻
-watcher 自动接受（`BROWSE_NO_AUTO_DIALOG=1` 关掉），永不阻塞 agent；
-`confirm`/`prompt` 走 `dialogStatus()` / `dialogAccept(text?)` /
-`dialogDismiss()` 显式处理：状态由 cdp 路由层截获，对话框开着时
-Input/evaluate 挂起会被 8 秒短超时拦下并给「先处理对话框」CTA，
-不烧 30 秒。另有 `selectOption(ref, value或label)` 内建下拉选择
-（设值+派发 input/change，未命中报全部可选值）、`pdf(path?)`
-无头专属存 PDF（回 `{path,bytes}`）。
-
-网络拦截（Fetch 域）：`routeBlock(pattern)` 拦死命中请求（glob 通配，
-BlockedByClient）、`routeMock(pattern, body, opts?)` 本地应答（status/
-contentType 可选；默认带 `Access-Control-Allow-Origin: *`，data: 测试页
-也读得到）、`routeClear()` 全清。`Fetch.requestPaused` 由常驻 watcher 按
-规则应答（未命中放行），规则作用于当前活动 tab。手动
-`session.Fetch.enable` 不受 watcher 打扰。
-
-录制：`recordStart(opts?)` / `recordStop()`。`Page.startScreencast` 帧流
-由常驻泵任务落盘 `%USERPROFILE%\.browse-rs\record-<ts>\frame-NNNNNN.png`
-（opts 可 `everyNthFrame` 源端抽帧、`maxWidth`/`maxHeight` 限宽高，
-轻量剪辑面），stop 回 `{frames,bytes,dir}`。ack 按帧自带 sessionId
-路由；帧走事件缓冲（上限 1000），录短段、要完整事件流先 peek。
-
-## 命令
+给 agent（也给人）用的浏览器驾驶 CLI：一条 JS 方言片段驱动你的
+[clean-chrome](https://github.com/raystyle/clean-chrome)（自编 Chromium），
+常驻 daemon 让会话跨命令存活。
 
 ```bash
-browse '<片段>'                     # 求值（自动拉 daemon 与引擎）
-browse -e '<片段>' | stdin | TTY    # 其余两形态（括号配平批处理 / rustyline REPL）
-browse --new-tab '<片段>'           # 先开 about:blank 再求值
-browse --connect <ws|端口> '<片段>'  # 显式附着
-browse up [--headless] [--pipe] [--chrome <path>] [--ws <url> | --port <p>]
-browse down                          # 退 daemon；只杀自己 spawn 的实例
-browse status [--json]
-browse --serve [--bind host:port]    # 前台跑 daemon
+browse 'await newTab("https://example.com")'   # 打开页面
+browse 'return await snapshot()'               # 拿页面结构（节点带 e1/e2 短引用）
+browse 'await clickRef("e3")'                  # 按引用点击
 ```
 
-环境变量：`BROWSE_PORT`（daemon 端口，默认 9880）、`BROWSE_NAME`（命名实例，
-ADR-0006：状态目录与派生端口 9900-9999 全隔离，`BROWSE_NAME=work browse up`
-即起一个与默认实例并行的引擎）、`BROWSE_CHROME`（chrome.exe 路径）、
-`BROWSE_CDP_WS`（钉死连接）、`BROWSE_NO_ATTACH=1`（跳过附着探测强制 spawn）、
-`BROWSE_EVAL_TIMEOUT`（秒，默认 300）。
+为什么顺手：
 
-退出码：`0` 成功 / `1` 执行失败 / `2` 用法错；错误串形态 `browse: <下一步指令>` 进 stderr。
-方言错误一律 CTA 三段式：`诊断（行L:列C）；下一步：<可照抄的写法或命令>`
-（如 `未定义变量 tabs；下一步：先在前一条片段里 const tabs = <值>`），
-由 `tests/dialect_errors.rs` 契约锁定。
+- **会话常驻**：变量、活动 tab、元素引用表跨命令存活，一条命令做一步
+- **错误自带下一步**：每条报错都附可照抄的 CTA（下一步做什么），不让你猜
+- **安全守卫**：绝不关你自己的浏览器，只关自己开的 tab；点击前查遮挡、引用过期即拦
+- **双通道**：WebSocket 或 clean-chrome 管道模式（`--pipe`，零 TCP 面）
+- **三平台真机验证**：Windows / macOS / Linux 双通道端到端全绿
 
-## 片段方言（与 browser-harness-js 对齐）
+## 安装
 
-```js
-await session.connect({port:9222})
-const tabs = await listPageTargets()
-await session.use(tabs[0].targetId)
-await session.Page.navigate({url:"https://example.com"})
-await session.waitFor("Page.loadEventFired", undefined, 15000)
-return (await session.Runtime.evaluate({expression:"document.title", returnByValue:true})).result.value
+前置：本机有 clean-chrome 部署（本仓库根的 `chromium-*/chrome.exe`，
+或设 `BROWSE_CHROME` 环境变量指向任意 chrome.exe）。
+
+```bash
+git clone <本仓库> && cd browse-rs
+cargo install --path crates/browse-cli --force
+browse --help
 ```
 
-支持：字面量、对象、数组、成员、下标、`await`、`const/let/var`、`return`、`//` 注释。
-不支持：函数字面量、`if/for/while`、模板字符串。报错会提示把页面逻辑放进
-`Runtime.evaluate` 的 `expression` 字符串（页内是真 V8）。
-`session.<Domain>.<method>(params)` 直转 CDP 字符串调用，652 个方法无封装。
-宿主全局：`listPageTargets()` / `resolveWsUrl(opts?)` / `detectBrowsers()` /
-`cdpMethods(domain?)`（652 命令运行时探针）/ `snapshot()`（AX 树快照，
-`{url,title,nodes:[{id,role,name,value,checked,backendNodeId,...}]}`，
-对齐 browser-use-pi）/ `screenshot(path?, full?)`（存 PNG 回 `{path,bytes}`）/
-`print(x)`。session 方法族：`connect`（支持 `timeoutMs`）/ `use` / `close`
-（断开可重连）/ `setActiveSession` / `waitFor` / `waitJs(expression, ms?)`
-（页内谓词轮询，返回真值本身，pi `page.waitFor` 的方言代偿）/ `call` /
-`isConnected` / `getActiveSession`。事件家族：`peekEvents(method, n?)`
-（非破坏窥视）、`peekEventsSince(method, sinceSeq, n?)`（seq 游标增量）、
-`findEvents(method, "params.requestId", <值>, n?)`（等值过滤）。事件进缓冲
-即盖单调 `seq`。方法拼错时 CDP `not found` 错误自动附相近建议
-（清单 652 条由 `tools/gen-cdp-methods.py` 生成，`crates/cdp/src/methods.txt`）。
-clean-chrome S006（50 锚）起 `Runtime.consoleAPICalled` 的 args 与
-`Runtime.exceptionThrown` 的 exception 不带 preview（objectId 保留），
-要对象细节走 `objectId + Runtime.getProperties`；`Runtime.evaluate`
-的 preview 两态不受影响。
+装好后第一条任意命令会自动拉起常驻 daemon（日志在
+`~/.browse-rs/daemon.log`）；`browse down` 幂等退出。
 
-域策略（对齐 pi policy）：`BROWSE_DENY_DOMAINS` / `BROWSE_ALLOW_DOMAINS`
-（逗号分隔，后缀匹配含子域；deny 优先）在 `Page.navigate` /
-`Target.createTarget` 上程序级拦截，未配置不拦。
+## 五分钟上手
 
-## 与样例（browser-harness-rs）的差异
+### 1. 打开页面，读点东西
 
-| 点 | 样例 | 本仓库 |
-|---|---|---|
-| daemon | `--serve` 手动起，一次性模式每进程重连 | 首次使用自动拉起，常驻持久（vars/活动 tab 跨调用） |
-| 引擎 | 要求浏览器已在跑 | 附着优先，缺则 spawn clean-chrome |
-| CDP 通道 | 仅 WS | WS + 管道（`--pipe`，S005） |
-| 守卫 | 无 | `Browser.close` 等拦截，`Target.closeTarget` 只放行自建 tab |
-| 事件缓冲 | 无界 Vec | 环形上限 1000 |
+```bash
+browse up --headless                 # 起一个无头引擎（附着优先，缺则自起）
+browse 'await newTab("https://example.com")'
+browse 'return await waitLoad()'
+browse 'return (await session.Runtime.evaluate({expression:"document.title", returnByValue:true})).result.value'
+# example.com
+```
+
+不想无头？`browse up` 直接开有头窗口，人机共存：自动化不抢你的前台。
+
+### 2. 快照、点击、填表（元素引用流）
+
+```bash
+browse 'return await snapshot()'                # AX 树：每节点带短引用 ref
+browse 'await fillRef("e2", "hello rust")'      # 按引用填输入框（回读验证）
+browse 'await clickRef("e3")'                   # 按引用点击（遮挡守卫）
+browse 'return await selectOption("e4", "Beta")'  # 下拉框（value 或可见 label）
+```
+
+引用比 CSS 选择器稳：页面重构不漂移，导航后过期会被拦下并提示重新
+snapshot，绝不静默点错位置。
+
+### 3. 留档：截图 / PDF / 录屏
+
+```bash
+browse 'return await screenshot()'              # PNG，回 {path,bytes}
+browse 'return await pdf()'                     # PDF（仅无头）
+browse 'return await recordStart()'             # 开始录屏（帧流落盘）
+browse '...操作页面...'
+browse 'return await recordStop()'              # 回 {frames,bytes,dir}
+```
+
+### 4. 等待与对话框
+
+```bash
+browse 'await waitLoad(8000)'                          # 等 readyState
+browse 'await waitIdle(5000)'                          # 等 network 静默
+browse 'await session.waitJs("window.done", 5000)'     # 等页内条件（真 V8）
+browse 'return await dialogStatus()'                   # 有 confirm/prompt？
+browse 'await dialogAccept()'                          # 显式应答（alert 会自动接受）
+```
+
+### 5. 拦网（测试与反打扰）
+
+```bash
+browse 'await routeBlock("*://ads.example.com/*")'                      # 拦死
+browse 'await routeMock("http://mock.test/api*", "{\"ok\":1}")'         # 本地假应答
+browse 'await routeClear()'
+```
+
+### 6. 附着你自己的浏览器 / 多实例
+
+```bash
+browse 'return await listPageTargets()'     # 你开着 clean-chrome（9222）时直接附着
+BROWSE_NAME=work browse up --headless       # 命名实例：独立端口与状态目录，并行互不干扰
+browse down
+```
+
+## 命令速查
+
+| 形态 | 说明 |
+| --- | --- |
+| `browse '<片段>'` | 求值（多语句、`;` 可选，`return` 出值，变量跨调用持久） |
+| `browse -e '<片段>'` / stdin / TTY REPL | 其余两传输形态（括号配平批处理 / 交互） |
+| `browse up [--headless] [--pipe]` | 显式起引擎 |
+| `browse down` / `browse status [--json]` | 退出 / 看状态 |
+
+完整命令面（含全部全局函数与 session 方法的参数、示例）：
+[`docs/surface/llms-full.txt`](docs/surface/llms-full.txt)；机器可读契约
+`docs/surface/browse.schema.json`；方言内运行时探针 `hostFunctions()`。
+
+方言边界：没有运算符 / if / for / 函数（页面逻辑放进
+`Runtime.evaluate` 的 `expression` 字符串，页内是真 V8）；CDP 全量
+652 个方法走 `session.<Domain>.<method>(params)` 直调，拼错自动给相近建议。
+
+## 文件落在哪
+
+都在 `~/.browse-rs/`（命名实例在其 `<name>/` 子目录）：
+`daemon.log`（daemon 日志）、`engine.log`（引擎 chrome 诊断）、
+`engine-profile`（引擎 profile，down 不删、复用登录态）、`screenshots/`、
+`pdfs/`、`record-*/`（录屏帧）、`drops/`（超 32KB 的大结果自动落盘，
+stdout 只回路径与预览）。
+
+## 出错怎么办
+
+错误三段式：`诊断（行L:列C）；下一步：<可照抄的命令>`。退出码
+`0` 成功 / `1` 执行失败 / `2` 用法错。常见问题：
+
+- **daemon 没起来**：看 `~/.browse-rs/daemon.log`；`browse down` 后重试
+- **引擎起不来**：`BROWSE_CHROME` 指到 chrome.exe；看 `engine.log`
+- **点了没反应**：多半被遮挡或引用过期，报错里直接给下一步
+- **管道挂着不返回**：`browse status` 看引擎；`browse down` 清场重来
+
+## 环境变量
+
+| 变量 | 作用 |
+| --- | --- |
+| `BROWSE_PORT` | daemon 端口（默认 9880） |
+| `BROWSE_NAME` | 命名实例：状态目录 + 派生端口 9900-9999（ADR-0006） |
+| `BROWSE_CHROME` | chrome.exe 路径（缺省走发现序） |
+| `BROWSE_CDP_WS` | 钉死连接的 WS URL |
+| `BROWSE_NO_ATTACH=1` | 跳过附着探测，强制 spawn 隔离实例 |
+| `BROWSE_NO_AUTO_DIALOG=1` | 关掉 alert 自动接受 |
+| `BROWSE_EVAL_TIMEOUT` | 单次求值超时秒数（默认 300） |
+| `BROWSE_DENY_DOMAINS` / `BROWSE_ALLOW_DOMAINS` | 域策略（后缀匹配，deny 优先） |
 
 ## 开发
 
 ```bash
-cargo test --workspace                    # 单元 + 契约（含 doctest）
-BROWSE_E2E=1 BROWSE_NO_ATTACH=1 cargo test -p browse-core --test e2e   # 真 chrome 端到端（需本机 clean-chrome；NO_ATTACH 防误附着用户浏览器）
+cargo test --workspace                                            # 单元 + 契约
+BROWSE_E2E=1 BROWSE_NO_ATTACH=1 cargo test -p browse-core --test e2e   # 真 chrome 端到端
 cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-CI 两个作业：windows-latest 跑全量门禁（fmt/clippy/test/doc/aidoc），
-ubuntu-latest 编译并单测 cdp（POSIX 管道 fd 3/4 布线的平台门禁）。
+深入读：`AGENTS.md`（工程契约）、`docs/architecture.md`（怎么拼）、
+`docs/guides/getting-started.md`（上手细节）、`docs/adr/`（为什么）、
+`docs/aidoc/llms.txt`（Rust API 索引）、`docs/surface/`（命令面派生物）。
 
-命令面目录（incur-rs 原则）：CLI/全局函数/session 方法在
-`crates/browse-core/src/surface.rs` 登记为数据，`browse --gen-surface
-docs/surface` 派生 JSON Schema（`browse.schema.json`）、LLM 清单
-（`llms.txt` / `llms-full.txt`）与技能（`skills/browse/SKILL.md`），
-`tests/surface_contract.rs` 锁两层漂移（产物一致 + 目录项全部可派发）；
-方言内 `hostFunctions()` 是同源运行时探针。
-
-详读 `AGENTS.md`（命令与门禁）、`docs/architecture.md`（现在怎么拼）、`docs/adr/`（为什么）。
-
-## Roadmap（v0.1 之外）
-
-- ~~元素引用 D35-lite（snapshot 短 ref + clickRef/fillRef，backendNodeId 锚）~~ 已落地
-- ~~录制（Page.startScreencast 帧流）~~ 已落地（源端抽帧/限宽高当轻量剪辑）
-- ~~元素引用的进阶（主动代际失效）~~ 已落地（`__browse_ref_gen` 窗口代标记，SPA 不误伤）
-- ~~多实例（bh `BH_NAME` 式）~~ 已落地（BROWSE_NAME，ADR-0006）
-- ~~POSIX 管道通道（fd 3/4 布线）~~ 已落地（真机 Windows/macOS/Linux 三平台端到端全绿 + CI ubuntu 门禁）
-
-大值保护（artifact/checkpoint 的降级实现，已落地）：片段结果序列化超
-32KB 时自动落盘 `%USERPROFILE%\.browse-rs\drops\value-<ts>.{json,txt}`，
-stdout 只回 `{"__dropped":true,"bytes":N,"path":"...","preview":"前 160 字符"}`
-（防大 JSON 淹没 agent 上下文；daemon 与 vars 表不受影响）
+Roadmap 五项（元素引用、录制、代际失效、多实例、POSIX 管道）已全部
+落地；后续吸收面以 `docs/adr/` 与提交记录为准。
 
 ## 明确不做（用户裁定，勿再提议）
 
@@ -173,5 +164,3 @@ stdout 只回 `{"__dropped":true,"bytes":N,"path":"...","preview":"前 160 字�
 - 模型循环/观察循环（消费者是编码 agent，它自带循环与视觉）
 - 控制流/函数进方言（ADR-0002）
 - Cloud browser（与 clean-chrome 本地优先哲学相反）
-
-[browser-harness-rs]: https://github.com/browser-use/browser-harness-js
