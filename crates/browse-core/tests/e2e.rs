@@ -216,6 +216,51 @@ async fn exercise(engine: &Engine, host: &JsHost, expect_channel: &str) {
     assert!(meta.len() > 0);
     tokio::fs::remove_file(&path).await.ok();
 
+    eprintln!("[e2e] 录制开始");
+    // 录制：startScreencast 帧流落盘；导航触发重绘产帧
+    let rec = host
+        .eval_snippet("return await recordStart()")
+        .await
+        .expect("recordStart");
+    assert!(rec.get("dir").is_some(), "recordStart 回 dir: {rec}");
+    host.eval_snippet(
+        r#"await session.Page.navigate({url:"data:text/html,<h1 style='background:rgb(255,0,0);height:100vh'>one</h1>"})"#,
+    )
+    .await
+    .expect("录制中导航 1");
+    host.eval_snippet(
+        r#"await session.waitJs("document.body && document.body.innerText.includes('one')", 5000)"#,
+    )
+    .await
+    .expect("等一屏就绪");
+    host.eval_snippet(
+        r#"await session.Page.navigate({url:"data:text/html,<h2 style='background:rgb(0,255,0)'>two</h2>"})"#,
+    )
+    .await
+    .expect("录制中导航 2");
+    let stopped = host
+        .eval_snippet("return await recordStop()")
+        .await
+        .expect("recordStop");
+    let frames = stopped.get("frames").and_then(Value::as_u64).unwrap_or(0);
+    assert!(frames >= 1, "应录到至少一帧: {stopped}");
+    let rec_dir = stopped
+        .get("dir")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    let on_disk = std::fs::read_dir(&rec_dir)
+        .map(|rd| rd.filter_map(|e| e.ok()).count() as u64)
+        .unwrap_or(0);
+    assert_eq!(on_disk, frames, "盘上帧文件数应与计数一致（dir {rec_dir}）");
+    let _ = tokio::fs::remove_dir_all(&rec_dir).await;
+    // 没在录时 recordStop：错误带 CTA
+    let no_rec = host.eval_snippet("await recordStop()").await;
+    assert!(
+        no_rec.is_err() && format!("{no_rec:#?}").contains("recordStart"),
+        "空停应带开录 CTA: {no_rec:?}"
+    );
+
     eprintln!("[e2e] 语义面开始");
     // ---- 语义层近期面 ----
     // tab 族：newTab -> currentTab -> switchTab 往返 -> closeTab 自建

@@ -14,6 +14,7 @@
 - [browse-core::engine](browse_core/engine.md): 引擎策略：附着优先，缺则自起（ADR-0003）。
 - [browse-core::js_host](browse_core/js_host.md): 方言求值器：把 [`crate::parser`] 的语句树跑在宿主侧。
 - [browse-core::parser](browse_core/parser.md): browser-harness-js 片段方言的语法分析器（纯函数）。
+- [browse-core::record](browse_core/record.md): 录制：`Page.startScreencast` 帧流落盘（方言无回调，泵任务代收）。
 - [browse-core::semantic](browse_core/semantic.md): 语义层近期面：tab 族、交互三件、等待判官。
 - [browse-core::server](browse_core/server.md): daemon 的 HTTP API：常驻会话 + 方言求值 + 引擎生命周期。
 

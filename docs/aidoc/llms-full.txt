@@ -67,6 +67,8 @@ browse CLI 的核心库：方言宿主、引擎策略、daemon HTTP API。
   `peekEvents`（非破坏事件窥视）。
 - [`engine`]：引擎策略（附着优先，缺则自起 clean-chrome 专属实例，只杀
   自己 spawn 的）与引擎状态。
+- [`record`]：录制——`Page.startScreencast` 帧流由泵任务落盘
+  （`recordStart` / `recordStop`）。
 - [`server`]：daemon 的 HTTP API（POST /eval、GET /health、POST /engine/up、
   POST /quit），常驻会话与全局变量跨 CLI 调用保持。
 
@@ -86,6 +88,7 @@ assert_eq!(render(&stmts), "const tabs = await listPageTargets()");
 - [`engine`](engine.md): 引擎策略：附着优先，缺则自起（ADR-0003）。
 - [`js_host`](js_host.md): 方言求值器：把 [`crate::parser`] 的语句树跑在宿主侧。
 - [`parser`](parser.md): browser-harness-js 片段方言的语法分析器（纯函数）。
+- [`record`](record.md): 录制：`Page.startScreencast` 帧流落盘（方言无回调，泵任务代收）。
 - [`semantic`](semantic.md): 语义层近期面：tab 族、交互三件、等待判官。
 - [`server`](server.md): daemon 的 HTTP API：常驻会话 + 方言求值 + 引擎生命周期。
 
@@ -164,6 +167,29 @@ browser-harness-js 片段方言的语法分析器（纯函数）。
 
 - `Expr` — 表达式节点。
 - `Stmt` — 语句：声明、表达式或 return。
+
+
+<!-- browse_core/record.md -->
+# browse-core::record
+
+录制：`Page.startScreencast` 帧流落盘（方言无回调，泵任务代收）。
+
+方言没有事件回调，帧流由常驻泵任务消费：`drain_events` 取帧 ->
+解 base64 写 PNG -> 按帧自带的 sessionId 回 `Page.screencastFrameAck`
+（不 ack 的话 chrome 只发头几帧就等住）。`recordStop` 停泵、末冲一次、
+`Page.stopScreencast`，回 `{frames,bytes,dir}`。
+
+注意：帧也走事件缓冲（上限 1000），长录制会挤掉旧事件——录短段，
+要完整事件流先 peek 再录。
+
+## Functions
+
+- `start` — 开始录制。`opts`（都可省）：`everyNthFrame`（抽帧，源端剪辑）、
+- `stop` — 停止录制：停泵 -> 末冲（200ms 窗口内迟到的帧也收）->
+
+## Types
+
+- `Recorder` — 一场进行中的录制：目录、计数器、停泵旗标与泵任务句柄。
 
 
 <!-- browse_core/semantic.md -->

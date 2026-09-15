@@ -12,6 +12,8 @@
 //!   `peekEvents`（非破坏事件窥视）。
 //! - [`engine`]：引擎策略（附着优先，缺则自起 clean-chrome 专属实例，只杀
 //!   自己 spawn 的）与引擎状态。
+//! - [`record`]：录制——`Page.startScreencast` 帧流由泵任务落盘
+//!   （`recordStart` / `recordStop`）。
 //! - [`server`]：daemon 的 HTTP API（POST /eval、GET /health、POST /engine/up、
 //!   POST /quit），常驻会话与全局变量跨 CLI 调用保持。
 //!
@@ -29,6 +31,7 @@
 pub mod engine;
 pub mod js_host;
 pub mod parser;
+pub mod record;
 pub mod semantic;
 pub mod server;
 

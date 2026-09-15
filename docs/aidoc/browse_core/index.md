@@ -14,6 +14,8 @@ browse CLI 的核心库：方言宿主、引擎策略、daemon HTTP API。
   `peekEvents`（非破坏事件窥视）。
 - [`engine`]：引擎策略（附着优先，缺则自起 clean-chrome 专属实例，只杀
   自己 spawn 的）与引擎状态。
+- [`record`]：录制——`Page.startScreencast` 帧流由泵任务落盘
+  （`recordStart` / `recordStop`）。
 - [`server`]：daemon 的 HTTP API（POST /eval、GET /health、POST /engine/up、
   POST /quit），常驻会话与全局变量跨 CLI 调用保持。
 
@@ -33,6 +35,7 @@ assert_eq!(render(&stmts), "const tabs = await listPageTargets()");
 - [`engine`](engine.md): 引擎策略：附着优先，缺则自起（ADR-0003）。
 - [`js_host`](js_host.md): 方言求值器：把 [`crate::parser`] 的语句树跑在宿主侧。
 - [`parser`](parser.md): browser-harness-js 片段方言的语法分析器（纯函数）。
+- [`record`](record.md): 录制：`Page.startScreencast` 帧流落盘（方言无回调，泵任务代收）。
 - [`semantic`](semantic.md): 语义层近期面：tab 族、交互三件、等待判官。
 - [`server`](server.md): daemon 的 HTTP API：常驻会话 + 方言求值 + 引擎生命周期。
 

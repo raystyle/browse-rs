@@ -229,11 +229,9 @@ impl Engine {
             } => {
                 // BROWSE_NO_ATTACH=1：跳过附着探测，强制 spawn 隔离实例
                 // （测试确定性 / 「别碰我正开着的浏览器」的显式意图）
-                let no_attach = std::env::var_os("BROWSE_NO_ATTACH")
-                    .is_some_and(|v| v == "1" || v == "true");
-                if !no_attach
-                    && let Some(ws) = discovery::probe_default().await
-                {
+                let no_attach =
+                    std::env::var_os("BROWSE_NO_ATTACH").is_some_and(|v| v == "1" || v == "true");
+                if !no_attach && let Some(ws) = discovery::probe_default().await {
                     self.session
                         .connect_opts(ConnectOptions {
                             ws_url: Some(ws.clone()),

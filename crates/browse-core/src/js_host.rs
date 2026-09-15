@@ -24,6 +24,8 @@ pub struct JsHost {
     /// 元素引用表（D35-lite）：最近一次 `snapshot()` 的短 ref -> backendNodeId。
     /// 换页/重开 snapshot 即整表替换；引用失效由 `DOM.resolveNode` 兜底报错。
     refs: Mutex<HashMap<String, i64>>,
+    /// 进行中的录制（至多一场；方言面 recordStart/recordStop 管理）。
+    record: Mutex<Option<crate::record::Recorder>>,
 }
 
 impl JsHost {
@@ -39,6 +41,7 @@ impl JsHost {
             session,
             vars: Mutex::new(HashMap::new()),
             refs: Mutex::new(HashMap::new()),
+            record: Mutex::new(None),
         })
     }
 
@@ -407,8 +410,31 @@ impl JsHost {
                 let bn = self.lookup_ref(r).await?;
                 crate::semantic::fill_ref(&self.session, bn, text).await
             }
+            // ---- 录制（Page.startScreencast 帧流落盘）----
+            "recordStart" => {
+                let opts = argv.first().cloned().unwrap_or(json!({}));
+                let mut rec = self.record.lock().await;
+                if rec.is_some() {
+                    bail!("已在录制（至多一场）；下一步：先 await recordStop() 收这一场，再开新的");
+                }
+                let r = crate::record::start(self.session.clone(), &opts).await?;
+                let brief = r.brief();
+                *rec = Some(r);
+                Ok(brief)
+            }
+            "recordStop" => {
+                let rec = self
+                    .record
+                    .lock()
+                    .await
+                    .take()
+                    .ok_or_else(|| anyhow!(
+                        "当前没有录制；下一步：先 await recordStart({{everyNthFrame:2}}) 开一场（可选抽帧/限宽）"
+                    ))?;
+                crate::record::stop(&self.session, rec).await
+            }
             other => bail!(
-                "未知函数 {other}；下一步：可用全局 listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/snapshot()/screenshot(path?, full?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/clickAt(x,y)/fillInput(sel,text)/clickRef(ref)/fillRef(ref,text)/pressKey(key)/waitLoad(ms?)/waitIdle(ms?)/print(x)；CDP 走 session.<Domain>.<method>(params)"
+                "未知函数 {other}；下一步：可用全局 listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/snapshot()/screenshot(path?, full?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/clickAt(x,y)/fillInput(sel,text)/clickRef(ref)/fillRef(ref,text)/pressKey(key)/waitLoad(ms?)/waitIdle(ms?)/recordStart(opts?)/recordStop()/print(x)；CDP 走 session.<Domain>.<method>(params)"
             ),
         }
     }
@@ -646,7 +672,7 @@ pub fn render_result(v: &Value) -> String {
 }
 
 /// 极简 base64 解码（标准字母表，容忍空白；不引 crate）。
-fn base64_decode(s: &str) -> Result<Vec<u8>> {
+pub(crate) fn base64_decode(s: &str) -> Result<Vec<u8>> {
     const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut val = [0u8; 256];
     for (i, b) in TABLE.iter().enumerate() {

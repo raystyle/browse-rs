@@ -83,6 +83,26 @@
       "docs": "剥掉 `//` 行注释（保留字符串字面量里的 `//`）。\n\n# Examples\n\n```\nassert_eq!(browse_core::parser::strip_comments(\"a // 尾注\\nb\"), \"a \\nb\");\nassert_eq!(browse_core::parser::strip_comments(r#\"\"http://x\"\"#), r#\"\"http://x\"\"#);\n```"
     },
     {
+      "path": "browse_core::record",
+      "kind": "module",
+      "docs": "录制：`Page.startScreencast` 帧流落盘（方言无回调，泵任务代收）。\n\n方言没有事件回调，帧流由常驻泵任务消费：`drain_events` 取帧 ->\n解 base64 写 PNG -> 按帧自带的 sessionId 回 `Page.screencastFrameAck`\n（不 ack 的话 chrome 只发头几帧就等住）。`recordStop` 停泵、末冲一次、\n`Page.stopScreencast`，回 `{frames,bytes,dir}`。\n\n注意：帧也走事件缓冲（上限 1000），长录制会挤掉旧事件——录短段，\n要完整事件流先 peek 再录。"
+    },
+    {
+      "path": "browse_core::record::Recorder",
+      "kind": "struct",
+      "docs": "一场进行中的录制：目录、计数器、停泵旗标与泵任务句柄。"
+    },
+    {
+      "path": "browse_core::record::start",
+      "kind": "function",
+      "docs": "开始录制。`opts`（都可省）：`everyNthFrame`（抽帧，源端剪辑）、\n`maxWidth`/`maxHeight`（缩放）、`quality`（JPEG 质量；本实现恒 PNG，\n留作向后兼容）。帧写 `<state>/record-<ts>/frame-NNNNNN.png`。\n\n# Errors\n\n未连接、`Page.startScreencast` 失败、目录建不出来。"
+    },
+    {
+      "path": "browse_core::record::stop",
+      "kind": "function",
+      "docs": "停止录制：停泵 -> 末冲（200ms 窗口内迟到的帧也收）->\n`Page.stopScreencast`，回 `{frames,bytes,dir}`。\n\n# Errors\n\n`Page.stopScreencast` 失败（帧已在盘上的不回滚）。"
+    },
+    {
       "path": "browse_core::semantic",
       "kind": "module",
       "docs": "语义层近期面：tab 族、交互三件、等待判官。\n\n对齐 harness(py) helpers 的高频操作面，坑表教训直接落地：\n- `new_tab` 先 about:blank 再 goto（带 url 与 attach 竞速 -> readyState 假完成）\n- `fill_input` 清空不发 Ctrl+A（char 事件会输入字面 a），用\n  `commands:['SelectAll']`；填完回读验证，失败如实报\n- 不自动 `Target.activateTarget`（人机共存：不抢用户前台）；从未激活的\n  后台 tab 收 Input 若挂起，错误 CTA 提示手动激活\n\n全部函数作用于当前活动 tab（`session.use` 路由）。"

@@ -350,13 +350,40 @@ impl Session {
     }
 
     async fn send(&self, method: &str, params: Value) -> Result<Value> {
+        let sid = if is_browser_method(method) {
+            None
+        } else {
+            self.session_id.lock().await.clone()
+        };
+        self.send_with(method, params, sid).await
+    }
+
+    /// 显式路由目标的调用：`sessionId` 用给定值（不走活动路由）。
+    /// 给「回执必须回到事件来源 session」的场合——典型是录制的
+    /// `Page.screencastFrameAck`，它要应答帧自带的 sessionId。
+    ///
+    /// # Errors
+    ///
+    /// 同 [`Session::call`]（守卫、CDP 错误、超时）。
+    pub async fn call_on(&self, method: &str, params: Value, session_id: &str) -> Result<Value> {
+        self.guard(method, &params).await?;
+        self.send_with(method, params, Some(session_id.to_string()))
+            .await
+    }
+
+    async fn send_with(
+        &self,
+        method: &str,
+        params: Value,
+        session_id: Option<String>,
+    ) -> Result<Value> {
         if !self.is_connected() {
             return Err(anyhow!("Not connected. Call session.connect(...) first."));
         }
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let mut msg = json!({ "id": id, "method": method, "params": params });
         if !is_browser_method(method)
-            && let Some(sid) = self.session_id.lock().await.clone()
+            && let Some(sid) = session_id
         {
             msg["sessionId"] = json!(sid);
         }
@@ -553,6 +580,23 @@ impl Session {
             .take(n)
             .cloned()
             .collect()
+    }
+
+    /// 消费式取事件：移除并返回缓冲里全部 `method` 匹配（peek 家族的
+    /// 破坏性对偶）。给常驻消费任务用（录帧泵）；取走后 `waitFor`/`peek`
+    /// 就见不到这些事件了。
+    pub async fn drain_events(&self, method: &str) -> Vec<Value> {
+        let mut evs = self.events.lock().await;
+        let mut out = Vec::new();
+        let mut i = 0;
+        while i < evs.len() {
+            if evs[i].get("method").and_then(|m| m.as_str()) == Some(method) {
+                out.push(evs.remove(i).unwrap_or(Value::Null));
+            } else {
+                i += 1;
+            }
+        }
+        out
     }
 
     /// 从环形缓冲里找第一个 `method` 事件（取出即移除）。超时报错。
@@ -824,6 +868,21 @@ mod tests {
         assert_eq!(s.peek_events_since("N.a", 3, 10).await.len(), 0);
         // 不匹配 method 的 since 查询为空
         assert_eq!(s.peek_events_since("别的.事件", 0, 10).await.len(), 0);
+    }
+
+    /// drain 消费式：取走后 peek 不再见，非匹配事件保留。
+    #[tokio::test]
+    async fn drain_consumes_only_matches() {
+        let s = Session::new();
+        route_all(&s, vec![ev("N.a", 1.0), ev("N.b", 2.0), ev("N.a", 3.0)]).await;
+        let drained = s.drain_events("N.a").await;
+        assert_eq!(drained.len(), 2);
+        assert_eq!(
+            s.peek_events("N.a", 10).await.len(),
+            0,
+            "drain 后 peek 不见"
+        );
+        assert_eq!(s.peek_events("N.b", 10).await.len(), 1, "非匹配保留");
     }
 
     /// findEvents：method + 点分路径等值过滤，命中与不命中各验。

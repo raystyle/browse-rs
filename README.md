@@ -37,6 +37,12 @@ Ctrl+A、回读严格验证）、`pressKey(key)`、`waitLoad(ms?)`、`waitIdle(m
 `DOM.resolveNode`/零尺寸探测兜底报错并带「重新 snapshot」CTA，
 绝不静默点错位置。
 
+录制：`recordStart(opts?)` / `recordStop()`。`Page.startScreencast` 帧流
+由常驻泵任务落盘 `%USERPROFILE%\.browse-rs\record-<ts>\frame-NNNNNN.png`
+（opts 可 `everyNthFrame` 源端抽帧、`maxWidth`/`maxHeight` 限宽高——
+轻量剪辑面），stop 回 `{frames,bytes,dir}`。ack 按帧自带 sessionId
+路由；帧走事件缓冲（上限 1000），录短段、要完整事件流先 peek。
+
 ## 命令
 
 ```bash
@@ -112,7 +118,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 ## Roadmap（v0.1 之外）
 
 - ~~元素引用 D35-lite（snapshot 短 ref + clickRef/fillRef，backendNodeId 锚）~~ 已落地（失效探测 + 重取 CTA）
-- 录制（Page.startScreencast 帧流）
+- ~~录制（Page.startScreencast 帧流）~~ 已落地（源端抽帧/限宽高当轻量剪辑）
 - 元素引用的进阶（主动代际失效）、录制剪辑
 - 多实例（bh `BH_NAME` 式）
 - POSIX 管道通道（fd 3/4 布线）
