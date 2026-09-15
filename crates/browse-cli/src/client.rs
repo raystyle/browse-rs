@@ -65,28 +65,64 @@ pub async fn ensure_daemon() -> Result<()> {
     let dir = state_dir();
     std::fs::create_dir_all(&dir).ok();
     let log = dir.join("daemon.log");
-    let out = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&log)?;
-    let mut cmd = Command::new(exe);
-    cmd.args(["--serve", "--bind", &daemon_bind()]);
-    let err_out = out.try_clone().ok();
-    cmd.stdout(out);
-    if let Some(e) = err_out {
-        cmd.stderr(e);
-    }
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
+        use windows_sys::Win32::Foundation::{HANDLE_FLAG_INHERIT, SetHandleInformation};
+        use windows_sys::Win32::System::Console::{
+            GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
+        };
         const DETACHED_PROCESS: u32 = 0x0000_0008;
         const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+        // 先摘掉本进程 stdio 句柄的可继承位：daemon spawn 走
+        // bInheritHandles=TRUE（stdio 指到日志文件），而 bash 管道默认
+        // 可继承——不摘的话常驻 daemon 会握着调用方 `browse '…' | jq`
+        // 的管道写端，管道永不 EOF。显式配置的日志句柄不受影响
+        for slot in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
+            let h = unsafe { GetStdHandle(slot) };
+            if !h.is_null() {
+                unsafe { SetHandleInformation(h, HANDLE_FLAG_INHERIT, 0) };
+            }
+        }
+        let out = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log)?;
+        let mut cmd = Command::new(exe);
+        cmd.args(["--serve", "--bind", &daemon_bind()]);
+        let err_out = out.try_clone().ok();
+        cmd.stdin(std::process::Stdio::null());
+        cmd.stdout(out);
+        if let Some(e) = err_out {
+            cmd.stderr(e);
+        }
         cmd.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
+        let child = cmd
+            .spawn()
+            .with_context(|| format!("拉起 daemon（日志 {}）", log.display()))?;
+        drop(child);
     }
-    let child = cmd
-        .spawn()
-        .with_context(|| format!("拉起 daemon（日志 {}）", log.display()))?;
-    drop(child);
+    #[cfg(not(windows))]
+    {
+        // Unix：std 打开的 fd 全带 CLOEXEC，只 dup2 配置过的 stdio，
+        // 调用方管道不会被 daemon 带走，直接 spawn 即可
+        let out = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log)?;
+        let mut cmd = Command::new(exe);
+        cmd.args(["--serve", "--bind", &daemon_bind()]);
+        let err_out = out.try_clone().ok();
+        cmd.stdin(std::process::Stdio::null());
+        cmd.stdout(out);
+        if let Some(e) = err_out {
+            cmd.stderr(e);
+        }
+        let child = cmd
+            .spawn()
+            .with_context(|| format!("拉起 daemon（日志 {}）", log.display()))?;
+        drop(child);
+    }
     let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
     while tokio::time::Instant::now() < deadline {
         if daemon_alive().await.is_some() {
