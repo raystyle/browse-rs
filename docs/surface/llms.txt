@@ -1,0 +1,70 @@
+# browse-rs 命令清单
+
+给 agent 用的 clean-chrome browse CLI。方言片段形态：browse '<片段>'；错误一律带 CTA「下一步」。
+
+## CLI
+
+| 命令 | 说明 |
+| --- | --- |
+| `browse '<片段>'` | 求值方言片段（缺省形态；自动拉起 daemon 与引擎）。 |
+| `browse -e '<片段>'` | 显式 --eval 形态（与缺省等价）。 |
+| `browse < 文件` | stdin 批处理：括号配平即提交一段，变量跨段共享。 |
+| `browse --new-tab '<片段>'` | 求值前先开 about:blank 新 tab。 |
+| `browse --connect <ws|端口> '<片段>'` | 显式附着给定 ws URL 或调试端口。 |
+| `browse up [--headless] [--pipe] [--chrome <path>] [--ws <url>] [--port <p>]` | 显式起引擎（附着优先，缺则 spawn clean-chrome 隔离实例）。 |
+| `browse down` | 退 daemon；只终结自己 spawn 的引擎，附着来源不动。 |
+| `browse status [--json]` | daemon/引擎/实例名/活动 tab 概览。 |
+| `browse --serve [--bind host:port]` | 前台跑 daemon（样例忠实形态）。 |
+
+## 全局函数
+
+| 命令 | 说明 |
+| --- | --- |
+| `listPageTargets()` | 列可附着 page targets（带 own 标：只有 own=true 可 closeTab）。 |
+| `resolveWsUrl(opts?)` | 把 wsUrl/port/profileDir 线索解析成 WS URL（不连接）。 |
+| `detectBrowsers()` | 探测本机已开的调试浏览器（profile/端口/wsUrl）。 |
+| `cdpMethods(domain?)` | 652 个 CDP 命令的运行时探针（按域过滤）。 |
+| `snapshot()` | AX 树快照：nodes 带 role/name/value/短 ref（e1、e2…），引用表的唯一来源。 |
+| `screenshot(path?, full?)` | 页内截图存 PNG，回 {path,bytes}。 |
+| `pdf(path?)` | 当前页存 PDF（仅无头 chrome），回 {path,bytes}。 |
+| `newTab(url?)` | 开新 tab 并设为活动路由（先 about:blank 再 goto，防竞速假完成）。 |
+| `switchTab(targetId)` | 切活动路由（不改 Chrome 可见前景，人机共存）。 |
+| `currentTab()` | 当前活动 tab 简表（无活动返回 null）。 |
+| `closeTab(targetId?)` | 关 tab；守卫只放行自建 tab（chrome 初始页与用户 tab 拒绝）。 |
+| `clickAt(x, y)` | 视口坐标 trusted 点击（点当前可见物，不做遮挡检查）。 |
+| `fillInput(selector, text)` | 按 CSS 选择器填输入框（SelectAll 不发 Ctrl+A，回读严格验证；select 走 selectOption）。 |
+| `clickRef(ref)` | 按 snapshot 短 ref 点击：滚动可见、量中心、遮挡命中测试（被盖即拒绝并报遮挡物）、trusted 派发。 |
+| `fillRef(ref, text)` | 按 ref 填输入框：objectId focus、SelectAll+insertText、同节点回读严格验证。 |
+| `selectOption(ref, value)` | 下拉框选择（value 或可见 label；设值+派发 input/change；未命中报全部可选值）。 |
+| `pressKey(key)` | 按一个键（Enter/Tab/单字符；Enter 的 text 是 \r，CDP 契约）。 |
+| `dialogStatus()` | 当前 JS 对话框状态（open/type/message/defaultPrompt）。 |
+| `dialogAccept(text?)` | 接受当前对话框（prompt 可带应答文本）。 |
+| `dialogDismiss()` | 拒绝当前对话框。alert/beforeunload 会被自动接受，无需手动。 |
+| `routeBlock(pattern)` | 网络拦截：glob 命中的请求直接失败（BlockedByClient）。作用于当前活动 tab。 |
+| `routeMock(pattern, body, opts?)` | 网络拦截：命中的请求本地应答（默认带 ACAO *）。 |
+| `routeClear()` | 清空全部拦截规则并 Fetch.disable。 |
+| `waitLoad(ms?)` | 等 document.readyState 到 complete（已加载立即返回）。 |
+| `waitIdle(ms?)` | 等 network 静默（窗口语义：起点前挂着的请求不计）。 |
+| `recordStart(opts?)` | 开始录屏（Screencast 帧流落盘；everyNthFrame 源端抽帧、maxWidth/maxHeight 限宽高）。 |
+| `recordStop()` | 停止录制，回 {frames,bytes,dir}（PNG 已在盘上）。 |
+| `hostFunctions()` | 本目录的运行时探针（agent 自描述，schema/清单同源）。 |
+| `print(x)` | 把值打到 daemon stderr（调试用）。 |
+
+## session 方法
+
+| 命令 | 说明 |
+| --- | --- |
+| `session.connect(opts?)` | 按 wsUrl/port/profileDir 连接（timeoutMs 可等人工 Allow）。 |
+| `session.use(targetId)` | 附着某 tab 并设为活动路由（flatten attach）。 |
+| `session.close()` | 断开连接不关浏览器（可重连；spawn 端口态引擎会被引擎策略重连）。 |
+| `session.setActiveSession(sessionId?)` | 覆写活动 sessionId（高级用法；一般走 session.use）。 |
+| `session.getActiveSession()` | 当前活动 sessionId（无则 null）。 |
+| `session.isConnected()` | 连接是否存活。 |
+| `session.waitFor(method, undefined, ms?)` | 从事件缓冲取第一个 method 事件（取出即移除；超时报错）。 |
+| `session.waitJs(expression, ms?)` | 页内谓词轮询（真 V8 表达式），等到即返回真值本身。 |
+| `session.call(method, params?)` | 裸调任意 CDP 方法（守卫与 sessionId 路由同 session.<Domain>.<method>）。 |
+| `session.peekEvents(method, n?)` | 非破坏窥视事件缓冲（waitFor 之后仍能取到）。 |
+| `session.peekEventsSince(method, sinceSeq, n?)` | seq 游标增量窥视（首拍 sinceSeq 用 0，之后用上一拍最后一条的 seq）。 |
+| `session.findEvents(method, path, value, n?)` | 等值过滤窥视（点分路径，如 params.requestId）。 |
+
+完整版见 llms-full.txt；机器可读契约见 browse.schema.json；Rust API 文档见 docs/aidoc/llms.txt。

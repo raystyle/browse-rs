@@ -10,6 +10,7 @@ Rust workspace（crates/cdp、browse-core、browse-cli）。公开契约以 `///
 - cargo test --doc --workspace
 - cargo doc --no-deps --workspace
 - cargo aidoc --check --strict   # aidoc 投影漂移门禁（改动 pub/文档后先 cargo aidoc 再提交 docs/aidoc）
+- cargo run -p browse-cli -- --gen-surface docs/surface   # 命令面目录重生成（schema/llms/skill；tests/surface_contract.rs 锁漂移）
 - cargo install --path crates/browse-cli --force    # 本机装 browse 进 PATH
 - BROWSE_E2E=1 BROWSE_NO_ATTACH=1 cargo test -p browse-core --test e2e # 真 chrome 端到端（NO_ATTACH：本机 9222 开着用户浏览器时也要自起隔离实例；CI 跳过）
 
@@ -31,6 +32,7 @@ Rust workspace（crates/cdp、browse-core、browse-cli）。公开契约以 `///
 ## Read first
 
 - docs/aidoc/llms.txt（Agent 入口索引）-> 相关 docs/aidoc/<crate>/<module>.md
+- docs/surface/llms.txt（CLI/方言命令面清单，crates/browse-core/src/surface.rs 派生）
 - docs/architecture.md（现在怎么拼：三层 crate + daemon + 双通道）
 - 仍不确定再打开源码 `///`
 - docs/adr/ 仅在改对应决策时（0001 daemon / 0002 方言 / 0003 引擎策略 / 0004 自动附着 / 0005 管道）

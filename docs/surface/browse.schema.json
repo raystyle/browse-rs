@@ -1,0 +1,871 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "cdpMethods": {
+      "description": "cdpMethods(domain?) 652 个 CDP 命令的运行时探针（按域过滤）。",
+      "example": "return await cdpMethods(\"Network\")",
+      "input": {
+        "properties": {
+          "domain": {
+            "description": "缺省 全部",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "cli.connect-flag": {
+      "description": "browse --connect <ws|端口> '<片段>' 显式附着给定 ws URL 或调试端口。",
+      "example": "browse --connect 9222 'return await listPageTargets()'",
+      "input": {
+        "properties": {
+          "snippet": {
+            "description": "",
+            "type": "string"
+          },
+          "target": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "cli.down": {
+      "description": "browse down 退 daemon；只终结自己 spawn 的引擎，附着来源不动。",
+      "example": "browse down",
+      "input": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "cli.eval": {
+      "description": "browse '<片段>' 求值方言片段（缺省形态；自动拉起 daemon 与引擎）。",
+      "example": "browse 'return await currentTab()'",
+      "input": {
+        "properties": {
+          "snippet": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "snippet"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "cli.eval-e": {
+      "description": "browse -e '<片段>' 显式 --eval 形态（与缺省等价）。",
+      "example": "browse -e 'return 1'",
+      "input": {
+        "properties": {
+          "snippet": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "snippet"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "cli.eval-stdin": {
+      "description": "browse < 文件 stdin 批处理：括号配平即提交一段，变量跨段共享。",
+      "example": "printf '%s\\n' 'const t = await listPageTargets()' 'return t[0].url' | browse",
+      "input": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "cli.new-tab-flag": {
+      "description": "browse --new-tab '<片段>' 求值前先开 about:blank 新 tab。",
+      "example": "browse --new-tab 'return await snapshot()'",
+      "input": {
+        "properties": {
+          "snippet": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "snippet"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "cli.serve": {
+      "description": "browse --serve [--bind host:port] 前台跑 daemon（样例忠实形态）。",
+      "example": "browse --serve --bind 127.0.0.1:9880",
+      "input": {
+        "properties": {
+          "bind": {
+            "description": "缺省 127.0.0.1:9880",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "cli.status": {
+      "description": "browse status [--json] daemon/引擎/实例名/活动 tab 概览。",
+      "example": "browse status --json",
+      "input": {
+        "properties": {
+          "json": {
+            "description": "缺省 false",
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "cli.up": {
+      "description": "browse up [--headless] [--pipe] [--chrome <path>] [--ws <url>] [--port <p>] 显式起引擎（附着优先，缺则 spawn clean-chrome 隔离实例）。",
+      "example": "browse up --headless --pipe",
+      "input": {
+        "properties": {
+          "chrome": {
+            "description": "缺省 发现序",
+            "type": "string"
+          },
+          "headless": {
+            "description": "缺省 false",
+            "type": "boolean"
+          },
+          "pipe": {
+            "description": "缺省 false",
+            "type": "boolean"
+          },
+          "port": {
+            "description": "",
+            "type": "number"
+          },
+          "ws": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "clickAt": {
+      "description": "clickAt(x, y) 视口坐标 trusted 点击（点当前可见物，不做遮挡检查）。",
+      "example": "await clickAt(120, 40)",
+      "input": {
+        "properties": {
+          "x": {
+            "description": "",
+            "type": "number"
+          },
+          "y": {
+            "description": "",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "clickRef": {
+      "description": "clickRef(ref) 按 snapshot 短 ref 点击：滚动可见、量中心、遮挡命中测试（被盖即拒绝并报遮挡物）、trusted 派发。",
+      "example": "await clickRef(\"e3\")",
+      "input": {
+        "properties": {
+          "ref": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "closeTab": {
+      "description": "closeTab(targetId?) 关 tab；守卫只放行自建 tab（chrome 初始页与用户 tab 拒绝）。",
+      "example": "await closeTab((await currentTab()).targetId)",
+      "input": {
+        "properties": {
+          "targetId": {
+            "description": "缺省 当前活动 tab",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "currentTab": {
+      "description": "currentTab() 当前活动 tab 简表（无活动返回 null）。",
+      "example": "return await currentTab()",
+      "input": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "detectBrowsers": {
+      "description": "detectBrowsers() 探测本机已开的调试浏览器（profile/端口/wsUrl）。",
+      "example": "return await detectBrowsers()",
+      "input": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "dialogAccept": {
+      "description": "dialogAccept(text?) 接受当前对话框（prompt 可带应答文本）。",
+      "example": "await dialogAccept(\"yes\")",
+      "input": {
+        "properties": {
+          "text": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "dialogDismiss": {
+      "description": "dialogDismiss() 拒绝当前对话框。alert/beforeunload 会被自动接受，无需手动。",
+      "example": "await dialogDismiss()",
+      "input": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "dialogStatus": {
+      "description": "dialogStatus() 当前 JS 对话框状态（open/type/message/defaultPrompt）。",
+      "example": "return await dialogStatus()",
+      "input": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "fillInput": {
+      "description": "fillInput(selector, text) 按 CSS 选择器填输入框（SelectAll 不发 Ctrl+A，回读严格验证；select 走 selectOption）。",
+      "example": "await fillInput(\"#q\", \"hello\")",
+      "input": {
+        "properties": {
+          "selector": {
+            "description": "",
+            "type": "string"
+          },
+          "text": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "selector",
+          "text"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "fillRef": {
+      "description": "fillRef(ref, text) 按 ref 填输入框：objectId focus、SelectAll+insertText、同节点回读严格验证。",
+      "example": "await fillRef(\"e2\", \"hello\")",
+      "input": {
+        "properties": {
+          "ref": {
+            "description": "",
+            "type": "string"
+          },
+          "text": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "text"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "hostFunctions": {
+      "description": "hostFunctions() 本目录的运行时探针（agent 自描述，schema/清单同源）。",
+      "example": "return await hostFunctions()",
+      "input": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "listPageTargets": {
+      "description": "listPageTargets() 列可附着 page targets（带 own 标：只有 own=true 可 closeTab）。",
+      "example": "const tabs = await listPageTargets()",
+      "input": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "newTab": {
+      "description": "newTab(url?) 开新 tab 并设为活动路由（先 about:blank 再 goto，防竞速假完成）。",
+      "example": "await newTab(\"https://example.com\")",
+      "input": {
+        "properties": {
+          "url": {
+            "description": "缺省 about:blank",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "pdf": {
+      "description": "pdf(path?) 当前页存 PDF（仅无头 chrome），回 {path,bytes}。",
+      "example": "return await pdf()",
+      "input": {
+        "properties": {
+          "path": {
+            "description": "缺省 <state>/pdfs/…pdf",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "pressKey": {
+      "description": "pressKey(key) 按一个键（Enter/Tab/单字符；Enter 的 text 是 \\r，CDP 契约）。",
+      "example": "await pressKey(\"Enter\")",
+      "input": {
+        "properties": {
+          "key": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "print": {
+      "description": "print(x) 把值打到 daemon stderr（调试用）。",
+      "example": "await print(tabs)",
+      "input": {
+        "properties": {
+          "x": {
+            "description": "",
+            "type": "any"
+          }
+        },
+        "required": [
+          "x"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "recordStart": {
+      "description": "recordStart(opts?) 开始录屏（Screencast 帧流落盘；everyNthFrame 源端抽帧、maxWidth/maxHeight 限宽高）。",
+      "example": "return await recordStart({everyNthFrame: 2})",
+      "input": {
+        "properties": {
+          "opts": {
+            "description": "缺省 {everyNthFrame:1}",
+            "type": "object"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "recordStop": {
+      "description": "recordStop() 停止录制，回 {frames,bytes,dir}（PNG 已在盘上）。",
+      "example": "return await recordStop()",
+      "input": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "resolveWsUrl": {
+      "description": "resolveWsUrl(opts?) 把 wsUrl/port/profileDir 线索解析成 WS URL（不连接）。",
+      "example": "return await resolveWsUrl({port: 9222})",
+      "input": {
+        "properties": {
+          "opts": {
+            "description": "缺省 {port:9222}",
+            "type": "object"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "routeBlock": {
+      "description": "routeBlock(pattern) 网络拦截：glob 命中的请求直接失败（BlockedByClient）。作用于当前活动 tab。",
+      "example": "await routeBlock(\"*://ads.example.com/*\")",
+      "input": {
+        "properties": {
+          "pattern": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pattern"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "routeClear": {
+      "description": "routeClear() 清空全部拦截规则并 Fetch.disable。",
+      "example": "await routeClear()",
+      "input": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "routeMock": {
+      "description": "routeMock(pattern, body, opts?) 网络拦截：命中的请求本地应答（默认带 ACAO *）。",
+      "example": "await routeMock(\"http://mock.test/api*\", \"{\\\"ok\\\":1}\", {contentType: \"application/json\"})",
+      "input": {
+        "properties": {
+          "body": {
+            "description": "",
+            "type": "string"
+          },
+          "opts": {
+            "description": "缺省 {status:200, contentType:\"text/html\"}",
+            "type": "object"
+          },
+          "pattern": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pattern",
+          "body"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "screenshot": {
+      "description": "screenshot(path?, full?) 页内截图存 PNG，回 {path,bytes}。",
+      "example": "return await screenshot()",
+      "input": {
+        "properties": {
+          "full": {
+            "description": "缺省 false",
+            "type": "boolean"
+          },
+          "path": {
+            "description": "缺省 <state>/screenshots/…png",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "selectOption": {
+      "description": "selectOption(ref, value) 下拉框选择（value 或可见 label；设值+派发 input/change；未命中报全部可选值）。",
+      "example": "return await selectOption(\"e4\", \"Beta\")",
+      "input": {
+        "properties": {
+          "ref": {
+            "description": "",
+            "type": "string"
+          },
+          "value": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "value"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "session.call": {
+      "description": "session.call(method, params?) 裸调任意 CDP 方法（守卫与 sessionId 路由同 session.<Domain>.<method>）。",
+      "example": "await session.call(\"Page.navigate\", {url: \"https://example.com\"})",
+      "input": {
+        "properties": {
+          "method": {
+            "description": "",
+            "type": "string"
+          },
+          "params": {
+            "description": "缺省 {}",
+            "type": "object"
+          }
+        },
+        "required": [
+          "method"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "session.close": {
+      "description": "session.close() 断开连接不关浏览器（可重连；spawn 端口态引擎会被引擎策略重连）。",
+      "example": "await session.close()",
+      "input": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "session.connect": {
+      "description": "session.connect(opts?) 按 wsUrl/port/profileDir 连接（timeoutMs 可等人工 Allow）。",
+      "example": "await session.connect({port: 9222, timeoutMs: 30000})",
+      "input": {
+        "properties": {
+          "opts": {
+            "description": "缺省 {port:9222, timeoutMs:5000}",
+            "type": "object"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "session.findEvents": {
+      "description": "session.findEvents(method, path, value, n?) 等值过滤窥视（点分路径，如 params.requestId）。",
+      "example": "return await session.findEvents(\"Network.responseReceived\", \"params.response.status\", 404, 1)",
+      "input": {
+        "properties": {
+          "method": {
+            "description": "",
+            "type": "string"
+          },
+          "n": {
+            "description": "缺省 1",
+            "type": "number"
+          },
+          "path": {
+            "description": "",
+            "type": "string"
+          },
+          "value": {
+            "description": "",
+            "type": "any"
+          }
+        },
+        "required": [
+          "method",
+          "path",
+          "value"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "session.getActiveSession": {
+      "description": "session.getActiveSession() 当前活动 sessionId（无则 null）。",
+      "example": "return await session.getActiveSession()",
+      "input": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "session.isConnected": {
+      "description": "session.isConnected() 连接是否存活。",
+      "example": "return await session.isConnected()",
+      "input": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "session.peekEvents": {
+      "description": "session.peekEvents(method, n?) 非破坏窥视事件缓冲（waitFor 之后仍能取到）。",
+      "example": "return await session.peekEvents(\"Network.requestWillBeSent\", 5)",
+      "input": {
+        "properties": {
+          "method": {
+            "description": "",
+            "type": "string"
+          },
+          "n": {
+            "description": "缺省 1",
+            "type": "number"
+          }
+        },
+        "required": [
+          "method"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "session.peekEventsSince": {
+      "description": "session.peekEventsSince(method, sinceSeq, n?) seq 游标增量窥视（首拍 sinceSeq 用 0，之后用上一拍最后一条的 seq）。",
+      "example": "return await session.peekEventsSince(\"Network.requestWillBeSent\", 42, 10)",
+      "input": {
+        "properties": {
+          "method": {
+            "description": "",
+            "type": "string"
+          },
+          "n": {
+            "description": "缺省 1",
+            "type": "number"
+          },
+          "sinceSeq": {
+            "description": "",
+            "type": "number"
+          }
+        },
+        "required": [
+          "method",
+          "sinceSeq"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "session.setActiveSession": {
+      "description": "session.setActiveSession(sessionId?) 覆写活动 sessionId（高级用法；一般走 session.use）。",
+      "example": "await session.setActiveSession(sid)",
+      "input": {
+        "properties": {
+          "sessionId": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "session.use": {
+      "description": "session.use(targetId) 附着某 tab 并设为活动路由（flatten attach）。",
+      "example": "await session.use(tabs[0].targetId)",
+      "input": {
+        "properties": {
+          "targetId": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "targetId"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "session.waitFor": {
+      "description": "session.waitFor(method, undefined, ms?) 从事件缓冲取第一个 method 事件（取出即移除；超时报错）。",
+      "example": "await session.waitFor(\"Page.loadEventFired\", undefined, 15000)",
+      "input": {
+        "properties": {
+          "method": {
+            "description": "",
+            "type": "string"
+          },
+          "ms": {
+            "description": "缺省 15000",
+            "type": "number"
+          }
+        },
+        "required": [
+          "method"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "session.waitJs": {
+      "description": "session.waitJs(expression, ms?) 页内谓词轮询（真 V8 表达式），等到即返回真值本身。",
+      "example": "await session.waitJs(\"document.querySelector('#x') !== null\", 5000)",
+      "input": {
+        "properties": {
+          "expression": {
+            "description": "",
+            "type": "string"
+          },
+          "ms": {
+            "description": "缺省 10000",
+            "type": "number"
+          }
+        },
+        "required": [
+          "expression"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "snapshot": {
+      "description": "snapshot() AX 树快照：nodes 带 role/name/value/短 ref（e1、e2…），引用表的唯一来源。",
+      "example": "const s = await snapshot()",
+      "input": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "switchTab": {
+      "description": "switchTab(targetId) 切活动路由（不改 Chrome 可见前景，人机共存）。",
+      "example": "await switchTab(tabs[0].targetId)",
+      "input": {
+        "properties": {
+          "targetId": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "targetId"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "waitIdle": {
+      "description": "waitIdle(ms?) 等 network 静默（窗口语义：起点前挂着的请求不计）。",
+      "example": "await waitIdle(5000)",
+      "input": {
+        "properties": {
+          "ms": {
+            "description": "缺省 10000",
+            "type": "number"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "waitLoad": {
+      "description": "waitLoad(ms?) 等 document.readyState 到 complete（已加载立即返回）。",
+      "example": "await waitLoad(8000)",
+      "input": {
+        "properties": {
+          "ms": {
+            "description": "缺省 10000",
+            "type": "number"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    }
+  },
+  "description": "由 crates/browse-core/src/surface.rs 目录派生；browse --gen-surface 重生成，tests/surface_contract.rs 锁漂移",
+  "title": "browse-rs 命令面"
+}

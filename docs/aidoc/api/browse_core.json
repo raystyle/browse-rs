@@ -231,6 +231,61 @@
       "path": "browse_core::server::serve",
       "kind": "function",
       "docs": "起 HTTP daemon，监听 `bind`，直到 POST /quit。\n\n# Errors\n\n端口绑定失败或 axum serve 出错。"
+    },
+    {
+      "path": "browse_core::surface",
+      "kind": "module",
+      "docs": "命令面目录（incur-rs 原则的方言版适配）：CLI 子命令、方言全局函数、\nsession 方法**只在这一处登记为数据**，JSON Schema、LLM 清单\n（`llms.txt` / `llms-full.txt`）与技能（`SKILL.md`）全部由\n[`render`] 系列从本目录派生（`browse --gen-surface docs/surface`\n重生成），`tests/surface_contract.rs` 锁漂移。\n\n与 incur（derive 宏命令图）的差异：我们的接口面是方言片段而非结构化\n参数，故目录手写为 `const`，派生物种取同样的三件（schema/llms/skill）。"
+    },
+    {
+      "path": "browse_core::surface::ArgSpec",
+      "kind": "struct",
+      "docs": "一个参数的形状。"
+    },
+    {
+      "path": "browse_core::surface::COMMANDS",
+      "kind": "constant",
+      "docs": "命令目录（单一真相源）。"
+    },
+    {
+      "path": "browse_core::surface::CmdKind",
+      "kind": "enum",
+      "docs": "命令种类。"
+    },
+    {
+      "path": "browse_core::surface::CmdSpec",
+      "kind": "struct",
+      "docs": "一条命令的登记项。"
+    },
+    {
+      "path": "browse_core::surface::catalog_json",
+      "kind": "function",
+      "docs": "目录的运行时 JSON（hostFunctions 探针的返回体）。"
+    },
+    {
+      "path": "browse_core::surface::render_llms",
+      "kind": "function",
+      "docs": "紧凑 LLM 清单（llms.txt）。"
+    },
+    {
+      "path": "browse_core::surface::render_llms_full",
+      "kind": "function",
+      "docs": "完整 LLM 清单（llms-full.txt）：索引 + 逐命令参数与示例。"
+    },
+    {
+      "path": "browse_core::surface::render_schema",
+      "kind": "function",
+      "docs": "JSON Schema 包（每命令一个 definition；输入按目录，输出是运行时 JSON）。"
+    },
+    {
+      "path": "browse_core::surface::render_skill",
+      "kind": "function",
+      "docs": "技能文件（SKILL.md，incur 同款 frontmatter 契约）。"
+    },
+    {
+      "path": "browse_core::surface::write_surface_files",
+      "kind": "function",
+      "docs": "把三件派生物写进目录（维护命令 `browse --gen-surface <dir>` 用）：\n`browse.schema.json` / `llms.txt` / `llms-full.txt` / `skills/browse/SKILL.md`。\n\n# Errors\n\n写盘失败（目录不可写）。"
     }
   ]
 }

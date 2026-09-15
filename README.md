@@ -144,6 +144,13 @@ cargo clippy --workspace --all-targets -- -D warnings
 CI 两个作业：windows-latest 跑全量门禁（fmt/clippy/test/doc/aidoc），
 ubuntu-latest 编译并单测 cdp（POSIX 管道 fd 3/4 布线的平台门禁）。
 
+命令面目录（incur-rs 原则）：CLI/全局函数/session 方法在
+`crates/browse-core/src/surface.rs` 登记为数据，`browse --gen-surface
+docs/surface` 派生 JSON Schema（`browse.schema.json`）、LLM 清单
+（`llms.txt` / `llms-full.txt`）与技能（`skills/browse/SKILL.md`），
+`tests/surface_contract.rs` 锁两层漂移（产物一致 + 目录项全部可派发）；
+方言内 `hostFunctions()` 是同源运行时探针。
+
 详读 `AGENTS.md`（命令与门禁）、`docs/architecture.md`（现在怎么拼）、`docs/adr/`（为什么）。
 
 ## Roadmap（v0.1 之外）

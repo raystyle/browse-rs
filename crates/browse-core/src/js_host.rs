@@ -305,6 +305,9 @@ impl JsHost {
                 };
                 Ok(Value::Array(list.into_iter().map(|m| json!(m)).collect()))
             }
+            // 本 CLI 的命令面目录探针（与 schema/llms/skill 同源，
+            // incur --llms 的运行时等价物）
+            "hostFunctions" => Ok(crate::surface::catalog_json()),
             // 页内截图存文件，回 {path, bytes}；full 走 captureBeyondViewport
             "screenshot" => {
                 let path = argv.first().and_then(Value::as_str).map(str::to_string);

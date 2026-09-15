@@ -18,6 +18,7 @@
 - [browse-core::record](browse_core/record.md): 录制：`Page.startScreencast` 帧流落盘（方言无回调，泵任务代收）。
 - [browse-core::semantic](browse_core/semantic.md): 语义层近期面：tab 族、交互三件、等待判官。
 - [browse-core::server](browse_core/server.md): daemon 的 HTTP API：常驻会话 + 方言求值 + 引擎生命周期。
+- [browse-core::surface](browse_core/surface.md): 命令面目录（incur-rs 原则的方言版适配）：CLI 子命令、方言全局函数、
 
 ## cdp 0.1.0
 

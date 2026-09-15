@@ -47,6 +47,7 @@ async fn main() -> Result<()> {
     let mut json = false;
 
     let mut args = std::env::args().skip(1);
+    let mut gen_surface: Option<String> = None;
     while let Some(a) = args.next() {
         let mut next = |flag: &str| -> Result<String> {
             args.next()
@@ -54,6 +55,7 @@ async fn main() -> Result<()> {
         };
         match a.as_str() {
             "--eval" | "-e" => snippets.push(next("--eval")?),
+            "--gen-surface" => gen_surface = Some(next("--gen-surface")?),
             "--serve" => serve = true,
             "--bind" => bind = Some(next("--bind")?),
             "--connect" => connect = Some(next("--connect")?),
@@ -88,6 +90,14 @@ async fn main() -> Result<()> {
     if serve {
         let bind = bind.unwrap_or_else(client::daemon_bind);
         return serve_foreground(bind, ws, port, chrome.map(Into::into), headless, pipe).await;
+    }
+
+    // 维护命令：从 surface 目录重生成 schema/llms/skill（提交 docs/surface/）
+    if let Some(dir) = gen_surface {
+        let p = std::path::PathBuf::from(&dir);
+        browse_core::surface::write_surface_files(&p)?;
+        println!("surface 已生成到 {}", p.display());
+        return Ok(());
     }
 
     // --connect 映射成显式引擎意图（ws 优先，其次端口）
