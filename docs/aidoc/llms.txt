@@ -19,6 +19,7 @@
 
 - [cdp overview](cdp/index.md): Chrome DevTools Protocol（CDP）连接层：一条常驻 browser-level WebSocket 会话。
 - [cdp::discovery](cdp/discovery.md): 连接线索到 WebSocket URL 的解析：`wsUrl` / `port` / `profileDir` 三条路。
+- [cdp::methods](cdp/methods.md): CDP 命令方法清单与相近建议。
 - [cdp::pipe](cdp/pipe.md): 匿名管道薄封装。std 的 anonymous pipe（`std::io::pipe`）至 1.98 仍未稳定，
 - [cdp::session](cdp/session.md): 一条 browser-level WebSocket + flatten attach + sessionId 路由。
 - [cdp::spawn](cdp/spawn.md): 找到 Chrome 可执行文件并拉起一个带调试口的专属实例。

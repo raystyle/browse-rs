@@ -55,14 +55,21 @@ return (await session.Runtime.evaluate({expression:"document.title", returnByVal
 `Runtime.evaluate` 的 `expression` 字符串（页内是真 V8）。
 `session.<Domain>.<method>(params)` 直转 CDP 字符串调用，652 个方法无封装。
 宿主全局：`listPageTargets()` / `resolveWsUrl(opts?)` / `detectBrowsers()` /
-`print(x)`。session 方法族：`connect`（支持 `timeoutMs`，等 Allow 给 30000）/
-`use` / `close`（断开不关浏览器，可重连）/ `setActiveSession` / `waitFor` /
-`call` / `isConnected` / `getActiveSession`。事件家族：`peekEvents(method, n?)`
-（非破坏窥视，官方 `onEvent` 的无函数方言等价面）、
-`peekEventsSince(method, sinceSeq, n?)`（seq 游标增量轮询，不重看旧事件）、
-`findEvents(method, "params.requestId", <值>, n?)`（点分路径等值过滤，
-挑特定请求/帧的事件）。事件进缓冲即盖单调 `seq`，waitFor/peek 拿到的
-事件自带游标。
+`cdpMethods(domain?)`（652 命令运行时探针）/ `snapshot()`（AX 树快照，
+`{url,title,nodes:[{id,role,name,value,checked,backendNodeId,...}]}`，
+对齐 browser-use-pi）/ `screenshot(path?, full?)`（存 PNG 回 `{path,bytes}`）/
+`print(x)`。session 方法族：`connect`（支持 `timeoutMs`）/ `use` / `close`
+（断开可重连）/ `setActiveSession` / `waitFor` / `waitJs(expression, ms?)`
+（页内谓词轮询，返回真值本身，pi `page.waitFor` 的方言代偿）/ `call` /
+`isConnected` / `getActiveSession`。事件家族：`peekEvents(method, n?)`
+（非破坏窥视）、`peekEventsSince(method, sinceSeq, n?)`（seq 游标增量）、
+`findEvents(method, "params.requestId", <值>, n?)`（等值过滤）。事件进缓冲
+即盖单调 `seq`。方法拼错时 CDP `not found` 错误自动附相近建议
+（清单 652 条由 `tools/gen-cdp-methods.py` 生成，`crates/cdp/src/methods.txt`）。
+
+域策略（对齐 pi policy）：`BROWSE_DENY_DOMAINS` / `BROWSE_ALLOW_DOMAINS`
+（逗号分隔，后缀匹配含子域；deny 优先）在 `Page.navigate` /
+`Target.createTarget` 上程序级拦截，未配置不拦。
 
 ## 与样例（browser-harness-rs）的差异
 

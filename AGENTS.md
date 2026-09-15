@@ -39,5 +39,7 @@ Rust workspace（crates/cdp、browse-core、browse-cli）。公开契约以 `///
 ## 环境
 
 - daemon 端口默认 9880（BROWSE_PORT）；chrome 发现序：BROWSE_CHROME -> cwd/exe 祖先的 `chromium-*/chrome.exe` -> 常规路径
+- 域策略：BROWSE_DENY_DOMAINS / BROWSE_ALLOW_DOMAINS（后缀匹配，deny 优先），拦 Page.navigate 与 Target.createTarget
+- 652 命令清单 crates/cdp/src/methods.txt 是生成物（tools/gen-cdp-methods.py，源头 refs/ 不入库）；改协议版本重跑生成再提交
 - daemon 日志：`%USERPROFILE%\.browse-rs\daemon.log`
 - 本机引擎 profile：`%USERPROFILE%\.browse-rs\engine-profile`（down 不删，复用登录态）

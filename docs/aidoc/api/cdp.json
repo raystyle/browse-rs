@@ -53,6 +53,31 @@
       "docs": "从 `DevToolsActivePort` 文件文本解析 WS URL：首行端口，次行 `/devtools/...` 路径。\n\n# Examples\n\n```\nlet text = \"52345\\n/devtools/browser/8f4eaaaa-1111\\n\";\nassert_eq!(\n    cdp::ws_from_active_port_text(text),\n    Some(\"ws://127.0.0.1:52345/devtools/browser/8f4eaaaa-1111\".to_string()),\n);\nassert_eq!(cdp::ws_from_active_port_text(\"garbage\"), None);\n```"
     },
     {
+      "path": "cdp::methods",
+      "kind": "module",
+      "docs": "CDP 命令方法清单与相近建议。\n\n`methods.txt` 由 `tools/gen-cdp-methods.py` 从上游\n`browser_protocol.json` + `js_protocol.json` 生成（652 条，跳过 events\n与 redirect 别名，对齐 browser-harness-js `sdk/gen.ts` 口径），随源码\n入库；升协议版本后重跑生成脚本再提交。\n\n用途是**被动增强**：不拦截未知方法（避免清单滞后误伤真方法），只在\nCDP 报 `not found` 时给相近建议，以及给方言 `cdpMethods(domain)` 做\n运行时探针（对齐 bh 的 `Object.keys(session.Network)`）。"
+    },
+    {
+      "path": "cdp::methods::METHODS_RAW",
+      "kind": "constant",
+      "docs": "全量命令清单（`Domain.Method` 每行一条）。"
+    },
+    {
+      "path": "cdp::methods::method_exists",
+      "kind": "function",
+      "docs": "是否为清单内已知命令。\n\n# Examples\n\n```\nassert!(cdp::methods::method_exists(\"Page.navigate\"));\nassert!(!cdp::methods::method_exists(\"Page.navigateX\"));\n```"
+    },
+    {
+      "path": "cdp::methods::methods_of_domain",
+      "kind": "function",
+      "docs": "某域的全部命令（`cdpMethods(\"Network\")` 的底座）。\n\n# Examples\n\n```\nassert!(cdp::methods::methods_of_domain(\"Network\").contains(&\"Network.enable\"));\nassert!(cdp::methods::methods_of_domain(\"NoSuchDomain\").is_empty());\n```"
+    },
+    {
+      "path": "cdp::methods::suggest",
+      "kind": "function",
+      "docs": "相近建议：同域优先，方法名前缀/包含次之，最多 `max` 条。\n\n# Examples\n\n```\nlet s = cdp::methods::suggest(\"Page.navigateX\", 3);\nassert!(s.contains(&\"Page.navigate\"));\n```"
+    },
+    {
       "path": "cdp::pipe",
       "kind": "module",
       "docs": "匿名管道薄封装。std 的 anonymous pipe（`std::io::pipe`）至 1.98 仍未稳定，\nWindows 直接用 `CreatePipe`；POSIX 留桩（管道通道暂仅 Windows，走端口态）。\n\n句柄存 `usize` 以获得 `Send + Sync`；阻塞 IO 由 [`crate::Session`] 的\n管道泵在 blocking 线程池上跑。"

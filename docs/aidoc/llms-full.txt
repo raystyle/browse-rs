@@ -211,6 +211,7 @@ s.call("Page.navigate", json!({ "url": "https://example.com" })).await?;
 ## Modules
 
 - [`discovery`](discovery.md): 连接线索到 WebSocket URL 的解析：`wsUrl` / `port` / `profileDir` 三条路。
+- [`methods`](methods.md): CDP 命令方法清单与相近建议。
 - [`pipe`](pipe.md): 匿名管道薄封装。std 的 anonymous pipe（`std::io::pipe`）至 1.98 仍未稳定，
 - [`session`](session.md): 一条 browser-level WebSocket + flatten attach + sessionId 路由。
 - [`spawn`](spawn.md): 找到 Chrome 可执行文件并拉起一个带调试口的专属实例。
@@ -239,6 +240,31 @@ Chrome 144+ 对默认 profile 的 HTTP `/json` 端点可能不服务，
 ## Types
 
 - `DetectedBrowser` — 一个可附着浏览器的候选描述（`detect_browsers` 的产物）。
+
+
+<!-- cdp/methods.md -->
+# cdp::methods
+
+CDP 命令方法清单与相近建议。
+
+`methods.txt` 由 `tools/gen-cdp-methods.py` 从上游
+`browser_protocol.json` + `js_protocol.json` 生成（652 条，跳过 events
+与 redirect 别名，对齐 browser-harness-js `sdk/gen.ts` 口径），随源码
+入库；升协议版本后重跑生成脚本再提交。
+
+用途是**被动增强**：不拦截未知方法（避免清单滞后误伤真方法），只在
+CDP 报 `not found` 时给相近建议，以及给方言 `cdpMethods(domain)` 做
+运行时探针（对齐 bh 的 `Object.keys(session.Network)`）。
+
+## Functions
+
+- `method_exists` — 是否为清单内已知命令。
+- `methods_of_domain` — 某域的全部命令（`cdpMethods("Network")` 的底座）。
+- `suggest` — 相近建议：同域优先，方法名前缀/包含次之，最多 `max` 条。
+
+## Constants
+
+- `METHODS_RAW` — 全量命令清单（`Domain.Method` 每行一条）。
 
 
 <!-- cdp/pipe.md -->

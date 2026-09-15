@@ -34,6 +34,7 @@ s.call("Page.navigate", json!({ "url": "https://example.com" })).await?;
 ## Modules
 
 - [`discovery`](discovery.md): 连接线索到 WebSocket URL 的解析：`wsUrl` / `port` / `profileDir` 三条路。
+- [`methods`](methods.md): CDP 命令方法清单与相近建议。
 - [`pipe`](pipe.md): 匿名管道薄封装。std 的 anonymous pipe（`std::io::pipe`）至 1.98 仍未稳定，
 - [`session`](session.md): 一条 browser-level WebSocket + flatten attach + sessionId 路由。
 - [`spawn`](spawn.md): 找到 Chrome 可执行文件并拉起一个带调试口的专属实例。

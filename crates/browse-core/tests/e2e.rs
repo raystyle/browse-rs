@@ -4,7 +4,7 @@
 //! -> Runtime.evaluate 读 title -> down 只杀自起实例。
 
 use browse_core::{Engine, EngineSpec, JsHost};
-use serde_json::json;
+use serde_json::{Value, json};
 
 /// 串行化两通道测试：engine-profile 是独占资源（chrome 单实例锁）。
 static SEQ: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
@@ -14,6 +14,21 @@ fn gated() -> bool {
 }
 
 async fn clean_profile() {
+    // 先收割上次被杀测试留下的引擎 chrome（只认 browse-rs 部署路径，
+    // 不碰用户浏览器），否则单实例 profile 锁让本次 spawn 连坐挂死
+    let _ = tokio::task::spawn_blocking(|| {
+        let _ = std::process::Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-Command",
+                "Get-Process chrome -ErrorAction SilentlyContinue | Where-Object {$_.Path -like '*browse-rs*'} | Stop-Process -Force",
+            ])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+    })
+    .await;
+    tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
     let dir = browse_core::engine::engine_profile_dir();
     let _ = tokio::task::spawn_blocking(move || {
         std::fs::remove_dir_all(dir).ok();
@@ -96,6 +111,58 @@ async fn exercise(engine: &Engine, host: &JsHost, expect_channel: &str) {
     host.eval_snippet(r#"await session.waitFor("Page.frameStartedLoading", undefined, 15000)"#)
         .await
         .expect("peek 之后 waitFor 仍取得到（非破坏）");
+
+    // waitJs：页内 800ms 后置真，谓词轮询等到
+    host.eval_snippet(
+        r#"await session.Page.navigate({url:"data:text/html,<script>setTimeout(() => window.done = 42, 800)</script>"})"#,
+    )
+    .await
+    .expect("导航到 waitJs 页");
+    let waited = host
+        .eval_snippet(r#"await session.waitJs("window.done", 8000)"#)
+        .await
+        .expect("waitJs");
+    assert_eq!(waited, json!(42), "waitJs 应返回真值本身");
+
+    // snapshot：AX 树精简节点，含按钮
+    host.eval_snippet(
+        r#"await session.Page.navigate({url:"data:text/html,<title>ax</title><button>GoGo</button><input value=\"hi\">"})"#,
+    )
+    .await
+    .expect("导航到 snapshot 页");
+    let snap = host
+        .eval_snippet("return await snapshot()")
+        .await
+        .expect("snapshot");
+    assert_eq!(
+        snap.pointer("/title"),
+        Some(&json!("ax")),
+        "snapshot 带 title"
+    );
+    let nodes = snap.get("nodes").and_then(Value::as_array).expect("nodes");
+    assert!(
+        nodes
+            .iter()
+            .any(|n| n.get("role") == Some(&json!("button"))
+                && n.get("name") == Some(&json!("GoGo"))),
+        "snapshot 应含 role=button name=GoGo: {snap}"
+    );
+
+    // screenshot：存文件、字节数为正、清场
+    let shot = host
+        .eval_snippet("return await screenshot()")
+        .await
+        .expect("screenshot");
+    let path = shot
+        .get("path")
+        .and_then(Value::as_str)
+        .expect("path")
+        .to_string();
+    let bytes = shot.get("bytes").and_then(Value::as_u64).unwrap_or(0);
+    assert!(bytes > 0, "截图应有内容: {shot}");
+    let meta = tokio::fs::metadata(&path).await.expect("截图文件应在");
+    assert!(meta.len() > 0);
+    tokio::fs::remove_file(&path).await.ok();
 
     // 守卫：Browser.close 必须被拦（程序级强制，与引擎来源无关）
     let blocked = host.eval_snippet("await session.Browser.close()").await;

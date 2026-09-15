@@ -30,6 +30,7 @@
 //! ```
 
 pub mod discovery;
+pub mod methods;
 pub mod pipe;
 pub mod session;
 pub mod spawn;

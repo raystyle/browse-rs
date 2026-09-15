@@ -307,6 +307,19 @@ impl Session {
                     ))
                 }
             }
+            // 域策略（ADR 借鉴 browser-use-pi policy.ts）：deny 优先于 allow，
+            // 未配置不拦；命中 host 等值或后缀（x.com 匹配 a.x.com）
+            "Page.navigate" | "Target.createTarget" => {
+                let url = params.get("url").and_then(Value::as_str).unwrap_or("");
+                if let Some(rule) = domain_policy_violation(url) {
+                    Err(anyhow!(
+                        "browse: 域策略拦截 {method} -> {url}（规则 {rule}）；\
+                         下一步：改 BROWSE_ALLOW_DOMAINS/BROWSE_DENY_DOMAINS 或换允许的站点"
+                    ))
+                } else {
+                    Ok(())
+                }
+            }
             _ => Ok(()),
         }
     }
@@ -347,6 +360,24 @@ impl Session {
             .context("cdp timeout")?
             .context("cdp dropped")?;
         if let Some(err) = resp.get("error") {
+            // 方法名拼错（CDP -32601 not found）：附相近建议（被动增强，不预拦）
+            let not_found = err
+                .get("code")
+                .and_then(Value::as_i64)
+                .is_some_and(|c| c == -32601)
+                || err
+                    .get("message")
+                    .and_then(Value::as_str)
+                    .is_some_and(|m| m.to_ascii_lowercase().contains("not found"));
+            if not_found {
+                let near = crate::methods::suggest(method, 3);
+                if !near.is_empty() {
+                    return Err(anyhow!(
+                        "CDP {method}: {err}；下一步：相近方法 {}（全量清单 await cdpMethods(\"<Domain>\")）",
+                        near.join(" / ")
+                    ));
+                }
+            }
             return Err(anyhow!("CDP {method}: {err}"));
         }
         Ok(resp.get("result").cloned().unwrap_or(json!({})))
@@ -560,6 +591,69 @@ fn json_path<'a>(v: &'a Value, path: &str) -> Option<&'a Value> {
     path.split('.')
         .filter(|seg| !seg.is_empty())
         .try_fold(v, |cur, seg| cur.get(seg))
+}
+
+/// 域策略命中则返回违规原因（deny 命中 / 不在 allow 清单），否则 `None`。
+/// 未配置任何规则时恒 `None`。deny 优先于 allow。行为契约见 src 内单元测试。
+fn domain_policy_violation(url: &str) -> Option<&'static str> {
+    let (allow, deny) = domain_rules();
+    if allow.is_empty() && deny.is_empty() {
+        return None;
+    }
+    let host = url_host(url);
+    if host.is_empty() {
+        return None;
+    }
+    for rule in &deny {
+        if host_matches(&host, rule) {
+            return Some("deny 命中");
+        }
+    }
+    if !allow.is_empty() && !allow.iter().any(|r| host_matches(&host, r)) {
+        return Some("不在 allow 清单");
+    }
+    None
+}
+
+/// 解析 `BROWSE_ALLOW_DOMAINS` / `BROWSE_DENY_DOMAINS`（逗号分隔，
+/// `*.` 前缀与裸域名都按后缀匹配）。`'static` 由 leak 一次性换来（进程级配置）。
+fn domain_rules() -> (Vec<&'static str>, Vec<&'static str>) {
+    use std::sync::OnceLock;
+    static RULES: OnceLock<(Vec<&'static str>, Vec<&'static str>)> = OnceLock::new();
+    RULES
+        .get_or_init(|| {
+            let parse = |key: &str| -> Vec<&'static str> {
+                std::env::var(key)
+                    .ok()
+                    .map(|v| {
+                        v.split(',')
+                            .map(|s| s.trim().trim_start_matches("*."))
+                            .filter(|s| !s.is_empty())
+                            .map(|s| Box::leak(s.to_string().into_boxed_str()) as &'static str)
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            };
+            (parse("BROWSE_ALLOW_DOMAINS"), parse("BROWSE_DENY_DOMAINS"))
+        })
+        .clone()
+}
+
+/// 裸 URL 的 host 提取（`http(s)://` 后到首个 `/?:#`），不引 url crate。
+fn url_host(url: &str) -> String {
+    let rest = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))
+        .unwrap_or(url);
+    rest.split(['/', ':', '?', '#'])
+        .next()
+        .unwrap_or("")
+        .to_ascii_lowercase()
+}
+
+/// host 等值或后缀匹配（`x.com` 匹配 `a.x.com`，不匹配 `ax.com`）。
+fn host_matches(host: &str, rule: &str) -> bool {
+    host == rule || host.strip_suffix(rule).is_some_and(|h| h.ends_with('.'))
 }
 
 /// 方法是否属于 browser 端点域（不附 `sessionId`）。
@@ -784,5 +878,23 @@ mod tests {
         assert_eq!(json_path(&v, "params"), v.get("params"));
         assert_eq!(json_path(&v, "params.nope.status"), None);
         assert_eq!(json_path(&v, ""), Some(&v));
+    }
+
+    /// URL host 提取：协议、端口、路径、大写。
+    #[test]
+    fn url_host_extraction() {
+        assert_eq!(url_host("https://Example.COM/x?y"), "example.com");
+        assert_eq!(url_host("http://a.b:8080/"), "a.b");
+        assert_eq!(url_host("about:blank"), "about");
+        assert_eq!(url_host("data:text/html,x"), "data");
+    }
+
+    /// 后缀匹配语义：子域命中、同级不误伤。
+    #[test]
+    fn host_suffix_matching() {
+        assert!(host_matches("x.com", "x.com"));
+        assert!(host_matches("a.x.com", "x.com"));
+        assert!(!host_matches("ax.com", "x.com"));
+        assert!(!host_matches("x.com.evil.io", "x.com"));
     }
 }

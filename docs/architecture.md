@@ -17,9 +17,10 @@ crates/browse-core  语义与 daemon（不碰 argv）
   parser.rs         方言语法分析器（纯函数；方言外语法解析期报错并给提示）
   js_host.rs        方言求值器：session.<Domain>.<method> 直转 CDP；
                     vars 跨片段持久；全局 listPageTargets/resolveWsUrl/
-                    detectBrowsers/print；session.close/setActiveSession/
-                    事件家族 peekEvents/peekEventsSince(seq 游标增量)/
-                    findEvents(点分路径等值过滤)
+                    detectBrowsers/cdpMethods/snapshot(AX 树)/
+                    screenshot(PNG 落盘)/print；session.close/
+                    setActiveSession/waitJs(页内谓词轮询)/事件家族
+                    peekEvents/peekEventsSince(seq 游标)/findEvents
   engine.rs         引擎状态机：附着优先缺则自起；只杀自己 spawn 的；
                     auto attach 首个 page target
   server.rs         daemon HTTP API：/eval（单飞槽 + 懒引擎 + 超时）、

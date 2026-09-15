@@ -10,6 +10,7 @@
 
 use crate::parser::{Expr, Stmt, parse_script};
 use anyhow::{Result, anyhow, bail};
+use cdp::methods::METHODS_RAW;
 use cdp::{ConnectOptions, PageTarget, Session};
 use serde_json::{Map, Value, json};
 use std::collections::HashMap;
@@ -205,12 +206,128 @@ impl JsHost {
                         .collect(),
                 ))
             }
+            // 运行时方法探针（对齐 bh 的 Object.keys(session.Network)）
+            "cdpMethods" => {
+                let dom = argv.first().and_then(Value::as_str);
+                let list = match dom {
+                    Some(d) => cdp::methods::methods_of_domain(d),
+                    None => METHODS_RAW.lines().collect(),
+                };
+                Ok(Value::Array(list.into_iter().map(|m| json!(m)).collect()))
+            }
+            // 页内截图存文件，回 {path, bytes}；full 走 captureBeyondViewport
+            "screenshot" => {
+                let path = argv.first().and_then(Value::as_str).map(str::to_string);
+                let full = argv.get(1).and_then(Value::as_bool).unwrap_or(false);
+                let mut params = json!({ "format": "png" });
+                if full {
+                    params["captureBeyondViewport"] = json!(true);
+                }
+                let r = self.session.call("Page.captureScreenshot", params).await?;
+                let data = r
+                    .get("data")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| anyhow!("captureScreenshot 未回 data"))?;
+                let bytes = base64_decode(data)?;
+                let path = match path {
+                    Some(p) => std::path::PathBuf::from(p),
+                    None => {
+                        let dir = std::env::var_os("USERPROFILE")
+                            .or_else(|| std::env::var_os("HOME"))
+                            .map(|h| {
+                                let mut p = std::path::PathBuf::from(h);
+                                p.push(".browse-rs");
+                                p.push("screenshots");
+                                p
+                            })
+                            .unwrap_or_else(|| std::path::PathBuf::from("."));
+                        tokio::fs::create_dir_all(&dir).await.ok();
+                        let ts = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.as_millis())
+                            .unwrap_or(0);
+                        dir.join(format!("shot-{ts}.png"))
+                    }
+                };
+                let display = path.display().to_string();
+                tokio::fs::write(&path, &bytes).await?;
+                Ok(json!({ "path": display, "bytes": bytes.len() }))
+            }
+            // AX 树快照（对齐 browser-use-pi 的 snapshot 原语）：
+            // getFullAXTree -> 精简节点表；url/title 一并带回
+            "snapshot" => {
+                let r = self
+                    .session
+                    .call("Accessibility.getFullAXTree", json!({}))
+                    .await?;
+                let info = self
+                    .session
+                    .call(
+                        "Runtime.evaluate",
+                        json!({
+                            "expression": "JSON.stringify([location.href, document.title])",
+                            "returnByValue": true
+                        }),
+                    )
+                    .await?;
+                let (url, title) = info
+                    .pointer("/result/value")
+                    .and_then(Value::as_str)
+                    .and_then(|s| serde_json::from_str::<Vec<String>>(s).ok())
+                    .map(|v| {
+                        (
+                            v.first().cloned().unwrap_or_default(),
+                            v.get(1).cloned().unwrap_or_default(),
+                        )
+                    })
+                    .unwrap_or_default();
+                let nodes: Vec<Value> = r
+                    .get("nodes")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter_map(|n| {
+                        let role = n
+                            .pointer("/role/value")
+                            .and_then(Value::as_str)
+                            .unwrap_or("");
+                        // 丢纯布局节点：无名的 generic/文本框/展示层
+                        if matches!(role, "generic" | "InlineTextBox" | "presentation" | "none") {
+                            return None;
+                        }
+                        let name = n
+                            .pointer("/name/value")
+                            .and_then(Value::as_str)
+                            .unwrap_or("");
+                        if name.is_empty()
+                            && !n.get("value").is_some_and(|v| !v.is_null())
+                            && n.get("backendDOMNodeId").is_none()
+                        {
+                            return None;
+                        }
+                        Some(json!({
+                            "id": n.get("nodeId"),
+                            "role": role,
+                            "name": name,
+                            "value": n.get("value").and_then(|v| v.get("value")),
+                            "checked": n.get("checked"),
+                            "pressed": n.get("pressed"),
+                            "selected": n.get("selected"),
+                            "expanded": n.get("expanded"),
+                            "disabled": n.get("disabled"),
+                            "backendNodeId": n.get("backendDOMNodeId"),
+                        }))
+                    })
+                    .collect();
+                Ok(json!({ "url": url, "title": title, "nodes": nodes }))
+            }
             "print" => {
                 eprintln!("{}", preview(&argv.first().cloned().unwrap_or(Value::Null)));
                 Ok(Value::Null)
             }
             other => bail!(
-                "未知函数 {other}；下一步：可用全局 listPageTargets()/resolveWsUrl()/detectBrowsers()/print(x)；CDP 走 session.<Domain>.<method>(params)"
+                "未知函数 {other}；下一步：可用全局 listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/snapshot()/screenshot(path?, full?)/print(x)；CDP 走 session.<Domain>.<method>(params)"
             ),
         }
     }
@@ -260,6 +377,58 @@ impl JsHost {
                 self.session.call(method, params).await
             }
             "isConnected" => Ok(json!(self.session.is_connected())),
+            // 页内谓词等待（对齐 pi 的 page.waitFor / 官方 waitFor 的谓词面在
+            // 无函数方言下的代偿）：轮询 Runtime.evaluate 直到表达式真值
+            "waitJs" | "wait_js" => {
+                let expr = argv
+                    .first()
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| anyhow!(
+                        "waitJs 缺 expression 字符串；下一步：await session.waitJs(\"document.querySelector('#x') !== null\", 5000)（页内表达式真值即通过，毫秒）"
+                    ))?;
+                let timeout_ms = argv.get(1).and_then(Value::as_u64).unwrap_or(10_000);
+                let deadline = tokio::time::Instant::now()
+                    + std::time::Duration::from_millis(timeout_ms.min(120_000));
+                let mut last_err = String::new();
+                loop {
+                    let r = self
+                        .session
+                        .call(
+                            "Runtime.evaluate",
+                            json!({ "expression": expr, "returnByValue": true }),
+                        )
+                        .await;
+                    match r {
+                        Ok(resp) => {
+                            let truthy = resp.pointer("/result/value").is_some_and(|v| {
+                                !v.is_null()
+                                    && *v != json!(false)
+                                    && *v != json!(0)
+                                    && *v != json!("")
+                            });
+                            if truthy {
+                                return Ok(resp
+                                    .pointer("/result/value")
+                                    .cloned()
+                                    .unwrap_or(Value::Null));
+                            }
+                        }
+                        Err(e) => last_err = format!("{e:#}"),
+                    }
+                    if tokio::time::Instant::now() >= deadline {
+                        return Err(anyhow!(
+                            "waitJs 超时（{}ms）：{expr}{}",
+                            timeout_ms,
+                            if last_err.is_empty() {
+                                String::new()
+                            } else {
+                                format!("；最后一次求值错误：{last_err}")
+                            }
+                        ));
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                }
+            }
             "getActiveSession" => Ok(json!(self.session.get_active_session().await)),
             "close" => {
                 self.session.close().await;
@@ -380,4 +549,33 @@ pub fn render_result(v: &Value) -> String {
         Value::Object(o) if o.is_empty() => String::new(),
         other => other.to_string(),
     }
+}
+
+/// 极简 base64 解码（标准字母表，容忍空白；不引 crate）。
+fn base64_decode(s: &str) -> Result<Vec<u8>> {
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut val = [0u8; 256];
+    for (i, b) in TABLE.iter().enumerate() {
+        val[*b as usize] = i as u8;
+    }
+    let cleaned: Vec<u8> = s
+        .bytes()
+        .filter(|b| !b.is_ascii_whitespace() && *b != b'=')
+        .collect();
+    let mut out = Vec::with_capacity(cleaned.len() * 3 / 4);
+    for chunk in cleaned.chunks(4) {
+        let b = |i: usize| -> Option<u8> { chunk.get(i).map(|c| val[*c as usize]) };
+        let n = ((b(0).ok_or_else(|| anyhow!("base64 非法输入"))? as u32) << 18)
+            | ((b(1).ok_or_else(|| anyhow!("base64 非法输入"))? as u32) << 12)
+            | (b(2).unwrap_or(0) as u32) << 6
+            | b(3).unwrap_or(0) as u32;
+        out.push((n >> 16) as u8);
+        if chunk.len() > 2 {
+            out.push((n >> 8) as u8);
+        }
+        if chunk.len() > 3 {
+            out.push(n as u8);
+        }
+    }
+    Ok(out)
 }
