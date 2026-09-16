@@ -30,3 +30,5 @@
 - 排查退役三篇（env-environment / flow-events / tool-selection）引用：全仓零命中，无需清理 [实证: rg 全仓扫描空]。
 - 用户确认四端全平台测试验收成局（lan-win 总台、lan-ubuntu、lan-linux、lan-mac）；本批改动全为非代码面，无平台方差，不另加跑。
 - 总台周知（ohmycloud，用户宣言 2026-09-16）：四平台协议升为全仓周知面，验收按需向 ohmycloud 总台要端点测试支撑，Rust 三岗 CI（linux 加 win-gnu 交叉加 mac）支撑已落地；本仓协作面（AGENTS 环境节）同步补入，远端建立后挂三岗 CI（衔接 flow-release 的 CI 待远端裁定）。
+- 统一封版协调（总台令）：治理终态句已回报（合同在位、门禁四端绿、CI 待远端、dev-evo 形态齐），版本判定「封 0.1.0 待封」（零 tag 无 CHANGELOG，现存全部功能为 0.1.0 主体），候总台统一封版令。
+- 第六十三批跟进：AGENTS 环境节补连接姿势口径引用一句（WSL 到宿主恒走回环与 interop、不走宿主 mesh IP；lan 三端 mesh 随时随地；口径在 env-platform 第十节）；周知多仓飞轮协作协议成篇（flow-flywheel.md），本仓派单回执实践即其实证源。
