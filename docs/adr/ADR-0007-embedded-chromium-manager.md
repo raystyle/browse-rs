@@ -18,7 +18,7 @@ browse 的引擎是 clean-chrome（Chromium 品牌），当前发现序依赖仓
 browse 内嵌 Chromium 版本管理器，不依赖外部安装：
 
 1. **自有应用数据目录内版本化管理**：各版本 Chromium 落 `<state>/chromium/<version>/`（安装、部署、升级一体）；安装部署升级机制复制 clean-chrome 既有各版本形态，不自创。
-2. **资源分发归 omc**：clean-chrome 发布包走 omc 分发面，承载为 ohmygh.COM 域下专门子域名（omc 承建，用户令 2026-09-16），路由 R2 镜像 + 版本段 + `.sha256` 边车锚（同 ark/hst 分发链）；browse 只做下载校验与落位，**不自建分发腿**（含 GitHub 直连腿），子域名与路由候 omc 定标回执后接入。
+2. **资源分发归 omc**：clean-chrome 发布包走 omc 分发面，承载 **chrome.ohmygh.com**（ohmygh.COM 专门子域，omc 承建，定标回执 2026-09-16），路由 `<version>/<asset>` + `.sha256` 边车即锚（无 manifest，与 env 域同构）；browse 只做下载校验与落位，**不自建分发腿**（含 GitHub 直连腿）；DNS 热验回报后接实测。
 3. **ark 明确排除**：clean-chrome 安装不属 ark catalog 面，安装执行面在 browse 自身。
 4. 引擎策略不变：附着优先（ADR-0003）、用户数据与版本目录分离（engine-profile 跨版本持久，升级零迁移）。
 

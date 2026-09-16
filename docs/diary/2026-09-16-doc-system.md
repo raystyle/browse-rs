@@ -44,4 +44,5 @@
 - Windows 真机冒烟 [实证: 真部署目录导入 500 文件/683MB，list/use/doctor 输出健康]；四面门禁绿（WSL、Windows 宿主、lan-ubuntu、lan-mac 各 12 组 ok）；surface 与 aidoc（25 artifacts，+chrome_mgr 模块页）重生成。
 - clean-chrome 工位转话（c002325）三句裁定与本仓 ADR-0007/REQ-003 同向，已确认入 REQ-003 上下文；R2 下载腿保持待 omc 端点定标，REQ-003 维持 draft（判据未全过不回填 trace）。
 - 分发承载定令（用户令 2026-09-16，clean-chrome 工位转达）：clean-chrome 发布包资源分发在 ohmygh.COM 域下专门子域名承载，omc 承建；本仓勿自建分发腿（GitHub 直连腿候选资格同废），子域名与路由候 omc 总台定标回执后接入。已折进 REQ-003 角色裁定段与 ADR-0007 决策二（Alternatives 同步钉死）。
+- 子域名定标回执（omc 总台，clean-chrome 工位转话）：chrome.ohmygh.com（与 env/pkgs/registry 平级），R2 桶 chrome 已建，版本段路由 <version>/<asset> 加 .sha256 边车（与 env 域同构，无 manifest 边车即锚）；DNS CNAME 至 public.r2.dev 传播中，总台热验回报后本仓再接 R2 下载腿实测。端点已入册 REQ-003 与 ADR-0007 决策二；定标余量收敛为版本发现来源与资产命名（随总台首版资产确认）。
 - 架构定调周知（用户裁 2026-09-16）：立 ADR-0007（accepted）：browse 内嵌 Chromium 版本管理器不依赖外部安装，各版本落 `<state>/chromium/<version>/` 版本化管理，机制复制 clean-chrome 既有形态；omc 管发布包资源分发（R2 镜像 + 版本段 + 边车锚，同 ark/hst 链）；ark 明确排除。REQ-003 同步对齐（manifest 版本登记、原子落位、pin 切换入 Criteria），定标项收敛为四个（镜像 tool 段与版本清单端点、缺版本自动装或 CTA、跨平台资产、GitHub 回退腿）。
