@@ -137,3 +137,8 @@
 - 冒烟 [实证: BROWSE_NO_ATTACH=1 up --headless --profile /tmp/custom-profile-a 得 spawned profile /tmp/custom-profile-a，目录落位，status 报同值；默认 profile 语义不变]。
 - 门禁：clippy 绿（run_eval 旗标族透传 allow too_many_arguments 在册注因）、12 组 test、10 doc test、surface 与 aidoc 重生、check clean、PE-01 至 PE-12 exit 0。封 0.3.0（minor 判据：能力新增）。
 - 踩坑注：down 后立即 up 偶发旧 daemon 未及退净致附着旧 9222，重跑即过；非本批引入，未立票。
+
+## 封版批漏重生修正（2026-09-17，CI docs 岗抓出）
+
+- 教训实证：aidoc 索引族（llms.txt、各 index.md、api/*.json、llms-full.txt）嵌 crate 版本号，封版批 bump 版本后必须重生（flow-release 第三节原文如此）；0.2.1 与 0.3.0 两批均漏，CI docs 岗两红。修：0.3.0 树上重生成（8 文件版本号行）重推，v0.3.0 tag 重标至自洽提交；v0.2.1 tag run 留红在案（其树内投影仍是 0.2.0 形，main 已愈，后续 tag 引以为鉴）。[实证: 重生后 check clean，diff 仅版本号行]
+- 流程修正入心：封版件清单第三步「含版本号的生成文件重生」此后封版批逐字过。

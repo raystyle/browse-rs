@@ -1,5 +1,5 @@
 <!-- browse_cli/index.md -->
-# browse-cli 0.2.1
+# browse-cli 0.3.0
 
 browse CLI 的可测半边：daemon 客户端（HTTP 调用 + 自动拉起）。
 
@@ -51,7 +51,7 @@ daemon 客户端：本地 HTTP 调用 + 首次使用自动拉起 detached daemon
 
 
 <!-- browse_core/index.md -->
-# browse-core 0.2.1
+# browse-core 0.3.0
 
 browse CLI 的核心库：方言宿主、引擎策略、daemon HTTP API。
 
@@ -351,7 +351,7 @@ session 方法**只在这一处登记为数据**，JSON Schema 与 LLM 清单
 
 
 <!-- cdp/index.md -->
-# cdp 0.2.1
+# cdp 0.3.0
 
 Chrome DevTools Protocol（CDP）连接层：一条常驻 browser-level WebSocket 会话。
 
