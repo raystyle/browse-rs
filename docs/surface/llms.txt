@@ -76,4 +76,4 @@
 | `session.peekEventsSince(method, sinceSeq, n?)` | seq 游标增量窥视（首拍 sinceSeq 用 0，之后用上一拍最后一条的 seq）。 |
 | `session.findEvents(method, path, value, n?)` | 等值过滤窥视（点分路径，如 params.requestId）。 |
 
-完整版见 llms-full.txt；机器可读契约见 browse.schema.json；Rust API 文档见 docs/aidoc/llms.txt。
+完整版见 llms-full.txt；机器可读契约见 browse.schema.json；Rust API 文档见 docs/aidoc/llms.txt；二进制直出 browse --llms（--full / --json 同源）。

@@ -8,8 +8,8 @@ Windows 直接用 `CreatePipe`，POSIX 用 `pipe(2)`。
 
 ## Functions
 
-- `anon_pair` — 建一对匿名管道（默认不可继承）：`(读端, 写端)`。
-- `set_inheritable` — 把句柄标为（不）可被子进程继承（`HANDLE_FLAG_INHERIT`）。
+- `anon_pair` — 建一对匿名管道：`(读端, 写端)`。
+- `set_inheritable` — POSIX 恒成功（Windows 对应物才可能失败）。
 
 ## Types
 

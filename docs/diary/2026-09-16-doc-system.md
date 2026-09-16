@@ -74,3 +74,10 @@
 - 门禁：clippy -D warnings 绿、cargo test --workspace 12 组 ok、doc test 10 ok、surface_contract 3 ok（先红后绿：目录改动后投影重生成即过，锁漂移机制实证）。
 - aidoc 不重生成：本批零 pub 项与 /// 改动（COMMANDS 是常量数据，main.rs 全私有项），投影构造上无漂移；WSL 侧 cargo aidoc --check 平台门控 NOT CHECKED（msvc 钉死属工具明示行为非失败）。
 - 版本判定：REQ-002 属 0.1.0 主体增量（封版前落地），semver 裁量随封版 REQ 统一，Cargo.toml 不动。
+
+## skill 物种退役与 aidoc 视图定标（用户令 2026-09-16）
+
+- 用户裁定：有 `browse --llms` 即不需 skill 形态命令，--llms 就是给 agent 的紧凑说明书。落地：`render_skill` 删除（pub 项），write_surface_files 不再产 SKILL.md，docs/surface/skills/ 删除，契约测试改锁「skills/ 不得残留」，AGENTS 与维护注释同步；llms.txt 尾注补「二进制直出 browse --llms（--full / --json 同源）」。
+- aidoc 投影随 pub 项删除必重生成，途中澄清口径：**本仓 Windows 编译面是 win-gnu 非 msvc**（用户裁定，CI ci.yml win-gnu check 岗即此形态），旧「宿主机 cargo.exe 同树重生成」句作废（旧位 /mnt/c 树已裁、UNC 共享对 interop 不可达）。落地：wsl 端 `cargo aidoc --retarget` 迁主机视图（仓内零 target_env cfg，pipe.md 页面 Windows/POSIX 变体随视图对换，语义等价），25 artifacts 重写，check --strict clean；nightly-2026-07-07 工具链补 target std 后一次过。[实证: check clean exit 0，diff 6 文件 +25/-28]
+- CI docs 岗随迁：windows-latest（msvc 宿主）改 ubuntu-latest，checkout 顺升 v5；Windows 面门禁由 ci.yml win-gnu check 岗独担。代价入账：Windows 宿主上跑 cargo test 的运行时覆盖从 CI 退役（按「不编译 msvc」裁定让位，后续如需 mingw 实跑岗另立）。
+- 门禁：clippy 绿、12 组 test、10 doc test、surface_contract 3 ok、aidoc check clean、PE-01 至 PE-12 exit 0。

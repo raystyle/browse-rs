@@ -1,10 +1,12 @@
 name: docs
 on: [push, pull_request]
 jobs:
+  # wsl 开发端视图跑文档面（用户裁定 2026-09-16：Windows 编译面是 win-gnu 非 msvc，
+  # aidoc 投影随开发端主机视图 --retarget 定标，宿主机 msvc 岗退役；win-gnu 面在 ci.yml）
   docs:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -20,7 +22,7 @@ jobs:
   posix:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy

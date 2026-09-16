@@ -95,12 +95,12 @@
     {
       "path": "cdp::pipe::anon_pair",
       "kind": "function",
-      "docs": "建一对匿名管道（默认不可继承）：`(读端, 写端)`。\n\n# Errors\n\n`CreatePipe` 失败（错误码进上下文）。"
+      "docs": "建一对匿名管道：`(读端, 写端)`。\n\nPOSIX fd 跨 fork/exec 继承（非 CLOEXEC），布线到固定 fd 由 spawn 侧的\npre_exec 做。\n\n# Errors\n\n`pipe(2)` 失败。"
     },
     {
       "path": "cdp::pipe::set_inheritable",
       "kind": "function",
-      "docs": "把句柄标为（不）可被子进程继承（`HANDLE_FLAG_INHERIT`）。\n\n# Errors\n\n`SetHandleInformation` 失败。"
+      "docs": "POSIX 恒成功（Windows 对应物才可能失败）。\n\nfd 跨 fork/exec 默认继承（非 CLOEXEC），布到固定 fd 3/4 由 spawn 的\npre_exec 负责。\n\n# Errors\n\n恒不报错（Windows 对应物才可能失败）。"
     },
     {
       "path": "cdp::session",

@@ -138,7 +138,7 @@ async fn main() -> Result<()> {
         return serve_foreground(bind, ws, port, chrome.map(Into::into), headless, pipe).await;
     }
 
-    // 维护命令：从 surface 目录重生成 schema/llms/skill（提交 docs/surface/）
+    // 维护命令：从 surface 目录重生成 schema/llms（提交 docs/surface/）
     if let Some(dir) = gen_surface {
         let p = std::path::PathBuf::from(&dir);
         browse_core::surface::write_surface_files(&p)?;

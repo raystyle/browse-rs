@@ -307,7 +307,7 @@ impl JsHost {
                 };
                 Ok(Value::Array(list.into_iter().map(|m| json!(m)).collect()))
             }
-            // 本 CLI 的命令面目录探针（与 schema/llms/skill 同源，
+            // 本 CLI 的命令面目录探针（与 schema/llms 同源，
             // incur --llms 的运行时等价物）
             "hostFunctions" => Ok(crate::surface::catalog_json()),
             // ---- Chromium 版本管理器（ADR-0007，本地导入面；R2 下载腿待 omc 端点）----

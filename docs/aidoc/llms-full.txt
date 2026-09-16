@@ -313,13 +313,15 @@ POST /quit 三端点保留），新增 `/engine/up` 与求值前的懒引擎策�
 # browse-core::surface
 
 命令面目录（incur-rs 原则的方言版适配）：CLI 子命令、方言全局函数、
-session 方法**只在这一处登记为数据**，JSON Schema、LLM 清单
-（`llms.txt` / `llms-full.txt`）与技能（`SKILL.md`）全部由
-[`render_llms`] 系列派生函数从本目录生成（`browse --gen-surface docs/surface`
-重生成），`tests/surface_contract.rs` 锁漂移。
+session 方法**只在这一处登记为数据**，JSON Schema 与 LLM 清单
+（`llms.txt` / `llms-full.txt`）全部由 [`render_llms`] 系列派生函数
+从本目录生成（`browse --gen-surface docs/surface` 重生成），agent 侧
+发现通道是 `browse --llms`（与本投影同源直出），`tests/surface_contract.rs`
+锁漂移。
 
 与 incur（derive 宏命令图）的差异：我们的接口面是方言片段而非结构化
-参数，故目录手写为 `const`，派生物种取同样的三件（schema/llms/skill）。
+参数，故目录手写为 `const`；incur 的技能（skill）物种不取，agent 说明书
+由 `browse --llms` 直出承担。
 
 ## Functions
 
@@ -327,8 +329,7 @@ session 方法**只在这一处登记为数据**，JSON Schema、LLM 清单
 - `render_llms` — 渲染紧凑 LLM 清单 `llms.txt`（索引层，一行一命令）。
 - `render_llms_full` — 渲染完整 LLM 清单 `llms-full.txt`：索引加逐命令参数与示例。
 - `render_schema` — 渲染 JSON Schema 包：每命令一个 definition，输入按目录、输出是运行时 JSON。
-- `render_skill` — 渲染技能文件 `SKILL.md`（incur 同款 frontmatter 契约）。
-- `write_surface_files` — 把三件派生物写进目录（维护命令 `browse --gen-surface <dir>` 用）：
+- `write_surface_files` — 把派生文件写进目录（维护命令 `browse --gen-surface <dir>` 用）：
 
 ## Types
 
@@ -446,8 +447,8 @@ Windows 直接用 `CreatePipe`，POSIX 用 `pipe(2)`。
 
 ## Functions
 
-- `anon_pair` — 建一对匿名管道（默认不可继承）：`(读端, 写端)`。
-- `set_inheritable` — 把句柄标为（不）可被子进程继承（`HANDLE_FLAG_INHERIT`）。
+- `anon_pair` — 建一对匿名管道：`(读端, 写端)`。
+- `set_inheritable` — POSIX 恒成功（Windows 对应物才可能失败）。
 
 ## Types
 

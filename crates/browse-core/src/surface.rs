@@ -1,11 +1,13 @@
 //! 命令面目录（incur-rs 原则的方言版适配）：CLI 子命令、方言全局函数、
-//! session 方法**只在这一处登记为数据**，JSON Schema、LLM 清单
-//! （`llms.txt` / `llms-full.txt`）与技能（`SKILL.md`）全部由
-//! [`render_llms`] 系列派生函数从本目录生成（`browse --gen-surface docs/surface`
-//! 重生成），`tests/surface_contract.rs` 锁漂移。
+//! session 方法**只在这一处登记为数据**，JSON Schema 与 LLM 清单
+//! （`llms.txt` / `llms-full.txt`）全部由 [`render_llms`] 系列派生函数
+//! 从本目录生成（`browse --gen-surface docs/surface` 重生成），agent 侧
+//! 发现通道是 `browse --llms`（与本投影同源直出），`tests/surface_contract.rs`
+//! 锁漂移。
 //!
 //! 与 incur（derive 宏命令图）的差异：我们的接口面是方言片段而非结构化
-//! 参数，故目录手写为 `const`，派生物种取同样的三件（schema/llms/skill）。
+//! 参数，故目录手写为 `const`；incur 的技能（skill）物种不取，agent 说明书
+//! 由 `browse --llms` 直出承担。
 
 use serde_json::{Value, json};
 
@@ -706,7 +708,8 @@ pub fn render_llms() -> String {
     }
     out.push_str(
         "完整版见 llms-full.txt；机器可读契约见 browse.schema.json；\
-         Rust API 文档见 docs/aidoc/llms.txt。\n",
+         Rust API 文档见 docs/aidoc/llms.txt；二进制直出 browse --llms\
+         （--full / --json 同源）。\n",
     );
     out
 }
@@ -735,52 +738,18 @@ pub fn render_llms_full() -> String {
     out
 }
 
-/// 渲染技能文件 `SKILL.md`（incur 同款 frontmatter 契约）。
-pub fn render_skill() -> String {
-    let mut out = String::from(
-        "---\nname: browse\ndescription: \"Drive clean-chrome via the browse CLI with JS-dialect snippets. Run `browse --help` for usage details.\"\nrequires_bin: browse\ncommand: browse\n---\n",
-    );
-    out.push_str(
-        "\n给 agent 的 browse CLI 驾驶术：方言片段（多语句、`;` 可选）驱动 \
-         clean-chrome；变量跨调用持久；错误带可照抄的下一步。\n",
-    );
-    for c in COMMANDS.iter().filter(|c| c.kind == CmdKind::Global) {
-        // 标题只留函数名（标题禁括号）；完整签名以行内码保留在正文首行。
-        let name = c.signature.split('(').next().unwrap_or(c.signature);
-        out.push_str(&format!(
-            "\n# {name}\n\n`{}`\n\n{}\n",
-            c.signature, c.description
-        ));
-        if !c.args.is_empty() {
-            out.push_str("\n## Inputs\n\n```json\n");
-            out.push_str(&serde_json::to_string_pretty(&input_schema(c)).unwrap_or_default());
-            out.push_str("\n```\n");
-        }
-        out.push_str(&format!("\n```js\n{}\n```\n", c.example));
-    }
-    out.push_str(
-        "\n完整面（含 session 方法与 CLI 形态）见 llms-full.txt 与 browse.schema.json。\n",
-    );
-    out
-}
-
-/// 把三件派生物写进目录（维护命令 `browse --gen-surface <dir>` 用）：
-/// `browse.schema.json` / `llms.txt` / `llms-full.txt` / `skills/browse/SKILL.md`。
+/// 把派生文件写进目录（维护命令 `browse --gen-surface <dir>` 用）：
+/// `browse.schema.json` / `llms.txt` / `llms-full.txt`。
 ///
 /// # Errors
 ///
 /// 写盘失败（目录不可写）。
 pub fn write_surface_files(dir: &std::path::Path) -> std::io::Result<()> {
-    std::fs::create_dir_all(dir.join("skills").join("browse"))?;
     std::fs::write(
         dir.join("browse.schema.json"),
         serde_json::to_vec_pretty(&render_schema()).unwrap_or_default(),
     )?;
     std::fs::write(dir.join("llms.txt"), render_llms())?;
     std::fs::write(dir.join("llms-full.txt"), render_llms_full())?;
-    std::fs::write(
-        dir.join("skills").join("browse").join("SKILL.md"),
-        render_skill(),
-    )?;
     Ok(())
 }
