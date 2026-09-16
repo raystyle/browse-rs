@@ -33,4 +33,5 @@
 - 统一封版协调（总台令）：治理终态句已回报（合同在位、门禁四端绿、CI 待远端、dev-evo 形态齐），版本判定「封 0.1.0 待封」（零 tag 无 CHANGELOG，现存全部功能为 0.1.0 主体），候总台统一封版令。
 - 第六十三批跟进：AGENTS 环境节补连接姿势口径引用一句（WSL 到宿主恒走回环与 interop、不走宿主 mesh IP；lan 三端 mesh 随时随地；口径在 env-platform 第十节）；周知多仓飞轮协作协议成篇（flow-flywheel.md），本仓派单回执实践即其实证源。
 - 第六十四批跟进三项：环境节补 pwsh 统一载体句（既有 PEP 723 Python 载体不迁移，新增验收/运维脚本一律 pwsh）；Must 节补版本载体唯一权威句（Cargo.toml workspace 版，semver 判据进封版 REQ；扫描确认载体外无第二真相，ADR 冻结件散文不算）；分发体系裁定待远端首发时接入（seed 通道自推镜像 + 三平台 CLI 资产，omc 管资源分发、ark 管落地验收，当前无分发面不预建）。版本判定维持「封 0.1.0 待封」。
-- 用户新令落账：browse 集成 clean-chrome 成独立软件包，自有用户数据目录，负责各系统部署升级维护。立 REQ-003（draft，must）：部署/升级/doctor 三面、自有 user-data 绑 `<state>/`、托管位并入发现序、分发走镜像域优先 GitHub 回退（对齐 flow-release 第八节）；定标项显式在册（镜像命名、pin 载体、跨平台资产、目录命名），实现批先立 ADR-0007；按 semver 判据落 0.2.0 批，不阻塞 0.1.0 统一封版。
+- 用户新令落账：browse 集成 clean-chrome 成独立软件包，自有应用数据目录，负责各系统部署升级维护。立 REQ-003（draft，must）：部署/升级/doctor 三面、自有 user-data 绑 `<state>/`、托管位并入发现序、分发走镜像域优先 GitHub 回退（对齐 flow-release 第八节）；定标项显式在册（镜像命名、pin 载体、跨平台资产、目录命名），实现批先立 ADR-0007；按 semver 判据落 0.2.0 批，不阻塞 0.1.0 统一封版。
+- REQ-003 定标令（用户裁定 2026-09-16）：omc 负责 clean-chrome 发布包资源分发；browse 自管安装执行，复制 clean-chrome 既有各版本安装部署升级形态（不自创）；ark 不管 clean-chrome 安装（fleet 执行角色的本仓例外）。已折进 REQ-003 正文角色裁定段，剩余定标项五个（镜像 tool 段命名与 omc 协调、pin 载体、跨平台资产、部署目录命名、发现序优先级）。
