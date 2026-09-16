@@ -142,3 +142,11 @@
 
 - 教训实证：aidoc 索引族（llms.txt、各 index.md、api/*.json、llms-full.txt）嵌 crate 版本号，封版批 bump 版本后必须重生（flow-release 第三节原文如此）；0.2.1 与 0.3.0 两批均漏，CI docs 岗两红。修：0.3.0 树上重生成（8 文件版本号行）重推，v0.3.0 tag 重标至自洽提交；v0.2.1 tag run 留红在案（其树内投影仍是 0.2.0 形，main 已愈，后续 tag 引以为鉴）。[实证: 重生后 check clean，diff 仅版本号行]
 - 流程修正入心：封版件清单第三步「含版本号的生成文件重生」此后封版批逐字过。
+
+## lan-ubuntu 有头与附着面激活（2026-09-17）
+
+- 导入安装：ubuntu 本机产物 480 文件/907MB 落 managed pin（browse 0.2.0 二进制，随下次 rsync 升）。
+- 有头 spawn 全绿：桌面是 GNOME Wayland 加 XWayland，显示环境从图形进程 environ 捞（DISPLAY=:0 加 XAUTHORITY=/run/user/1000/.mutter-Xwaylandauth.*）；带该环境 up 得 spawned headless=false，窗口上桌面，evaluate 得 ubuntu-headed-ok。
+- 附着面全链绿（教义铁律实测）：手动起 chrome（9222、独立 profile）后 browse 求值，attach-first 自动探测附着（status 见 attached ws://127.0.0.1:9222），驱动 navigate 加 evaluate 得 attach-ok；browse down 后附着浏览器仍活（只杀自起铁律成立），手动清场。
+- 踩坑两笔：一，Ubuntu 24.04 AppArmor 限 unprivileged userns，手动启动的 chrome 不带 --no-sandbox 即 FATAL（spawn 路径本就带，ADR-0003 教义再证）；首测的「误杀」假警报实为手动浏览器从未活过，判杀律前先证源活着。二，ssh 会话无桌面授权，显示环境须从图形进程 environ 捞而非假设 DISPLAY。
+- 平台分工矩阵现况：无头双端（wsl、lan-linux）全绿；有头端 lan-ubuntu 双面绿；lan-win 有头面经 x.com cookie 转移首验；lan-mac 候（mac 产物是 .app 形，待 155 窗或按需）。
