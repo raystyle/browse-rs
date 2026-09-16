@@ -10,7 +10,7 @@ trace: null
 
 ## Scenario
 
-agent 在只装了二进制（cargo install 进 PATH）的机器上用 browse，手边没有仓，需要从 CLI 本体拿到命令面（dev-evo tool-cli-agents 发现三通道的 --llms 通道：零常驻成本，按需一次）。
+agent 在只装了二进制（cargo install 进 PATH）的机器上用 browse，手边没有仓，需要从 CLI 本体拿到命令面（evo-adr:code-kit 的 tool-cli-agents 发现三通道之 --llms 通道：零常驻成本，按需一次）。
 
 ## Criteria
 

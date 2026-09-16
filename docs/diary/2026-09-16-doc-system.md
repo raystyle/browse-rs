@@ -60,3 +60,8 @@
 - 全平台测试基建正确原语定标为 5端4机：五端 wsl、lan-win、lan-mac、lan-ubuntu、lan-linux，wsl 与 lan-win 同宿主合计四台物理机；linux2 系 lan-linux 误名，不是端点名（错名源头在 ohmycloud AGENTS pwsh 五端清单，已 herdr 转达总台自清，本仓 grep 复扫零引用）。
 - AGENTS 环境节由「四平台测试矩阵」形改「5端4机」形：wsl 独立成端不再折进 lan-win 括号，「四平台」此后仅指 OS 维度（win/ubuntu/linux/mac）。[实证: 改后门禁 PE-01 至 PE-12 exit 0（PASS 10 / SKIP 2），载体用重构后新位 evo-adr:code-kit 的 check.py]
 - 途中发现：ProjectEvo 仓本日更名 project-evo 且重构为四插件市场仓（evo-adr / evo-codesec / evo-research / evo-herdr），dev-evo skill 消解；本仓 AGENTS Commands 与 docs/README.md 门禁节所引 ~/repos/ProjectEvo/.../dev-evo/scripts/check.py 旧路径悬空，候总台新口径周知后另批切径，本批不夹带。
+
+## project-evo 切径收口（总台回执 ff8255a）
+
+- 总台回执三件全过：A 活跃面正名（AGENTS:39 linux2 改 lan-linux 并注五端四机）、B REQ-049 与索引追记端位承接、C docs/README 切四插件形态；豁免裁定九文件全对号（历史档按当时事实保留），门禁双绿，sha 已自取核对。
+- 本仓收口五处切 evo-adr:code-kit 新位：AGENTS Commands 门禁路径、AGENTS 连接姿势口径引用（env-platform 第十节，节号随迁未变）、docs/README 门禁节路径、requirements 索引 REQ-001 trace 锚、REQ-002 出处；REQ-001 文内 trace 与 diary 旧路径叙述按当时事实保留（同总台豁免口径）。[实证: AGENTS 所载新命令逐字直跑 exit 0（PASS 10 / SKIP 2）]

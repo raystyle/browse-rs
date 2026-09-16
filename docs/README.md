@@ -24,5 +24,5 @@
 
 ## 门禁
 
-- 骨架合规：PEVO_CHECK_ALLOW="^docs/aidoc/" uv run ~/repos/ProjectEvo/plugins/project-evo/skills/dev-evo/scripts/check.py . 退出码 0。豁免正则在册一处：aidoc 条目分隔符 em dash 是 cargo-aidoc 渲染格式（无开关可改），路径级放行 docs/aidoc/，其漂移真门禁是 cargo aidoc --check --strict
+- 骨架合规：PEVO_CHECK_ALLOW="^docs/aidoc/" uv run ~/repos/project-evo/plugins/evo-adr/skills/code-kit/scripts/check.py . 退出码 0。豁免正则在册一处：aidoc 条目分隔符 em dash 是 cargo-aidoc 渲染格式（无开关可改），路径级放行 docs/aidoc/，其漂移真门禁是 cargo aidoc --check --strict
 - 投影漂移：cargo aidoc --check --strict 与 tests/surface_contract.rs

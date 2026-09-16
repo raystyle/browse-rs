@@ -13,7 +13,7 @@ Rust workspace（crates/cdp、browse-core、browse-cli）。公开契约以 `///
 - cargo run -p browse-cli -- --gen-surface docs/surface   # 命令面目录重生成（schema/llms/skill；tests/surface_contract.rs 锁漂移）
 - cargo install --path crates/browse-cli --force    # 本机装 browse 进 PATH
 - BROWSE_E2E=1 BROWSE_NO_ATTACH=1 cargo test -p browse-core --test e2e # 真 chrome 端到端（NO_ATTACH：本机 9222 开着用户浏览器时也要自起隔离实例；CI 跳过）
-- PEVO_CHECK_ALLOW="^docs/aidoc/" uv run ~/repos/ProjectEvo/plugins/project-evo/skills/dev-evo/scripts/check.py .   # 文档骨架合规门禁（PE-01 至 PE-12，退出码 0；豁免正则在册：aidoc 条目分隔符 em dash 是 cargo-aidoc 渲染格式，无开关，真门禁是 cargo aidoc --check --strict）
+- PEVO_CHECK_ALLOW="^docs/aidoc/" uv run ~/repos/project-evo/plugins/evo-adr/skills/code-kit/scripts/check.py .   # 文档骨架合规门禁（PE-01 至 PE-12，退出码 0；载体 project-evo 四插件市场仓 evo-adr:code-kit；豁免正则在册：aidoc 条目分隔符 em dash 是 cargo-aidoc 渲染格式，无开关，真门禁是 cargo aidoc --check --strict）
 
 ## Must
 
@@ -50,5 +50,5 @@ Rust workspace（crates/cdp、browse-core、browse-cli）。公开契约以 `///
 - daemon 日志：`%USERPROFILE%\.browse-rs\daemon.log`；引擎 chrome 诊断：同目录 `engine.log`（不继承调用方句柄）
 - 本机引擎 profile：`%USERPROFILE%\.browse-rs\engine-profile`（down 不删，复用登录态）
 - 全平台测试基建（5端4机，用户定标 2026-09-16）：五端 wsl、lan-win、lan-mac、lan-ubuntu、lan-linux，wsl 与 lan-win 同宿主合计四台物理机；lan-ubuntu（Linux NUC，全运行时）、lan-linux（Linux server，备用端点）、lan-mac（macOS arm64），真实环境测试验收；验收按需向 ohmycloud 总台要端点测试支撑。本仓实操：wsl 直跑门禁 + lan-win 宿主机 `cargo.exe` 同树（aidoc 投影必须在宿主机侧重生成，manifest 钉 msvc）；`ssh lan-ubuntu` / `ssh lan-mac` 的 `~/browse-rs` 是 rsync 副本非 git 仓，先 rsync 源树再跑门禁。远端 origin = github.com/raystyle/browse-rs，Rust 三岗 CI 已挂（linux + win-gnu 交叉 + mac，.github/workflows/ci.yml）
-- 连接姿势（口径全文见 dev-evo skill env-platform 第十节）：WSL 到宿主恒走 127.0.0.1 回环 ssh 与 interop 直调（`cargo.exe`、`/mnt/c` 互访），不走宿主 mesh IP（mirrored 网络下自连被 RST 属结构性，非配置可修）；lan 三端（lan-ubuntu / lan-linux / lan-mac）mesh 地址互访随时可用；连接问题先查姿势再查配置
+- 连接姿势（口径全文见 evo-adr:code-kit 的 env-platform 第十节）：WSL 到宿主恒走 127.0.0.1 回环 ssh 与 interop 直调（`cargo.exe`、`/mnt/c` 互访），不走宿主 mesh IP（mirrored 网络下自连被 RST 属结构性，非配置可修）；lan 三端（lan-ubuntu / lan-linux / lan-mac）mesh 地址互访随时可用；连接问题先查姿势再查配置
 - 运维与验收脚本载体（口径见 env-platform 第十一节）：统一走 pwsh 一份（五端 pwsh 7.6.6 在位）；本仓既有跨平台脚本载体是 PEP 723 Python 经 uv（`tools/`），不强制迁移，验收与运维面新增脚本一律 pwsh
