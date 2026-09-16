@@ -81,3 +81,10 @@
 - aidoc 投影随 pub 项删除必重生成，途中澄清口径：**本仓 Windows 编译面是 win-gnu 非 msvc**（用户裁定，CI ci.yml win-gnu check 岗即此形态），旧「宿主机 cargo.exe 同树重生成」句作废（旧位 /mnt/c 树已裁、UNC 共享对 interop 不可达）。落地：wsl 端 `cargo aidoc --retarget` 迁主机视图（仓内零 target_env cfg，pipe.md 页面 Windows/POSIX 变体随视图对换，语义等价），25 artifacts 重写，check --strict clean；nightly-2026-07-07 工具链补 target std 后一次过。[实证: check clean exit 0，diff 6 文件 +25/-28]
 - CI docs 岗随迁：windows-latest（msvc 宿主）改 ubuntu-latest，checkout 顺升 v5；Windows 面门禁由 ci.yml win-gnu check 岗独担。代价入账：Windows 宿主上跑 cargo test 的运行时覆盖从 CI 退役（按「不编译 msvc」裁定让位，后续如需 mingw 实跑岗另立）。
 - 门禁：clippy 绿、12 组 test、10 doc test、surface_contract 3 ok、aidoc check clean、PE-01 至 PE-12 exit 0。
+
+## 封版 v0.1.0（用户令 2026-09-16）
+
+- 三路门禁（flow-release 第二节）：wsl 全件（fmt --check、clippy -D warnings、12 组 test、10 doc test、release 构建 1m09s）；实机 lan-ubuntu 与 lan-mac（rsync 同树，STAGE-CLIPPY-OK 加 STAGE-TEST-OK，各 12 组 test ok，exit 0；ubuntu 首跑 PATH 127 补 source cargo/env 即过）；CI main 双岗绿（5fe8804：ci 1m13s、docs 2m17s）。lan-win=win-gnu 交叉岗、lan-linux=备用端点，在册口径不适用实跑。[实证: 各路阶段标记与退出码直读]
+- 封版件一次提交：CHANGELOG 立卷（版本级里程碑制）、REQ-004 立 semver 判据（首封 0.1.0：零前置版不取 1.0.0；R2 腿后续取 0.2.0）；生成物零版本号嵌入（surface 与 aidoc manifest 扫描空），无重生件。
+- tag v0.1.0 推远端触发 CI；分发腿不预建（用户裁定在册，CLI 资产归 omc/seed 通道），仓内无 release 流水线属预期非缺口。
+- 收尾义务：CHANGELOG 定版、本日记钩子、总台版本对齐表 browse-rs 行回执（tag 落地后 herdr 转发）。
