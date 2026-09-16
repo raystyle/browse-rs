@@ -112,3 +112,11 @@
 - lan-linux 全链五阶绿：chrome --version 直通（Chromium 152.0.7977.84，ldd 零缺库，服务器库面全）；browse 0.2.0 二进制直发（wsl glibc 2.39 产物跑 lan-linux 2.43，前向兼容实证）；chrome install 导入 480 文件/907MB 自动 pin；无头链 up --headless（spawn headless=true channel=port）加 navigate data: URL 加 evaluate 得值 lanlinux-headless-ok 加 doctor healthy/pinnedOk 双真加 down 干净退。[实证: 阶段标记 STAGE-UP/EVAL/DOCTOR/DOWN-OK 直读]
 - wsl 无头面同套激活：同集合导入后首跑缺 libnss3/libnspr4/libasound2t64 五库，apt 装后 ldd 零缺；无头链全绿（evaluate 得值 wsl-headless-ok，doctor 双真）。wsl 依赖面入账：最小 Ubuntu 缺 nss/alsa 族，lan-linux 服务器库面反而全。
 - REQ-003 跨平台注更新：Linux 运行时集实证可跑（两端无头全链），资产打包形候 155 窗。
+
+## x.com 登录态 cookie 转移实测（用户令 2026-09-17，lan-win 有头面首验）
+
+- 链路：lan-win 起 152 有头窗（持久 profile C:\Users\ray\.browse-rs\x-login-profile，9222 调试口）加用户手工登 x.com 加 wsl 侧 browse 经 mirrored 回环 127.0.0.1:9222 附着读取（x.com 与 twitter.com 双域 19 枚含 auth_token）加 BROWSE_NO_ATTACH=1 spawn 无头引擎（engine-profile）加 Network.setCookies 整批注入加无头开 x.com/home 验证。[实证: 注入回 injected-ok；无头引擎 location.pathname 得 /home（未认证必 302 至 /login，协议级登录态证据）]
+- 跨端附着通路实证：WSL 到宿主 127.0.0.1:9222 直达（mirrored 回环，与连接姿势口径一致）；守卫拦 Browser.close 属设计内（附着浏览器绝不被工具关，实测命中一次）。
+- 真缺口一（bug，候 patch 批）：附着 tab 因页面导航换血断 socket 后，browse up --connect 9222 重附只重建 Engine 层（status 显示 attached），JsHost 内层 Session 仍持死 socket，一切求值 CDP socket closed，须 browse down 重起 daemon 才恢复；修法候选：engine 重附时同步重建 host 会话。
+- 真缺口二（行为澄清）：引擎已健康附着时 up --headless 不切换（attach-first 教义使然）；强制换 spawn 要 BROWSE_NO_ATTACH=1 且 daemon 进程须带该 env 起动（旧 daemon 不读新 env），实战记 down 后再带 env up。
+- 方言边界三处实踏（皆在册设计）：无箭头函数（过滤移 jq/shell）、无加号运算符（写字面量）、成员访问限 .prop 形（页面逻辑照旧走 Runtime.evaluate 的 expression）。
