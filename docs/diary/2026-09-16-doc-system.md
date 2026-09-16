@@ -54,3 +54,9 @@
 - 后续新开发会话与日记以 ~/repos/browse-rs 为工作根（今日会话起于旧位 /mnt/c/browse-rs，收尾后新 clone 拉平到 tip）；旧位保留过渡一至两天后裁。
 - 本仓跨仓路径切形：AGENTS Commands 与 docs/README.md 门禁节的 dev-evo check.py 路径由 /mnt/d/ProjectEvo 切 ~/repos/ProjectEvo（新位实证同版可用）；矩阵 rsync 源同步切 ~/repos 形。
 - Windows 侧注意：aidoc 投影与 cargo.exe 同树面在过渡期仍走旧位 /mnt/c 树，新根的 Windows 岗衔接随旧位裁撤批再定。
+
+## 平台原语定标（用户令 2026-09-16）
+
+- 全平台测试基建正确原语定标为 5端4机：五端 wsl、lan-win、lan-mac、lan-ubuntu、lan-linux，wsl 与 lan-win 同宿主合计四台物理机；linux2 系 lan-linux 误名，不是端点名（错名源头在 ohmycloud AGENTS pwsh 五端清单，已 herdr 转达总台自清，本仓 grep 复扫零引用）。
+- AGENTS 环境节由「四平台测试矩阵」形改「5端4机」形：wsl 独立成端不再折进 lan-win 括号，「四平台」此后仅指 OS 维度（win/ubuntu/linux/mac）。[实证: 改后门禁 PE-01 至 PE-12 exit 0（PASS 10 / SKIP 2），载体用重构后新位 evo-adr:code-kit 的 check.py]
+- 途中发现：ProjectEvo 仓本日更名 project-evo 且重构为四插件市场仓（evo-adr / evo-codesec / evo-research / evo-herdr），dev-evo skill 消解；本仓 AGENTS Commands 与 docs/README.md 门禁节所引 ~/repos/ProjectEvo/.../dev-evo/scripts/check.py 旧路径悬空，候总台新口径周知后另批切径，本批不夹带。
