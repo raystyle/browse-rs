@@ -143,6 +143,11 @@
       "docs": "管道通道的开关取值，即 `CLEAN_CHROME_DEBUG` 环境变量的值域。"
     },
     {
+      "path": "cdp::spawn::chrome_binary_name",
+      "kind": "function",
+      "docs": "返回本平台的 chrome 二进制名（Windows `chrome.exe`，其余 `chrome`）；\n托管部署校验与版本管理器共用的口径。"
+    },
+    {
       "path": "cdp::spawn::find_chrome",
       "kind": "function",
       "docs": "依优先序探测 Chrome 可执行文件，找不到返回 `None`。\n\n优先序：`BROWSE_CHROME` 环境变量 -> 可执行文件同目录与当前目录下的\n`chromium-*/chrome.exe`（clean-chrome SxS 部署形态）-> 常规安装路径。\n\n# Examples\n\n```\nuse std::path::Path;\n// 显式路径原样直通（不校验存在性）\nassert_eq!(\n    cdp::spawn::find_chrome(Some(Path::new(\"/x/chrome\"))),\n    Some(\"/x/chrome\".into()),\n);\n// 无显式时按环境与部署探测，结果随机器而变，不在此断言\n```"

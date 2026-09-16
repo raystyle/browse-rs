@@ -35,4 +35,12 @@
 - 第六十四批跟进三项：环境节补 pwsh 统一载体句（既有 PEP 723 Python 载体不迁移，新增验收/运维脚本一律 pwsh）；Must 节补版本载体唯一权威句（Cargo.toml workspace 版，semver 判据进封版 REQ；扫描确认载体外无第二真相，ADR 冻结件散文不算）；分发体系裁定待远端首发时接入（seed 通道自推镜像 + 三平台 CLI 资产，omc 管资源分发、ark 管落地验收，当前无分发面不预建）。版本判定维持「封 0.1.0 待封」。
 - 用户新令落账：browse 集成 clean-chrome 成独立软件包，自有应用数据目录，负责各系统部署升级维护。立 REQ-003（draft，must）：部署/升级/doctor 三面、自有 user-data 绑 `<state>/`、托管位并入发现序、分发走镜像域优先 GitHub 回退（对齐 flow-release 第八节）；定标项显式在册（镜像命名、pin 载体、跨平台资产、目录命名），实现批先立 ADR-0007；按 semver 判据落 0.2.0 批，不阻塞 0.1.0 统一封版。
 - REQ-003 定标令（用户裁定 2026-09-16）：omc 负责 clean-chrome 发布包资源分发；browse 自管安装执行，复制 clean-chrome 既有各版本安装部署升级形态（不自创）；ark 不管 clean-chrome 安装（fleet 执行角色的本仓例外）。已折进 REQ-003 正文角色裁定段，剩余定标项五个（镜像 tool 段命名与 omc 协调、pin 载体、跨平台资产、部署目录命名、发现序优先级）。
+
+## REQ-003 实现批：本地导入面全链
+
+- 新模块 `browse-core/src/chrome_mgr.rs`：版本登记册（manifest.json：已装版本/来源/文件与字节基线/pin）、本地目录导入安装（整树复制 + chrome 二进制校验 + 自动 pin）、pin 切换（旧版保留可回退）、doctor（在位/文件基线/pin 健康，漂移时托管位自动退发现序）、版本号防穿越校验；五组单元测试全绿。
+- 发现序落地（engine `resolve_chrome`）：`--chrome` 显式 -> `BROWSE_CHROME` -> 托管 pin（`<state>/chromium/<pinned>/`）-> 祖先部署 -> 常规路径；spawn 找不到 chrome 的错误 CTA 改指 `browse chrome install`。
+- 命令面 8 条进 `COMMANDS`（Cli：browse chrome install/list/use/doctor；全局：chromeInstall/chromeList/chromeUse/chromeDoctor），方言侧 install 走 spawn_blocking 防塞单飞槽；未知函数 CTA 清单同步。
+- Windows 真机冒烟 [实证: 真部署目录导入 500 文件/683MB，list/use/doctor 输出健康]；四面门禁绿（WSL、Windows 宿主、lan-ubuntu、lan-mac 各 12 组 ok）；surface 与 aidoc（25 artifacts，+chrome_mgr 模块页）重生成。
+- clean-chrome 工位转话（c002325）三句裁定与本仓 ADR-0007/REQ-003 同向，已确认入 REQ-003 上下文；R2 下载腿保持待 omc 端点定标，REQ-003 维持 draft（判据未全过不回填 trace）。
 - 架构定调周知（用户裁 2026-09-16）：立 ADR-0007（accepted）：browse 内嵌 Chromium 版本管理器不依赖外部安装，各版本落 `<state>/chromium/<version>/` 版本化管理，机制复制 clean-chrome 既有形态；omc 管发布包资源分发（R2 镜像 + 版本段 + 边车锚，同 ark/hst 链）；ark 明确排除。REQ-003 同步对齐（manifest 版本登记、原子落位、pin 切换入 Criteria），定标项收敛为四个（镜像 tool 段与版本清单端点、缺版本自动装或 CTA、跨平台资产、GitHub 回退腿）。

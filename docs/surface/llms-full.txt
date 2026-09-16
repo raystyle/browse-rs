@@ -14,6 +14,10 @@
 | `browse up [--headless] [--pipe] [--chrome <path>] [--ws <url>] [--port <p>]` | 显式起引擎（附着优先，缺则 spawn clean-chrome 隔离实例）。 |
 | `browse down` | 退 daemon；只终结自己 spawn 的引擎，附着来源不动。 |
 | `browse status [--json]` | daemon/引擎/实例名/活动 tab 概览。 |
+| `browse chrome install <版本> <部署目录>` | 导入安装一个 Chromium 版本到应用数据目录并 pin（ADR-0007 本地面）。 |
+| `browse chrome list` | 列已装 Chromium 版本与当前 pin。 |
+| `browse chrome use <版本>` | 把托管引擎 pin 切到已装版本（旧版保留可回退）。 |
+| `browse chrome doctor` | 托管 Chromium 部署体检（在位/文件基线/pin）。 |
 | `browse --serve [--bind host:port]` | 前台跑 daemon（样例忠实形态）。 |
 
 ## 全局函数
@@ -23,6 +27,10 @@
 | `listPageTargets()` | 列可附着 page targets（带 own 标：只有 own=true 可 closeTab）。 |
 | `resolveWsUrl(opts?)` | 把 wsUrl/port/profileDir 线索解析成 WS URL（不连接）。 |
 | `detectBrowsers()` | 探测本机已开的调试浏览器（profile/端口/wsUrl）。 |
+| `chromeInstall(opts?)` | 导入安装 Chromium 版本（version 缺省取目录名；R2 下载腿待 omc 端点）。 |
+| `chromeList()` | 列已装 Chromium 版本与当前 pin。 |
+| `chromeUse(version)` | pin 切到已装版本（引擎发现序的托管位）。 |
+| `chromeDoctor()` | 托管 Chromium 部署体检（在位/文件基线/pin 健康）。 |
 | `cdpMethods(domain?)` | 652 个 CDP 命令的运行时探针（按域过滤）。 |
 | `snapshot()` | AX 树快照：nodes 带 role/name/value/短 ref（e1、e2…），引用表的唯一来源。 |
 | `screenshot(path?, full?)` | 页内截图存 PNG，回 {path,bytes}。 |
@@ -160,6 +168,47 @@ daemon/引擎/实例名/活动 tab 概览。
 browse status --json
 ```
 
+## `browse chrome install <版本> <部署目录>`
+
+导入安装一个 Chromium 版本到应用数据目录并 pin（ADR-0007 本地面）。
+
+参数：
+- `version`（string），必填
+- `fromDir`（string），必填
+
+```js
+browse chrome install 152.0.7977.84 chromium-152.0.7977.84
+```
+
+## `browse chrome list`
+
+列已装 Chromium 版本与当前 pin。
+
+
+```js
+browse chrome list
+```
+
+## `browse chrome use <版本>`
+
+把托管引擎 pin 切到已装版本（旧版保留可回退）。
+
+参数：
+- `version`（string），必填
+
+```js
+browse chrome use 152.0.7977.84
+```
+
+## `browse chrome doctor`
+
+托管 Chromium 部署体检（在位/文件基线/pin）。
+
+
+```js
+browse chrome doctor
+```
+
 ## `browse --serve [--bind host:port]`
 
 前台跑 daemon（样例忠实形态）。
@@ -198,6 +247,46 @@ return await resolveWsUrl({port: 9222})
 
 ```js
 return await detectBrowsers()
+```
+
+## `chromeInstall(opts?)`
+
+导入安装 Chromium 版本（version 缺省取目录名；R2 下载腿待 omc 端点）。
+
+参数：
+- `opts`（object，缺省 {fromDir}）
+
+```js
+await chromeInstall({fromDir: "chromium-152.0.7977.84"})
+```
+
+## `chromeList()`
+
+列已装 Chromium 版本与当前 pin。
+
+
+```js
+return await chromeList()
+```
+
+## `chromeUse(version)`
+
+pin 切到已装版本（引擎发现序的托管位）。
+
+参数：
+- `version`（string），必填
+
+```js
+await chromeUse("152.0.7977.84")
+```
+
+## `chromeDoctor()`
+
+托管 Chromium 部署体检（在位/文件基线/pin 健康）。
+
+
+```js
+return await chromeDoctor()
 ```
 
 ## `cdpMethods(domain?)`

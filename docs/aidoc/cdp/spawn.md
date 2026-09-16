@@ -8,6 +8,7 @@
 
 ## Functions
 
+- `chrome_binary_name` — 返回本平台的 chrome 二进制名（Windows `chrome.exe`，其余 `chrome`）；
 - `find_chrome` — 依优先序探测 Chrome 可执行文件，找不到返回 `None`。
 - `spawn_engine` — 拉起一个带调试口的专属引擎实例（独立 profile、端口自动分配）。
 - `spawn_engine_pipes` — 按管道契约拉起 clean-chrome（S005 / D02-6；Windows 句柄态与 POSIX

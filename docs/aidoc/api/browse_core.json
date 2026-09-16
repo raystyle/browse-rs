@@ -3,6 +3,81 @@
   "version": "0.1.0",
   "items": [
     {
+      "path": "browse_core::chrome_mgr",
+      "kind": "module",
+      "docs": "内嵌 Chromium 版本管理器（ADR-0007）：各版本 clean-chrome 在本仓应用\n数据目录下版本化管理（安装、pin、升级、体检）。\n\n布局：`<state>/chromium/<version>/`（每版本一目录，旧版保留可回退），\n登记 `<state>/chromium/manifest.json`（已装版本 + pin 指向）。\n引擎 user-data 不在版本目录（engine-profile 跨版本持久，升级零迁移）。\n\n安装源两形（ADR-0007）：本地目录导入（SxS 部署形态，`chromium-<ver>/`\n整目录复制；本实现面）；R2 镜像版本段下载（omc 分发面，端点未定标，\n接口在册待 omc 协调后补）。"
+    },
+    {
+      "path": "browse_core::chrome_mgr::ChromeInstall",
+      "kind": "struct",
+      "docs": "一条已安装版本的登记项。"
+    },
+    {
+      "path": "browse_core::chrome_mgr::ChromeManifest",
+      "kind": "struct",
+      "docs": "版本登记册：已装版本 + 当前 pin。"
+    },
+    {
+      "path": "browse_core::chrome_mgr::check_deployed",
+      "kind": "function",
+      "docs": "校验某目录是可用的 Chromium 部署（chrome 二进制在位）。\n\n# Errors\n\n目录不存在或没有 chrome 二进制（错误带 chromeInstall CTA）。"
+    },
+    {
+      "path": "browse_core::chrome_mgr::chromium_root",
+      "kind": "function",
+      "docs": "托管根目录（本实例状态目录下的 `chromium/`）。"
+    },
+    {
+      "path": "browse_core::chrome_mgr::doctor_json",
+      "kind": "function",
+      "docs": "体检：逐版本核对部署在位与登记基线（文件数），回结构化结果。"
+    },
+    {
+      "path": "browse_core::chrome_mgr::install_from_dir",
+      "kind": "function",
+      "docs": "从本地部署目录导入安装一个版本（整目录复制到 `<root>/<version>/`），\n登记进 manifest 并 pin 为当前版本。\n\n# Errors\n\n版本号非法、源目录不是可用部署、目标已存在（不覆盖，先显式删）、\n复制或写盘失败。"
+    },
+    {
+      "path": "browse_core::chrome_mgr::list_json",
+      "kind": "function",
+      "docs": "列已装版本与 pin（给 chromeList 面与 CLI）。"
+    },
+    {
+      "path": "browse_core::chrome_mgr::manifest_path",
+      "kind": "function",
+      "docs": "manifest 落盘路径。"
+    },
+    {
+      "path": "browse_core::chrome_mgr::pinned_chrome",
+      "kind": "function",
+      "docs": "托管位解析：pin 版本的 chrome 二进制路径（发现序的托管档）。\n\npin 未设、目录缺失或二进制不在（登记与盘面漂移）一律 `None`，\n退给后续发现序；漂移面由 [`doctor_json`] 报。"
+    },
+    {
+      "path": "browse_core::chrome_mgr::read_manifest",
+      "kind": "function",
+      "docs": "读登记册；根目录不存在或 manifest 缺失视为空册。"
+    },
+    {
+      "path": "browse_core::chrome_mgr::use_version",
+      "kind": "function",
+      "docs": "pin 切换到已装版本（引擎发现序的托管位生效点）。\n\n# Errors\n\n版本未安装（错误带 chromeList/chromeInstall CTA）。"
+    },
+    {
+      "path": "browse_core::chrome_mgr::version_dir",
+      "kind": "function",
+      "docs": "某版本的落位目录（不校验存在）。"
+    },
+    {
+      "path": "browse_core::chrome_mgr::version_from_dir_name",
+      "kind": "function",
+      "docs": "从部署目录名提取版本（`chromium-152.0.7977.84` 出 `152.0.7977.84`；\n无前缀则整名当版本）。"
+    },
+    {
+      "path": "browse_core::chrome_mgr::write_manifest",
+      "kind": "function",
+      "docs": "写登记册（先建根目录）。\n\n# Errors\n\n根目录建不出来或序列化写盘失败。"
+    },
+    {
       "path": "browse_core::engine",
       "kind": "module",
       "docs": "引擎策略：附着优先，缺则自起（ADR-0003）。\n\nclean-chrome 专为自动化而生（`--auto-allow-devtools-connections` 免确认、\n无参数启动即开 9222），所以：\n\n1. 显式 `ws` / `port`（CLI 旗标或 `BROWSE_CDP_WS`）优先直连。\n2. 否则探测本机已开的调试口（`/json/version`@9222 -> 默认 profile 的\n   `DevToolsActivePort`），命中即附着；人机共存，绝不关用户的浏览器。\n3. 都没有就 spawn 专属实例：独立 profile、`--remote-debugging-port=0`、\n   可 `--headless`。[`Engine::shutdown`] 只终结自己 spawn 的（优雅\n   `Browser.close` -> 兜底杀进程树）。\n\n连上后自动 attach 首个 page target（没有就开 about:blank），\n让 agent 一条命令即可 `session.Page.navigate(...)`（ADR-0004）；\n片段里的显式 `session.connect` / `session.use` 仍然可覆盖。"

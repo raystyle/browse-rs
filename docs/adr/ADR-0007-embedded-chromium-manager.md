@@ -7,7 +7,7 @@ deciders: 用户裁定（架构定调周知）+ 维护者
 
 # ADR-0007：内嵌 Chromium 版本管理器托管 clean-chrome
 
-关联：[ADR-0001](ADR-0001-daemon-persistent.md)（常驻 daemon）、[ADR-0003](ADR-0003-attach-first-spawn-fallback.md)（引擎策略）、[ADR-0006](ADR-0006-multi-instance-name.md)（应用数据目录）。
+关联：[ADR-0001](ADR-0001-daemon-persistent.md)（常驻 daemon）、[ADR-0003](ADR-0003-attach-first-spawn-fallback.md)（引擎策略）、[ADR-0006](ADR-0006-multi-instance-name.md)（应用数据目录）；clean-chrome 工位同向确认（转话 commit c002325），其 REQ-012 的 155 双版本过渡与本仓版本段子目录范式互为参照。
 
 ## Context
 

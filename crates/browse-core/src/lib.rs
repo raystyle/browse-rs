@@ -30,6 +30,7 @@
 //! assert_eq!(render(&stmts), "const tabs = await listPageTargets()");
 //! ```
 
+pub mod chrome_mgr;
 pub mod engine;
 pub mod js_host;
 pub mod parser;

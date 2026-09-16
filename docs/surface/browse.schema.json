@@ -17,6 +17,125 @@
       "output": "runtime JSON（回值随页面与 CDP 而定）",
       "type": "object"
     },
+    "chromeDoctor": {
+      "description": "chromeDoctor() 托管 Chromium 部署体检（在位/文件基线/pin 健康）。",
+      "example": "return await chromeDoctor()",
+      "input": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "chromeInstall": {
+      "description": "chromeInstall(opts?) 导入安装 Chromium 版本（version 缺省取目录名；R2 下载腿待 omc 端点）。",
+      "example": "await chromeInstall({fromDir: \"chromium-152.0.7977.84\"})",
+      "input": {
+        "properties": {
+          "opts": {
+            "description": "缺省 {fromDir}",
+            "type": "object"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "chromeList": {
+      "description": "chromeList() 列已装 Chromium 版本与当前 pin。",
+      "example": "return await chromeList()",
+      "input": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "chromeUse": {
+      "description": "chromeUse(version) pin 切到已装版本（引擎发现序的托管位）。",
+      "example": "await chromeUse(\"152.0.7977.84\")",
+      "input": {
+        "properties": {
+          "version": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "cli.chrome-doctor": {
+      "description": "browse chrome doctor 托管 Chromium 部署体检（在位/文件基线/pin）。",
+      "example": "browse chrome doctor",
+      "input": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "cli.chrome-install": {
+      "description": "browse chrome install <版本> <部署目录> 导入安装一个 Chromium 版本到应用数据目录并 pin（ADR-0007 本地面）。",
+      "example": "browse chrome install 152.0.7977.84 chromium-152.0.7977.84",
+      "input": {
+        "properties": {
+          "fromDir": {
+            "description": "",
+            "type": "string"
+          },
+          "version": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "fromDir"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "cli.chrome-list": {
+      "description": "browse chrome list 列已装 Chromium 版本与当前 pin。",
+      "example": "browse chrome list",
+      "input": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "cli.chrome-use": {
+      "description": "browse chrome use <版本> 把托管引擎 pin 切到已装版本（旧版保留可回退）。",
+      "example": "browse chrome use 152.0.7977.84",
+      "input": {
+        "properties": {
+          "version": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
     "cli.connect-flag": {
       "description": "browse --connect <ws|端口> '<片段>' 显式附着给定 ws URL 或调试端口。",
       "example": "browse --connect 9222 'return await listPageTargets()'",

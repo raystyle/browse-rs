@@ -52,6 +52,78 @@ return await resolveWsUrl({port: 9222})
 return await detectBrowsers()
 ```
 
+# chromeInstall
+
+`chromeInstall(opts?)`
+
+导入安装 Chromium 版本（version 缺省取目录名；R2 下载腿待 omc 端点）。
+
+## Inputs
+
+```json
+{
+  "properties": {
+    "opts": {
+      "description": "缺省 {fromDir}",
+      "type": "object"
+    }
+  },
+  "required": [],
+  "type": "object"
+}
+```
+
+```js
+await chromeInstall({fromDir: "chromium-152.0.7977.84"})
+```
+
+# chromeList
+
+`chromeList()`
+
+列已装 Chromium 版本与当前 pin。
+
+```js
+return await chromeList()
+```
+
+# chromeUse
+
+`chromeUse(version)`
+
+pin 切到已装版本（引擎发现序的托管位）。
+
+## Inputs
+
+```json
+{
+  "properties": {
+    "version": {
+      "description": "",
+      "type": "string"
+    }
+  },
+  "required": [
+    "version"
+  ],
+  "type": "object"
+}
+```
+
+```js
+await chromeUse("152.0.7977.84")
+```
+
+# chromeDoctor
+
+`chromeDoctor()`
+
+托管 Chromium 部署体检（在位/文件基线/pin 健康）。
+
+```js
+return await chromeDoctor()
+```
+
 # cdpMethods
 
 `cdpMethods(domain?)`

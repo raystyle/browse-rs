@@ -72,7 +72,9 @@ fn newest_chromium_under(root: &Path) -> Option<PathBuf> {
     hits.pop()
 }
 
-fn chrome_binary_name() -> &'static str {
+/// 返回本平台的 chrome 二进制名（Windows `chrome.exe`，其余 `chrome`）；
+/// 托管部署校验与版本管理器共用的口径。
+pub fn chrome_binary_name() -> &'static str {
     if cfg!(windows) {
         "chrome.exe"
     } else {

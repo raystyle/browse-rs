@@ -29,6 +29,14 @@ enum Mode {
     Down,
     /// `browse status`：看 daemon/引擎状态。
     Status,
+    /// `browse chrome install <版本> <部署目录>`：导入安装 Chromium 版本。
+    ChromeInstall { version: String, from_dir: String },
+    /// `browse chrome list`：列已装版本与 pin。
+    ChromeList,
+    /// `browse chrome use <版本>`：pin 切换。
+    ChromeUse(String),
+    /// `browse chrome doctor`：托管部署体检。
+    ChromeDoctor,
 }
 
 #[tokio::main]
@@ -79,6 +87,24 @@ async fn main() -> Result<()> {
             "up" if snippets.is_empty() && mode_is_eval(&mode) => mode = Mode::Up,
             "down" if snippets.is_empty() && mode_is_eval(&mode) => mode = Mode::Down,
             "status" if snippets.is_empty() && mode_is_eval(&mode) => mode = Mode::Status,
+            "chrome" if snippets.is_empty() && mode_is_eval(&mode) => {
+                match next("chrome")?.as_str() {
+                    "list" => mode = Mode::ChromeList,
+                    "doctor" => mode = Mode::ChromeDoctor,
+                    "use" => mode = Mode::ChromeUse(next("chrome use")?),
+                    "install" => {
+                        let version = next("chrome install <版本>")?;
+                        let from_dir = next("chrome install <版本> <部署目录>")?;
+                        mode = Mode::ChromeInstall { version, from_dir };
+                    }
+                    other => {
+                        eprintln!(
+                            "browse: chrome 子命令不认识 {other}（install/use/list/doctor，退出 2）"
+                        );
+                        std::process::exit(2);
+                    }
+                }
+            }
             other if other.starts_with('-') => {
                 eprintln!("browse: 未知参数 {other}（用法错，退出 2）");
                 std::process::exit(2);
@@ -136,6 +162,42 @@ async fn main() -> Result<()> {
                 Some(h) => print_health(&h, json),
                 None => println!("daemon 不在跑（跑任意片段或 browse up 自动拉起）"),
             }
+            Ok(())
+        }
+        // Chromium 版本管理器：纯本地操作，不经 daemon（ADR-0007）
+        Mode::ChromeInstall { version, from_dir } => {
+            let brief = browse_core::chrome_mgr::install_from_dir(
+                &browse_core::chrome_mgr::chromium_root(),
+                &version,
+                std::path::Path::new(&from_dir),
+            )?;
+            println!("{}", serde_json::to_string_pretty(&brief)?);
+            Ok(())
+        }
+        Mode::ChromeList => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&browse_core::chrome_mgr::list_json(
+                    &browse_core::chrome_mgr::chromium_root()
+                ))?
+            );
+            Ok(())
+        }
+        Mode::ChromeUse(v) => {
+            let r = browse_core::chrome_mgr::use_version(
+                &browse_core::chrome_mgr::chromium_root(),
+                &v,
+            )?;
+            println!("{}", serde_json::to_string_pretty(&r)?);
+            Ok(())
+        }
+        Mode::ChromeDoctor => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&browse_core::chrome_mgr::doctor_json(
+                    &browse_core::chrome_mgr::chromium_root()
+                ))?
+            );
             Ok(())
         }
         Mode::Eval => run_eval(snippets, new_tab, ws, port, chrome, headless, pipe).await,

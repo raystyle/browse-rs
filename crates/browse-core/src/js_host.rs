@@ -310,6 +310,47 @@ impl JsHost {
             // 本 CLI 的命令面目录探针（与 schema/llms/skill 同源，
             // incur --llms 的运行时等价物）
             "hostFunctions" => Ok(crate::surface::catalog_json()),
+            // ---- Chromium 版本管理器（ADR-0007，本地导入面；R2 下载腿待 omc 端点）----
+            "chromeInstall" => {
+                let opts = argv.first().cloned().unwrap_or(json!({}));
+                let from_dir = opts
+                    .get("fromDir")
+                    .and_then(Value::as_str)
+                    .map(str::to_string);
+                let Some(from) = from_dir else {
+                    bail!(
+                        "chromeInstall 本地面要 fromDir（R2 镜像下载腿待 omc 端点定标）；\
+                         下一步：chromeInstall({{fromDir: \"chromium-152.0.7977.84\"}})"
+                    );
+                };
+                let from = std::path::PathBuf::from(from);
+                let version = opts
+                    .get("version")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .unwrap_or_else(|| crate::chrome_mgr::version_from_dir_name(&from));
+                let root = crate::chrome_mgr::chromium_root();
+                let brief = tokio::task::spawn_blocking(move || {
+                    crate::chrome_mgr::install_from_dir(&root, &version, &from)
+                })
+                .await
+                .map_err(|e| anyhow::anyhow!("安装任务崩了：{e}"))??;
+                Ok(brief)
+            }
+            "chromeList" => Ok(crate::chrome_mgr::list_json(
+                &crate::chrome_mgr::chromium_root(),
+            )),
+            "chromeUse" => {
+                let Some(v) = argv.first().and_then(Value::as_str) else {
+                    bail!(
+                        "chromeUse 缺 version；下一步：chromeUse(\"152.0.7977.84\")，先 chromeList() 看已装"
+                    );
+                };
+                crate::chrome_mgr::use_version(&crate::chrome_mgr::chromium_root(), v)
+            }
+            "chromeDoctor" => Ok(crate::chrome_mgr::doctor_json(
+                &crate::chrome_mgr::chromium_root(),
+            )),
             // 页内截图存文件，回 {path, bytes}；full 走 captureBeyondViewport
             "screenshot" => {
                 let path = argv.first().and_then(Value::as_str).map(str::to_string);
@@ -623,7 +664,7 @@ impl JsHost {
                 crate::record::stop(&self.session, rec).await
             }
             other => bail!(
-                "未知函数 {other}；下一步：可用全局 listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/snapshot()/screenshot(path?, full?)/pdf(path?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/clickAt(x,y)/fillInput(sel,text)/clickRef(ref)/fillRef(ref,text)/selectOption(ref,value)/pressKey(key)/dialogStatus()/dialogAccept(text?)/dialogDismiss()/routeBlock(pattern)/routeMock(pattern,body,opts?)/routeClear()/waitLoad(ms?)/waitIdle(ms?)/recordStart(opts?)/recordStop()/print(x)；CDP 走 session.<Domain>.<method>(params)"
+                "未知函数 {other}；下一步：可用全局 listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/snapshot()/screenshot(path?, full?)/pdf(path?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/clickAt(x,y)/fillInput(sel,text)/clickRef(ref)/fillRef(ref,text)/selectOption(ref,value)/pressKey(key)/dialogStatus()/dialogAccept(text?)/dialogDismiss()/routeBlock(pattern)/routeMock(pattern,body,opts?)/routeClear()/waitLoad(ms?)/waitIdle(ms?)/recordStart(opts?)/recordStop()/chromeInstall(opts?)/chromeList()/chromeUse(version)/chromeDoctor()/print(x)；CDP 走 session.<Domain>.<method>(params)"
             ),
         }
     }

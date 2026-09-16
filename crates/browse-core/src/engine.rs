@@ -113,6 +113,16 @@ struct EngineInner {
     child: Option<Child>,
 }
 
+/// 引擎 chrome 解析序（ADR-0007）：CLI 显式 `--chrome` 最先；`BROWSE_CHROME`
+/// 环境变量交给 [`cdp::spawn::find_chrome`] 自查；两者皆空时托管 pin 版本
+/// （`<state>/chromium/<pinned>/`）作为显式路径顶上，再往后是祖先部署与常规路径。
+fn resolve_chrome(explicit: Option<PathBuf>) -> Option<PathBuf> {
+    if explicit.is_some() || std::env::var_os("BROWSE_CHROME").is_some() {
+        return explicit;
+    }
+    crate::chrome_mgr::pinned_chrome(&crate::chrome_mgr::chromium_root())
+}
+
 impl Engine {
     /// 绑定一条会话建引擎；冷态是 [`EngineSource::NotConnected`]。
     ///
@@ -242,9 +252,9 @@ impl Engine {
     }
 
     async fn spawn(&self, chrome: Option<PathBuf>, headless: bool) -> Result<EngineSource> {
-        let chrome = cdp_spawn::find_chrome(chrome.as_deref()).ok_or_else(|| {
+        let chrome = cdp_spawn::find_chrome(resolve_chrome(chrome).as_deref()).ok_or_else(|| {
             anyhow!(
-                "browse: 找不到 chrome；用 --chrome <path> 或设 BROWSE_CHROME 指向 clean-chrome 的 chrome.exe"
+                "browse: 找不到 chrome；下一步：browse chrome install <版本> <部署目录>（或 --chrome <path> / BROWSE_CHROME 显式指定）"
             )
         })?;
         let profile = crate::paths::engine_profile_dir();
@@ -293,9 +303,9 @@ impl Engine {
 
     /// 管道态 spawn（S005 契约）：免端口探测、零 TCP 面、断管即关浏览器。
     async fn spawn_pipes(&self, chrome: Option<PathBuf>, headless: bool) -> Result<EngineSource> {
-        let chrome = cdp_spawn::find_chrome(chrome.as_deref()).ok_or_else(|| {
+        let chrome = cdp_spawn::find_chrome(resolve_chrome(chrome).as_deref()).ok_or_else(|| {
             anyhow!(
-                "browse: 找不到 chrome；用 --chrome <path> 或设 BROWSE_CHROME 指向 clean-chrome 的 chrome.exe"
+                "browse: 找不到 chrome；下一步：browse chrome install <版本> <部署目录>（或 --chrome <path> / BROWSE_CHROME 显式指定）"
             )
         })?;
         let profile = crate::paths::engine_profile_dir();
