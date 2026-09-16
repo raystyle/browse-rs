@@ -13,11 +13,11 @@ CDP 报 `not found` 时给相近建议，以及给方言 `cdpMethods(domain)` �
 
 ## Functions
 
-- `method_exists` — 是否为清单内已知命令。
-- `methods_of_domain` — 某域的全部命令（`cdpMethods("Network")` 的底座）。
+- `method_exists` — 判断方法是否为清单内已知命令（被动增强用，不预拦未知方法）。
+- `methods_of_domain` — 返回某域的全部命令，是 `cdpMethods("Network")` 的底座。
 - `suggest` — 相近建议：同域优先，方法名前缀/包含次之，最多 `max` 条。
 
 ## Constants
 
-- `METHODS_RAW` — 全量命令清单（`Domain.Method` 每行一条）。
+- `METHODS_RAW` — 全量 CDP 命令清单，`Domain.Method` 每行一条（652 条）。
 

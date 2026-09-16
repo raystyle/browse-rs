@@ -21,18 +21,18 @@ daemon 客户端：本地 HTTP 调用 + 首次使用自动拉起 detached daemon
 
 ## Functions
 
-- `daemon_alive` — daemon 是否在跑（GET /health 通即为在）。
-- `daemon_bind` — daemon 的 `host:port` 绑定串（多实例：`BROWSE_NAME` 派生端口，见 ADR-0006）。
-- `engine_up` — POST /engine/up（显式起引擎）。
-- `ensure_daemon` — 确保 daemon 在跑：不通就 detached 拉起 `browse --serve`，再探活。
-- `eval` — POST /eval。返回片段求值结果；daemon 侧错误进 `Err`（错误串已是给人/agent 的下一步指令形态）。
-- `health` — GET /health。
-- `quit` — POST /quit（退 daemon；daemon 侧顺带只终结自起引擎）。
-- `state_dir` — daemon 日志与运行面目录：`%USERPROFILE%\.browse-rs[\<name>]`（多实例）。
+- `daemon_alive` — 探测 daemon 是否在跑：GET /health 通即为在。
+- `daemon_bind` — 返回 daemon 监听的 `host:port` 串；多实例由 `BROWSE_NAME` 派生端口（ADR-0006）。
+- `engine_up` — POST /engine/up 显式起引擎，走 ensure 全链（附着优先缺则 spawn）。
+- `ensure_daemon` — daemon 不在跑时 detached 拉起 `browse --serve` 并探活到通；已在跑则直接返回。
+- `eval` — 把方言片段 POST 到 daemon 的 /eval 求值。
+- `health` — GET /health 取 daemon 状态面；daemon 不在时报可照抄的拉起提示。
+- `quit` — POST /quit 退 daemon，daemon 侧顺带只终结自起引擎（附着来源不动）。
+- `state_dir` — 返回 daemon 日志与运行面目录（`%USERPROFILE%\.browse-rs[\<name>]`，多实例各一份）。
 
 ## Constants
 
-- `DEFAULT_PORT` — daemon 缺省端口（`BROWSE_PORT` / `BROWSE_NAME` 派生可覆盖）。避开 bh 的 9876。
+- `DEFAULT_PORT` — daemon 的缺省端口，`BROWSE_PORT` 与 `BROWSE_NAME` 派生端口可覆盖。
 
 
 <!-- browse_cli/render.md -->
@@ -47,7 +47,7 @@ daemon 客户端：本地 HTTP 调用 + 首次使用自动拉起 detached daemon
 
 ## Constants
 
-- `DROP_THRESHOLD` — 触发落盘的阈值（字节）。序列化后的打印串超过即落盘。
+- `DROP_THRESHOLD` — 序列化后的打印串超过本阈值（字节）即落盘，保护 agent 上下文。
 
 
 <!-- browse_core/index.md -->
@@ -119,8 +119,8 @@ clean-chrome 专为自动化而生（`--auto-allow-devtools-connections` 免确�
 ## Types
 
 - `Engine` — 引擎状态机：确保连接、报告来源、只终结自己 spawn 的。
-- `EngineSource` — 引擎现状（可序列化，`/health` 面直接用）。
-- `EngineSpec` — 引擎指令：CLI 旗标 / 环境变量解析出的意图。
+- `EngineSource` — 引擎现状的可序列化快照，`/health` 面直接用。
+- `EngineSpec` — 引擎指令意图，由 CLI 旗标或环境变量解析而来。
 
 
 <!-- browse_core/js_host.md -->
@@ -142,7 +142,7 @@ clean-chrome 专为自动化而生（`--auto-allow-devtools-connections` 免确�
 
 ## Types
 
-- `JsHost` — 方言宿主：一个 CDP [`Session`] + 一份跨片段持久的变量表。
+- `JsHost` — 方言宿主：持有一个 CDP [`Session`] 加一份跨片段持久的变量表。
 
 
 <!-- browse_core/parser.md -->
@@ -158,15 +158,15 @@ browser-harness-js 片段方言的语法分析器（纯函数）。
 ## Functions
 
 - `loc` — 把字节偏移换算成「行L:列C」（错误定位用，CTA 的一半是位置）。
-- `parse_script` — 解析整段片段为语句列表（先剥 `//` 注释）。
-- `render` — 语句列表回显成源码（诊断与 doctest 用，非规范格式化器）。
-- `snippet_complete` — 片段是否括号配平（stdin/TTY 增量读入用：配平才送求值）。
-- `strip_comments` — 剥掉 `//` 行注释（保留字符串字面量里的 `//`）。
+- `parse_script` — 把整段片段解析成语句列表（先剥 `//` 注释）。
+- `render` — 把语句列表回显成源码（诊断与 doctest 用，非规范格式化器）。
+- `snippet_complete` — 判断片段括号是否配平（stdin/TTY 增量读入用：配平才送求值）。
+- `strip_comments` — 把 `//` 行注释剥掉，保留字符串字面量里的 `//`。
 
 ## Types
 
-- `Expr` — 表达式节点。
-- `Stmt` — 语句：声明、表达式或 return。
+- `Expr` — 方言的表达式节点，构成求值树。
+- `Stmt` — 方言的顶层语句形态：声明、表达式或 return。
 
 
 <!-- browse_core/paths.md -->
@@ -182,16 +182,16 @@ browser-harness-js 片段方言的语法分析器（纯函数）。
 
 ## Functions
 
-- `daemon_port` — 本实例 daemon 端口：`BROWSE_PORT` 显式优先，其次按 `BROWSE_NAME`
-- `derived_port` — 名字稳定派生端口（9900..=9999）。同名恒同口（重启不变）；
-- `engine_profile_dir` — 本实例引擎 profile：`<state>/engine-profile`（命名实例各自独占，
-- `instance_name` — 实例名：`BROWSE_NAME` 的非空值；未设即默认实例（`None`）。
-- `state_dir` — 本实例状态目录：`%USERPROFILE%\.browse-rs[\<name>]`。
-- `state_dir_for` — 按名取状态目录（纯函数，可单测）。
+- `daemon_port` — 返回本实例 daemon 端口：`BROWSE_PORT` 显式优先，其次按 `BROWSE_NAME`
+- `derived_port` — 把名字稳定派生成 9900..=9999 区间的端口，同名恒同口（重启不变）。
+- `engine_profile_dir` — 返回本实例引擎 profile（`<state>/engine-profile`；命名实例各自独占，
+- `instance_name` — 返回实例名（`BROWSE_NAME` 的非空值）；未设即默认实例（`None`）。
+- `state_dir` — 返回本实例状态目录（`%USERPROFILE%\.browse-rs[\<name>]`）。
+- `state_dir_for` — 把实例名映射到状态目录的纯函数（同输入恒同输出，可单测）。
 
 ## Constants
 
-- `DERIVED_PORT_MIN` — 命名实例缺省端口下界（派生区间 9900..=9999，避开默认 9880 与 bh 的 9876）。
+- `DERIVED_PORT_MIN` — 命名实例派生端口的下界（区间 9900..=9999，避开默认 9880 与 bh 的 9876）。
 
 
 <!-- browse_core/record.md -->
@@ -209,12 +209,12 @@ browser-harness-js 片段方言的语法分析器（纯函数）。
 
 ## Functions
 
-- `start` — 开始录制。`opts`（都可省）：`everyNthFrame`（抽帧，源端剪辑）、
+- `start` — 开始一场屏幕录制，帧由常驻泵任务落盘。
 - `stop` — 停止录制：停泵 -> 末冲（200ms 窗口内迟到的帧也收）->
 
 ## Types
 
-- `Recorder` — 一场进行中的录制：目录、计数器、停泵旗标与泵任务句柄。
+- `Recorder` — 承载一场进行中的录制，聚合目录、计数器、停泵旗标与泵任务句柄。
 
 
 <!-- browse_core/semantic.md -->
@@ -233,19 +233,19 @@ browser-harness-js 片段方言的语法分析器（纯函数）。
 
 ## Functions
 
-- `click_at` — 真点击：`Input.dispatchMouseEvent` pressed+released 于视口坐标 (x,y)。
+- `click_at` — 用 `Input.dispatchMouseEvent` pressed+released 在视口坐标 (x,y) 派发
 - `click_ref` — 按短 ref 点击：滚动可见 -> 量视口中心 -> **遮挡命中测试** -> 复用
-- `close_tab` — 关 tab；缺省关当前活动 tab。守卫层只放行本会话自建 tab：用户 tab 一律拒绝。
+- `close_tab` — 关 tab（缺省关当前活动 tab）；守卫层只放行本会话自建 tab，用户 tab 一律拒绝。
 - `current_tab` — 当前活动 tab 简表 `{targetId,title,url}`；无活动 tab 返回 `null`。
 - `fill_input` — 按 CSS 选择器填输入框：focus -> 全选（commands，不发 Ctrl+A）-> 可选
 - `fill_ref` — 按短 ref 填输入框：objectId 上 focus -> 探测控件（SELECT/readOnly 拒收
 - `new_tab` — 新开 tab 并设为活动路由。给了 `url` 则先建 about:blank 附着后再导航
-- `pdf` — 当前页存 PDF（`Page.printToPDF`，`printBackground`+`preferCSSPageSize`）。
-- `press_key` — 按一个键：`Input.dispatchKeyEvent` keyDown(+text)+keyUp。Enter 的 text
+- `pdf` — 当前页存 PDF（`Page.printToPDF`，`printBackground`+`preferCSSPageSize`），
+- `press_key` — 用 `Input.dispatchKeyEvent` keyDown(+text)+keyUp 按一个键；Enter 的
 - `select_option` — 按短 ref 选下拉框选项：value 或可见 label 匹配，设值并派发 input+change
 - `switch_tab` — 切换活动路由到既有 tab（不改 Chrome 可见前景），返回该 tab 简表。
 - `wait_idle` — 等 network 静默：从调用时刻起观察 `Network.requestWillBeSent` 与
-- `wait_load` — 等 load：先宽容地等一次 frameNavigated（导航可能已完成，超时忽略），
+- `wait_load` — 等页面 load 完成：先宽容地等一次 frameNavigated（导航可能已完成，
 
 
 <!-- browse_core/server.md -->
@@ -268,9 +268,9 @@ POST /quit 三端点保留），新增 `/engine/up` 与求值前的懒引擎策�
 
 ## Types
 
-- `Daemon` — daemon 运行面：宿主、引擎、缺省引擎意图、单飞槽与退出旗标。
-- `EngineUpRequest` — `/engine/up` 请求体。
-- `EvalRequest` — `/eval` 请求体。
+- `Daemon` — HTTP daemon 的运行面聚合：宿主、引擎、缺省引擎意图、单飞槽与退出旗标。
+- `EngineUpRequest` — 描述 POST /engine/up 的请求体。
+- `EvalRequest` — 描述 POST /eval 的请求体。
 
 
 <!-- browse_core/surface.md -->
@@ -279,7 +279,7 @@ POST /quit 三端点保留），新增 `/engine/up` 与求值前的懒引擎策�
 命令面目录（incur-rs 原则的方言版适配）：CLI 子命令、方言全局函数、
 session 方法**只在这一处登记为数据**，JSON Schema、LLM 清单
 （`llms.txt` / `llms-full.txt`）与技能（`SKILL.md`）全部由
-[`render`] 系列从本目录派生（`browse --gen-surface docs/surface`
+[`render_llms`] 系列派生函数从本目录生成（`browse --gen-surface docs/surface`
 重生成），`tests/surface_contract.rs` 锁漂移。
 
 与 incur（derive 宏命令图）的差异：我们的接口面是方言片段而非结构化
@@ -287,22 +287,22 @@ session 方法**只在这一处登记为数据**，JSON Schema、LLM 清单
 
 ## Functions
 
-- `catalog_json` — 目录的运行时 JSON（hostFunctions 探针的返回体）。
-- `render_llms` — 紧凑 LLM 清单（llms.txt）。
-- `render_llms_full` — 完整 LLM 清单（llms-full.txt）：索引 + 逐命令参数与示例。
-- `render_schema` — JSON Schema 包（每命令一个 definition；输入按目录，输出是运行时 JSON）。
-- `render_skill` — 技能文件（SKILL.md，incur 同款 frontmatter 契约）。
+- `catalog_json` — 返回目录的运行时 JSON，即 hostFunctions 探针的返回体。
+- `render_llms` — 渲染紧凑 LLM 清单 `llms.txt`（索引层，一行一命令）。
+- `render_llms_full` — 渲染完整 LLM 清单 `llms-full.txt`：索引加逐命令参数与示例。
+- `render_schema` — 渲染 JSON Schema 包：每命令一个 definition，输入按目录、输出是运行时 JSON。
+- `render_skill` — 渲染技能文件 `SKILL.md`（incur 同款 frontmatter 契约）。
 - `write_surface_files` — 把三件派生物写进目录（维护命令 `browse --gen-surface <dir>` 用）：
 
 ## Types
 
-- `ArgSpec` — 一个参数的形状。
-- `CmdKind` — 命令种类。
-- `CmdSpec` — 一条命令的登记项。
+- `ArgSpec` — 描述一个参数的形状：名、类型、必填与否与缺省。
+- `CmdKind` — 命令在目录中的种类：CLI 子命令、方言全局函数或 session 方法。
+- `CmdSpec` — 命令目录里一条命令的登记项。
 
 ## Constants
 
-- `COMMANDS` — 命令目录（单一真相源）。
+- `COMMANDS` — 全量命令目录，CLI/方言/session 三面的单一真相源。
 
 
 <!-- cdp/index.md -->
@@ -326,6 +326,7 @@ Chrome DevTools Protocol（CDP）连接层：一条常驻 browser-level WebSocke
 # Examples
 
 ```no_run
+# // no_run：需要本机 9222 开着真浏览器
 # async fn demo() -> anyhow::Result<()> {
 use cdp::{ConnectOptions, Session};
 use serde_json::json;
@@ -359,18 +360,18 @@ Chrome 144+ 对默认 profile 的 HTTP `/json` 端点可能不服务，
 
 ## Functions
 
-- `default_profile_dirs` — clean-chrome / Chromium / Chrome 的默认 user-data 目录（按探测优先序）。
-- `detect_browsers` — 扫默认 profile 目录列出所有可附着候选（对齐官方 harness 的
+- `default_profile_dirs` — 返回默认 user-data 目录清单（clean-chrome / Chromium / Chrome，按探测优先序）。
+- `detect_browsers` — 扫默认 profile 目录列出所有可附着候选：读各目录的 `DevToolsActivePort`
 - `http_version_ws_url` — GET `<http>/json/version` 取 `webSocketDebuggerUrl`（自带 `timeout` 超时）。
-- `parse_port` — 解析端口字面量：`"9222"`、`"http://127.0.0.1:9222"`、`"127.0.0.1:9222/"` 都出 `9222`。
-- `probe_default` — 引擎附着探测：返回本机已开调试口浏览器的 WS URL，没有则 `None`。
-- `resolve_ws_url` — 解析 [`super::ConnectOptions`] 为 WS URL。`profileDir` 路径会轮询等文件出现
+- `parse_port` — 端口字面量的宽容解析：`"9222"`、`"http://127.0.0.1:9222"`、`"127.0.0.1:9222/"` 都出 `9222`。
+- `probe_default` — 探测本机已开调试口的浏览器，返回其 WS URL；没有则 `None`。
+- `resolve_ws_url` — 把 [`super::ConnectOptions`] 三线索解析成 WS URL。
 - `wait_active_port_file` — 轮询 profile 目录下的 `DevToolsActivePort`，直到超时。
 - `ws_from_active_port_text` — 从 `DevToolsActivePort` 文件文本解析 WS URL：首行端口，次行 `/devtools/...` 路径。
 
 ## Types
 
-- `DetectedBrowser` — 一个可附着浏览器的候选描述（`detect_browsers` 的产物）。
+- `DetectedBrowser` — 可附着浏览器的候选描述，由 [`detect_browsers`] 产出。
 
 
 <!-- cdp/methods.md -->
@@ -389,13 +390,13 @@ CDP 报 `not found` 时给相近建议，以及给方言 `cdpMethods(domain)` �
 
 ## Functions
 
-- `method_exists` — 是否为清单内已知命令。
-- `methods_of_domain` — 某域的全部命令（`cdpMethods("Network")` 的底座）。
+- `method_exists` — 判断方法是否为清单内已知命令（被动增强用，不预拦未知方法）。
+- `methods_of_domain` — 返回某域的全部命令，是 `cdpMethods("Network")` 的底座。
 - `suggest` — 相近建议：同域优先，方法名前缀/包含次之，最多 `max` 条。
 
 ## Constants
 
-- `METHODS_RAW` — 全量命令清单（`Domain.Method` 每行一条）。
+- `METHODS_RAW` — 全量 CDP 命令清单，`Domain.Method` 每行一条（652 条）。
 
 
 <!-- cdp/pipe.md -->
@@ -414,8 +415,8 @@ Windows 直接用 `CreatePipe`，POSIX 用 `pipe(2)`。
 
 ## Types
 
-- `PipeReader` — 管道读端（启动器持有，读 chrome 写出的 CDP）。
-- `PipeWriter` — 管道写端（启动器持有，往 chrome 写 CDP）。
+- `PipeReader` — CDP 管道的读端，启动器持有，读 chrome 写出的字节流。
+- `PipeWriter` — CDP 管道的写端，启动器持有，往 chrome 写 CDP 字节流。
 
 
 <!-- cdp/session.md -->
@@ -429,13 +430,13 @@ Windows 直接用 `CreatePipe`，POSIX 用 `pipe(2)`。
 
 ## Functions
 
-- `is_browser_method` — 方法是否属于 browser 端点域（不附 `sessionId`）。
+- `is_browser_method` — 判断方法是否属于 browser 端点域（这类方法不附 `sessionId`）。
 
 ## Types
 
-- `ConnectOptions` — 连接线索三选一：`wsUrl` / `port` / `profileDir`。
-- `PageTarget` — 一个可附着的 page target（已滤 `chrome://`、`devtools://`）。
-- `Session` — 常驻 CDP 会话。clone `Arc<Self>` 共享同一条连接。
+- `ConnectOptions` — 连接线索三选一（`wsUrl` / `port` / `profileDir`），全部可缺省走自动策略。
+- `PageTarget` — 描述一个可附着的 page target；已滤 `chrome://`、`devtools://` 干扰目标。
+- `Session` — 常驻的 browser 级 CDP 会话；clone `Arc<Self>` 共享同一条连接。
 
 
 <!-- cdp/spawn.md -->
@@ -449,15 +450,15 @@ Windows 直接用 `CreatePipe`，POSIX 用 `pipe(2)`。
 
 ## Functions
 
-- `find_chrome` — 依优先序找 Chrome 可执行文件：`BROWSE_CHROME` 环境变量 ->
-- `spawn_engine` — 拉起专属引擎实例。参数：可执行文件、独立 profile 目录、是否无头。
+- `find_chrome` — 依优先序探测 Chrome 可执行文件，找不到返回 `None`。
+- `spawn_engine` — 拉起一个带调试口的专属引擎实例（独立 profile、端口自动分配）。
 - `spawn_engine_pipes` — 按管道契约拉起 clean-chrome（S005 / D02-6；Windows 句柄态与 POSIX
 - `terminate_pid` — 强杀进程树（优雅退出 `Browser.close` 失败后的兜底）。
-- `wait_devtools_ready` — 等 spawn 出来的实例调试口就绪（读它 profile 下的 `DevToolsActivePort`），
+- `wait_devtools_ready` — 等 spawn 出来的实例调试口就绪，返回 WS URL（读它 profile 下的
 
 ## Types
 
-- `PipeEngine` — 管道态引擎句柄：子进程 + 留在启动器侧的两条 CDP 管道端。
-- `PipeMode` — 管道通道三态：CLEAN_CHROME_DEBUG 的取值。
+- `PipeEngine` — 管道态引擎的句柄：chrome 子进程加留在启动器侧的两条 CDP 管道端。
+- `PipeMode` — 管道通道的开关取值，即 `CLEAN_CHROME_DEBUG` 环境变量的值域。
 
 

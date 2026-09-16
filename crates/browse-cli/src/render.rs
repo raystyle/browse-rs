@@ -4,13 +4,13 @@
 use serde_json::Value;
 use std::path::PathBuf;
 
-/// 触发落盘的阈值（字节）。序列化后的打印串超过即落盘。
+/// 序列化后的打印串超过本阈值（字节）即落盘，保护 agent 上下文。
 pub const DROP_THRESHOLD: usize = 32 * 1024;
 
-/// 预览长度（字符）。
+/// 落盘提示行里保留的预览长度（字符数）。
 const PREVIEW_CHARS: usize = 160;
 
-/// 落盘目录：`<state>/drops`（命名实例见 [`browse_core::paths`]）。
+/// 返回落盘目录 `<state>/drops`（命名实例见 [`browse_core::paths`]）。
 fn drops_dir() -> PathBuf {
     browse_core::paths::state_dir().join("drops")
 }

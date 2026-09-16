@@ -10,17 +10,17 @@
     {
       "path": "cdp::discovery::DetectedBrowser",
       "kind": "struct",
-      "docs": "一个可附着浏览器的候选描述（`detect_browsers` 的产物）。"
+      "docs": "可附着浏览器的候选描述，由 [`detect_browsers`] 产出。"
     },
     {
       "path": "cdp::discovery::default_profile_dirs",
       "kind": "function",
-      "docs": "clean-chrome / Chromium / Chrome 的默认 user-data 目录（按探测优先序）。\n\nclean-chrome 是 Chromium 品牌，profile 在 `%LOCALAPPDATA%\\Chromium\\User Data`。"
+      "docs": "返回默认 user-data 目录清单（clean-chrome / Chromium / Chrome，按探测优先序）。\n\nclean-chrome 是 Chromium 品牌，profile 在 `%LOCALAPPDATA%\\Chromium\\User Data`。"
     },
     {
       "path": "cdp::discovery::detect_browsers",
       "kind": "function",
-      "docs": "扫默认 profile 目录列出所有可附着候选（对齐官方 harness 的\n`detectBrowsers()`）：读各目录的 `DevToolsActivePort`，按 mtime 降序\n（最近启动优先）。同步、零网络。\n\n# Examples\n\n```no_run\n# async fn demo() {\nfor b in cdp::discovery::detect_browsers() {\n    println!(\"{} port={} mtime={}\", b.profile_dir.display(), b.port, b.mtime_ms);\n}\n# }\n```"
+      "docs": "扫默认 profile 目录列出所有可附着候选：读各目录的 `DevToolsActivePort`\n按 mtime 降序（最近启动优先），同步、零网络，对齐官方 harness 的\n`detectBrowsers()`。\n\n# Examples\n\n```no_run\n# // no_run：扫的是本机真实 profile 目录，结果随机器而变，不可断言\n# async fn demo() {\nfor b in cdp::discovery::detect_browsers() {\n    println!(\"{} port={} mtime={}\", b.profile_dir.display(), b.port, b.mtime_ms);\n}\n# }\n```"
     },
     {
       "path": "cdp::discovery::http_version_ws_url",
@@ -30,17 +30,17 @@
     {
       "path": "cdp::discovery::parse_port",
       "kind": "function",
-      "docs": "解析端口字面量：`\"9222\"`、`\"http://127.0.0.1:9222\"`、`\"127.0.0.1:9222/\"` 都出 `9222`。\n\n# Examples\n\n```\nassert_eq!(cdp::parse_port(\"9222\"), Some(9222));\nassert_eq!(cdp::parse_port(\"http://127.0.0.1:9222\"), Some(9222));\nassert_eq!(cdp::parse_port(\"not-a-port\"), None);\n```"
+      "docs": "端口字面量的宽容解析：`\"9222\"`、`\"http://127.0.0.1:9222\"`、`\"127.0.0.1:9222/\"` 都出 `9222`。\n\n# Examples\n\n```\nassert_eq!(cdp::parse_port(\"9222\"), Some(9222));\nassert_eq!(cdp::parse_port(\"http://127.0.0.1:9222\"), Some(9222));\nassert_eq!(cdp::parse_port(\"not-a-port\"), None);\n```"
     },
     {
       "path": "cdp::discovery::probe_default",
       "kind": "function",
-      "docs": "引擎附着探测：返回本机已开调试口浏览器的 WS URL，没有则 `None`。\n\n顺序：默认端口 9222 的 `/json/version`（300ms 短超时，别让缺浏览器拖慢冷启动）\n-> 各默认 profile 目录下的 `DevToolsActivePort` 文件（静态读一次，\n浏览器已在跑则文件已在）。"
+      "docs": "探测本机已开调试口的浏览器，返回其 WS URL；没有则 `None`。\n\n顺序：默认端口 9222 的 `/json/version`（300ms 短超时，别让缺浏览器拖慢冷启动）\n-> 各默认 profile 目录下的 `DevToolsActivePort` 文件（静态读一次，\n浏览器已在跑则文件已在）。"
     },
     {
       "path": "cdp::discovery::resolve_ws_url",
       "kind": "function",
-      "docs": "解析 [`super::ConnectOptions`] 为 WS URL。`profileDir` 路径会轮询等文件出现\n（Chrome 启动到写文件有窗口期），其余立即解析；整体超时由\n[`super::ConnectOptions::timeout_ms`] 控制（缺省 5 秒）。\n\n# Errors\n\n- `wsUrl` 是 http 端点但 `/json/version` 请求失败或没有 `webSocketDebuggerUrl`。\n- `profileDir` 超时内读不到合法的 `DevToolsActivePort`。\n- 三线索全空时按默认端口 9222 走 `/json/version`，失败同上。"
+      "docs": "把 [`super::ConnectOptions`] 三线索解析成 WS URL。\n\n`profileDir` 路径会轮询等文件出现（Chrome 启动到写文件有窗口期），\n其余立即解析；整体超时由 [`super::ConnectOptions::timeout_ms`] 控制\n（缺省 5 秒）。\n\n# Errors\n\n- `wsUrl` 是 http 端点但 `/json/version` 请求失败或没有 `webSocketDebuggerUrl`。\n- `profileDir` 超时内读不到合法的 `DevToolsActivePort`。\n- 三线索全空时按默认端口 9222 走 `/json/version`，失败同上。"
     },
     {
       "path": "cdp::discovery::wait_active_port_file",
@@ -60,17 +60,17 @@
     {
       "path": "cdp::methods::METHODS_RAW",
       "kind": "constant",
-      "docs": "全量命令清单（`Domain.Method` 每行一条）。"
+      "docs": "全量 CDP 命令清单，`Domain.Method` 每行一条（652 条）。"
     },
     {
       "path": "cdp::methods::method_exists",
       "kind": "function",
-      "docs": "是否为清单内已知命令。\n\n# Examples\n\n```\nassert!(cdp::methods::method_exists(\"Page.navigate\"));\nassert!(!cdp::methods::method_exists(\"Page.navigateX\"));\n```"
+      "docs": "判断方法是否为清单内已知命令（被动增强用，不预拦未知方法）。\n\n# Examples\n\n```\nassert!(cdp::methods::method_exists(\"Page.navigate\"));\nassert!(!cdp::methods::method_exists(\"Page.navigateX\"));\n```"
     },
     {
       "path": "cdp::methods::methods_of_domain",
       "kind": "function",
-      "docs": "某域的全部命令（`cdpMethods(\"Network\")` 的底座）。\n\n# Examples\n\n```\nassert!(cdp::methods::methods_of_domain(\"Network\").contains(&\"Network.enable\"));\nassert!(cdp::methods::methods_of_domain(\"NoSuchDomain\").is_empty());\n```"
+      "docs": "返回某域的全部命令，是 `cdpMethods(\"Network\")` 的底座。\n\n# Examples\n\n```\nassert!(cdp::methods::methods_of_domain(\"Network\").contains(&\"Network.enable\"));\nassert!(cdp::methods::methods_of_domain(\"NoSuchDomain\").is_empty());\n```"
     },
     {
       "path": "cdp::methods::suggest",
@@ -85,12 +85,12 @@
     {
       "path": "cdp::pipe::PipeReader",
       "kind": "struct",
-      "docs": "管道读端（启动器持有，读 chrome 写出的 CDP）。"
+      "docs": "CDP 管道的读端，启动器持有，读 chrome 写出的字节流。"
     },
     {
       "path": "cdp::pipe::PipeWriter",
       "kind": "struct",
-      "docs": "管道写端（启动器持有，往 chrome 写 CDP）。"
+      "docs": "CDP 管道的写端，启动器持有，往 chrome 写 CDP 字节流。"
     },
     {
       "path": "cdp::pipe::anon_pair",
@@ -110,22 +110,22 @@
     {
       "path": "cdp::session::ConnectOptions",
       "kind": "struct",
-      "docs": "连接线索三选一：`wsUrl` / `port` / `profileDir`。"
+      "docs": "连接线索三选一（`wsUrl` / `port` / `profileDir`），全部可缺省走自动策略。"
     },
     {
       "path": "cdp::session::PageTarget",
       "kind": "struct",
-      "docs": "一个可附着的 page target（已滤 `chrome://`、`devtools://`）。"
+      "docs": "描述一个可附着的 page target；已滤 `chrome://`、`devtools://` 干扰目标。"
     },
     {
       "path": "cdp::session::Session",
       "kind": "struct",
-      "docs": "常驻 CDP 会话。clone `Arc<Self>` 共享同一条连接。"
+      "docs": "常驻的 browser 级 CDP 会话；clone `Arc<Self>` 共享同一条连接。"
     },
     {
       "path": "cdp::session::is_browser_method",
       "kind": "function",
-      "docs": "方法是否属于 browser 端点域（不附 `sessionId`）。\n\n# Examples\n\n```\nassert!(cdp::session::is_browser_method(\"Target.getTargets\"));\nassert!(!cdp::session::is_browser_method(\"Page.navigate\"));\n```"
+      "docs": "判断方法是否属于 browser 端点域（这类方法不附 `sessionId`）。\n\n# Examples\n\n```\nassert!(cdp::session::is_browser_method(\"Target.getTargets\"));\nassert!(!cdp::session::is_browser_method(\"Page.navigate\"));\n```"
     },
     {
       "path": "cdp::spawn",
@@ -135,22 +135,22 @@
     {
       "path": "cdp::spawn::PipeEngine",
       "kind": "struct",
-      "docs": "管道态引擎句柄：子进程 + 留在启动器侧的两条 CDP 管道端。"
+      "docs": "管道态引擎的句柄：chrome 子进程加留在启动器侧的两条 CDP 管道端。"
     },
     {
       "path": "cdp::spawn::PipeMode",
       "kind": "enum",
-      "docs": "管道通道三态：CLEAN_CHROME_DEBUG 的取值。"
+      "docs": "管道通道的开关取值，即 `CLEAN_CHROME_DEBUG` 环境变量的值域。"
     },
     {
       "path": "cdp::spawn::find_chrome",
       "kind": "function",
-      "docs": "依优先序找 Chrome 可执行文件：`BROWSE_CHROME` 环境变量 ->\n可执行文件同目录与当前目录下的 `chromium-*/chrome.exe`（clean-chrome\nSxS 部署形态）-> 常规安装路径。找不到返回 `None`。\n\n# Examples\n\n```\n// 本机 clean-chrome 部署在仓库根的 chromium-*/ 下时：\nlet p = cdp::spawn::find_chrome(None);\nprintln!(\"{p:?}\");\n```"
+      "docs": "依优先序探测 Chrome 可执行文件，找不到返回 `None`。\n\n优先序：`BROWSE_CHROME` 环境变量 -> 可执行文件同目录与当前目录下的\n`chromium-*/chrome.exe`（clean-chrome SxS 部署形态）-> 常规安装路径。\n\n# Examples\n\n```\nuse std::path::Path;\n// 显式路径原样直通（不校验存在性）\nassert_eq!(\n    cdp::spawn::find_chrome(Some(Path::new(\"/x/chrome\"))),\n    Some(\"/x/chrome\".into()),\n);\n// 无显式时按环境与部署探测，结果随机器而变，不在此断言\n```"
     },
     {
       "path": "cdp::spawn::spawn_engine",
       "kind": "function",
-      "docs": "拉起专属引擎实例。参数：可执行文件、独立 profile 目录、是否无头。\n\n命令行：`--user-data-dir <dir> --remote-debugging-port=0 --no-first-run\n--no-default-browser-check --no-sandbox [--headless] about:blank`。\n\n`--no-sandbox`：SxS 部署的 clean-chrome 在本机沙箱进程打不开自身 exe\n（`Sandbox cannot access executable`，0x5）；引擎是自动化专属隔离实例，\n不承载用户浏览面，关沙箱与 clean-chrome 验收实践一致（linux 同款）。\nchrome 诊断写 `<state>/engine.log`。\n\n# Errors\n\nspawn 失败（路径不是可执行文件等）。"
+      "docs": "拉起一个带调试口的专属引擎实例（独立 profile、端口自动分配）。\n\n参数：可执行文件、独立 profile 目录、是否无头。\n\n命令行：`--user-data-dir <dir> --remote-debugging-port=0 --no-first-run\n--no-default-browser-check --no-sandbox [--headless] about:blank`。\n\n`--no-sandbox`：SxS 部署的 clean-chrome 在本机沙箱进程打不开自身 exe\n（`Sandbox cannot access executable`，0x5）；引擎是自动化专属隔离实例，\n不承载用户浏览面，关沙箱与 clean-chrome 验收实践一致（linux 同款）。\nchrome 诊断写 `<state>/engine.log`。\n\n# Errors\n\nspawn 失败（路径不是可执行文件等）。"
     },
     {
       "path": "cdp::spawn::spawn_engine_pipes",
@@ -165,7 +165,7 @@
     {
       "path": "cdp::spawn::wait_devtools_ready",
       "kind": "function",
-      "docs": "等 spawn 出来的实例调试口就绪（读它 profile 下的 `DevToolsActivePort`），\n返回 WS URL。冷启动首跑（建 profile）可能要几秒，默认上限 15 秒。\n\n# Errors\n\n超时内端口文件没就绪。"
+      "docs": "等 spawn 出来的实例调试口就绪，返回 WS URL（读它 profile 下的\n`DevToolsActivePort`）。\n\n冷启动首跑（建 profile）可能要几秒，默认上限 15 秒。\n\n# Errors\n\n超时内端口文件没就绪。"
     }
   ]
 }

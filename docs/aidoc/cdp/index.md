@@ -18,6 +18,7 @@ Chrome DevTools Protocol（CDP）连接层：一条常驻 browser-level WebSocke
 # Examples
 
 ```no_run
+# // no_run：需要本机 9222 开着真浏览器
 # async fn demo() -> anyhow::Result<()> {
 use cdp::{ConnectOptions, Session};
 use serde_json::json;

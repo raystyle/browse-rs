@@ -9,16 +9,21 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::time::Duration;
 
-/// 依优先序找 Chrome 可执行文件：`BROWSE_CHROME` 环境变量 ->
-/// 可执行文件同目录与当前目录下的 `chromium-*/chrome.exe`（clean-chrome
-/// SxS 部署形态）-> 常规安装路径。找不到返回 `None`。
+/// 依优先序探测 Chrome 可执行文件，找不到返回 `None`。
+///
+/// 优先序：`BROWSE_CHROME` 环境变量 -> 可执行文件同目录与当前目录下的
+/// `chromium-*/chrome.exe`（clean-chrome SxS 部署形态）-> 常规安装路径。
 ///
 /// # Examples
 ///
 /// ```
-/// // 本机 clean-chrome 部署在仓库根的 chromium-*/ 下时：
-/// let p = cdp::spawn::find_chrome(None);
-/// println!("{p:?}");
+/// use std::path::Path;
+/// // 显式路径原样直通（不校验存在性）
+/// assert_eq!(
+///     cdp::spawn::find_chrome(Some(Path::new("/x/chrome"))),
+///     Some("/x/chrome".into()),
+/// );
+/// // 无显式时按环境与部署探测，结果随机器而变，不在此断言
 /// ```
 pub fn find_chrome(explicit: Option<&Path>) -> Option<PathBuf> {
     if let Some(p) = explicit {
@@ -90,8 +95,10 @@ fn fallback_paths() -> Vec<PathBuf> {
 }
 
 /// 引擎 chrome 的 stdio 三路全显式：stderr 落 profile 旁的 `engine.log`，
-/// stdin/stdout 置空。绝不继承父进程句柄；引擎常比单次调用方（CLI/测试）
-/// 活得久，继承的 stderr 管道会让调用方管道永不 EOF（实测挂死过整条流水）。
+/// stdin/stdout 置空。
+///
+/// 绝不继承父进程句柄；引擎常比单次调用方（CLI/测试）活得久，继承的
+/// stderr 管道会让调用方管道永不 EOF（实测挂死过整条流水）。
 fn engine_stdio(profile_dir: &Path) -> std::process::Stdio {
     let log = profile_dir
         .parent()
@@ -105,7 +112,9 @@ fn engine_stdio(profile_dir: &Path) -> std::process::Stdio {
         .unwrap_or_else(|_| std::process::Stdio::null())
 }
 
-/// 拉起专属引擎实例。参数：可执行文件、独立 profile 目录、是否无头。
+/// 拉起一个带调试口的专属引擎实例（独立 profile、端口自动分配）。
+///
+/// 参数：可执行文件、独立 profile 目录、是否无头。
 ///
 /// 命令行：`--user-data-dir <dir> --remote-debugging-port=0 --no-first-run
 /// --no-default-browser-check --no-sandbox [--headless] about:blank`。
@@ -141,8 +150,10 @@ pub fn spawn_engine(chrome: &Path, profile_dir: &Path, headless: bool) -> Result
         .with_context(|| format!("spawn {}", chrome.display()))
 }
 
-/// 等 spawn 出来的实例调试口就绪（读它 profile 下的 `DevToolsActivePort`），
-/// 返回 WS URL。冷启动首跑（建 profile）可能要几秒，默认上限 15 秒。
+/// 等 spawn 出来的实例调试口就绪，返回 WS URL（读它 profile 下的
+/// `DevToolsActivePort`）。
+///
+/// 冷启动首跑（建 profile）可能要几秒，默认上限 15 秒。
 ///
 /// # Errors
 ///
@@ -151,7 +162,7 @@ pub async fn wait_devtools_ready(profile_dir: &Path) -> Result<String> {
     crate::discovery::wait_active_port_file(profile_dir, Duration::from_secs(15)).await
 }
 
-/// 管道态引擎句柄：子进程 + 留在启动器侧的两条 CDP 管道端。
+/// 管道态引擎的句柄：chrome 子进程加留在启动器侧的两条 CDP 管道端。
 pub struct PipeEngine {
     /// chrome 子进程（drop 不杀；`Engine::shutdown` 负责）。
     pub child: Child,
@@ -161,7 +172,7 @@ pub struct PipeEngine {
     pub write: crate::pipe::PipeWriter,
 }
 
-/// 管道通道三态：CLEAN_CHROME_DEBUG 的取值。
+/// 管道通道的开关取值，即 `CLEAN_CHROME_DEBUG` 环境变量的值域。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PipeMode {
     /// 只开 CDP 管道，不开 9222 端口。
@@ -171,7 +182,7 @@ pub enum PipeMode {
 }
 
 impl PipeMode {
-    /// 环境变量值（喂给 `CLEAN_CHROME_DEBUG`）。
+    /// 返回喂给 `CLEAN_CHROME_DEBUG` 的环境变量值。
     pub fn as_env(self) -> &'static str {
         match self {
             PipeMode::Pipe => "pipe",

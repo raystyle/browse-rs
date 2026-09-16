@@ -19,7 +19,7 @@ use rustyline::error::ReadlineError;
 use std::io::IsTerminal;
 use tokio::io::{AsyncBufReadExt, BufReader};
 
-/// 生命周期子命令。
+/// CLI 入口解析出的形态：缺省求值或生命周期子命令。
 enum Mode {
     /// 求值片段（缺省）。
     Eval,

@@ -18,7 +18,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use tokio::sync::Mutex;
 
-/// 方言宿主：一个 CDP [`Session`] + 一份跨片段持久的变量表。
+/// 方言宿主：持有一个 CDP [`Session`] 加一份跨片段持久的变量表。
 pub struct JsHost {
     session: Arc<Session>,
     vars: Mutex<HashMap<String, Value>>,
@@ -66,11 +66,12 @@ struct RefTable {
 }
 
 impl JsHost {
-    /// 绑定一条会话建宿主。变量表为空，随 daemon 生命期累积。
+    /// 绑定一条会话建宿主；变量表为空，随 daemon 生命期累积。
     ///
     /// # Examples
     ///
     /// ```no_run
+    /// # // no_run：构造会 spawn 对话框与路由 watcher 任务，需要 tokio runtime
     /// let host = browse_core::JsHost::new(cdp::Session::new());
     /// ```
     pub fn new(session: Arc<Session>) -> Arc<Self> {
@@ -89,6 +90,7 @@ impl JsHost {
     }
 
     /// 规则变更后同步 `Fetch.enable` 的 pattern 集（去重；空则 disable）。
+    ///
     /// 拦截是 per-session 的：规则作用于当前活动 tab，换 tab 后重设规则。
     async fn sync_fetch_patterns(&self) -> Result<()> {
         let rules = self.routes.lock().await.clone();
@@ -128,7 +130,7 @@ impl JsHost {
         Ok(())
     }
 
-    /// 共享的会话（health/status 面用）。
+    /// 返回宿主共享的会话（health/status 面用）。
     pub fn session(&self) -> Arc<Session> {
         self.session.clone()
     }
@@ -627,9 +629,11 @@ impl JsHost {
     }
 
     /// 查短 ref 对应的 backendNodeId（只认最近一次 snapshot 的表），
-    /// 并做主动代际校验：snapshot 时在页窗口盖过 `__browse_ref_gen` 代标记，
-    /// 引用前核对：不匹配即文档已被导航重开，整表作废，给重取 CTA。
-    /// 标记取不到（evaluate 失败）不拦，退给被动失效（resolveNode/零尺寸）。
+    /// 并做主动代际校验。
+    ///
+    /// snapshot 时在页窗口盖过 `__browse_ref_gen` 代标记，引用前核对：
+    /// 不匹配即文档已被导航重开，整表作废，给重取 CTA。标记取不到
+    /// （evaluate 失败）不拦，退给被动失效（resolveNode/零尺寸）。
     async fn lookup_ref(&self, r: &str) -> Result<i64> {
         let table = self.refs.lock().await.clone();
         let Some(t) = table else {
@@ -817,11 +821,13 @@ impl JsHost {
     }
 }
 
-/// 对话框 watcher（吸收 agent-browser 语义，游离常驻任务）：给新活动
-/// session 补 `Page.enable`（对话框事件需要域开启才流动），`alert`/
-/// `beforeunload` 自动接受（`BROWSE_NO_AUTO_DIALOG=1` 关掉），永不阻塞
-/// agent；`confirm`/`prompt` 留给显式 `dialogAccept/dialogDismiss`。
-/// 状态由 cdp `route()` 截获维护（[`cdp::Session::pending_dialog`]）。
+/// 对话框 watcher（游离常驻任务，吸收 agent-browser 语义）：自动接受
+/// `alert`/`beforeunload`，永不阻塞 agent。
+///
+/// 给新活动 session 补 `Page.enable`（对话框事件需要域开启才流动）；
+/// `BROWSE_NO_AUTO_DIALOG=1` 关掉自动接受；`confirm`/`prompt` 留给显式
+/// `dialogAccept/dialogDismiss`。状态由 cdp `route()` 截获维护
+/// （[`cdp::Session::pending_dialog`]）。
 fn spawn_dialog_watcher(session: Arc<Session>) {
     tokio::spawn(async move {
         let auto =
@@ -863,11 +869,12 @@ fn spawn_dialog_watcher(session: Arc<Session>) {
     });
 }
 
-/// 网络拦截 watcher（游离常驻任务）：`Fetch.requestPaused` 是必须应答的
-/// 事件（不应答页面就挂着），由 watcher 按 [`RouteRule`] 应答；命中的
-/// failRequest/fulfillRequest，未命中的 continueRequest 放行。只在我们
-/// 自己 `Fetch.enable` 时才接管（手动开 Fetch 域的 requestPaused 不动，
-/// 留给 agent 自己 peekEvents 处理）。
+/// 网络拦截 watcher（游离常驻任务）：由它按 [`RouteRule`] 应答必须应答的
+/// `Fetch.requestPaused` 事件（不应答页面就挂着）。
+///
+/// 命中的 failRequest/fulfillRequest，未命中的 continueRequest 放行；
+/// 只在我们自己 `Fetch.enable` 时才接管（手动开 Fetch 域的 requestPaused
+/// 不动，留给 agent 自己 peekEvents 处理）。
 fn spawn_route_watcher(
     session: Arc<Session>,
     routes: Arc<Mutex<Vec<RouteRule>>>,
@@ -970,7 +977,7 @@ fn glob_match(pat: &str, text: &str) -> bool {
     true
 }
 
-/// 极简 base64 编码（标准字母表 + padding；与 [`base64_decode`] 对偶）。
+/// 标准字母表加 padding 的 base64 编码，与 [`base64_decode`] 对偶。
 pub(crate) fn base64_encode(data: &[u8]) -> String {
     const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
@@ -1057,7 +1064,7 @@ pub fn render_result(v: &Value) -> String {
     }
 }
 
-/// 极简 base64 解码（标准字母表，容忍空白；不引 crate）。
+/// 标准字母表的 base64 解码，容忍空白，不引 crate。
 pub(crate) fn base64_decode(s: &str) -> Result<Vec<u8>> {
     const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut val = [0u8; 256];

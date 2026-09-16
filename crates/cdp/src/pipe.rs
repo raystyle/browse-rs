@@ -6,13 +6,13 @@
 
 use anyhow::{Result, anyhow};
 
-/// 管道读端（启动器持有，读 chrome 写出的 CDP）。
+/// CDP 管道的读端，启动器持有，读 chrome 写出的字节流。
 pub struct PipeReader {
     /// OS 句柄（Windows HANDLE / POSIX fd）。
     pub h: usize,
 }
 
-/// 管道写端（启动器持有，往 chrome 写 CDP）。
+/// CDP 管道的写端，启动器持有，往 chrome 写 CDP 字节流。
 pub struct PipeWriter {
     /// OS 句柄（Windows HANDLE / POSIX fd）。
     pub h: usize,
@@ -164,8 +164,10 @@ pub fn anon_pair() -> Result<(PipeReader, PipeWriter)> {
     Ok((PipeReader { h: r as usize }, PipeWriter { h: w as usize }))
 }
 
-/// 建一对匿名管道：`(读端, 写端)`。POSIX fd 跨 fork/exec 继承
-/// （非 CLOEXEC），布线到固定 fd 由 spawn 侧的 pre_exec 做。
+/// 建一对匿名管道：`(读端, 写端)`。
+///
+/// POSIX fd 跨 fork/exec 继承（非 CLOEXEC），布线到固定 fd 由 spawn 侧的
+/// pre_exec 做。
 ///
 /// # Errors
 ///
@@ -203,8 +205,10 @@ pub fn set_inheritable(h: usize, on: bool) -> Result<()> {
     Ok(())
 }
 
-/// POSIX 恒成功：fd 跨 fork/exec 默认继承（非 CLOEXEC），
-/// 布到固定 fd 3/4 由 spawn 的 pre_exec 负责。
+/// POSIX 恒成功（Windows 对应物才可能失败）。
+///
+/// fd 跨 fork/exec 默认继承（非 CLOEXEC），布到固定 fd 3/4 由 spawn 的
+/// pre_exec 负责。
 ///
 /// # Errors
 ///

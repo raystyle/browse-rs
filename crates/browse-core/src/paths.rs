@@ -8,10 +8,10 @@
 
 use std::path::PathBuf;
 
-/// 命名实例缺省端口下界（派生区间 9900..=9999，避开默认 9880 与 bh 的 9876）。
+/// 命名实例派生端口的下界（区间 9900..=9999，避开默认 9880 与 bh 的 9876）。
 pub const DERIVED_PORT_MIN: u16 = 9900;
 
-/// 实例名：`BROWSE_NAME` 的非空值；未设即默认实例（`None`）。
+/// 返回实例名（`BROWSE_NAME` 的非空值）；未设即默认实例（`None`）。
 ///
 /// # Examples
 ///
@@ -27,7 +27,7 @@ pub fn instance_name() -> Option<String> {
         .filter(|s| !s.is_empty())
 }
 
-/// 按名取状态目录（纯函数，可单测）。
+/// 把实例名映射到状态目录的纯函数（同输入恒同输出，可单测）。
 ///
 /// # Examples
 ///
@@ -46,7 +46,7 @@ pub fn state_dir_for(name: &Option<String>) -> PathBuf {
     }
 }
 
-/// 本实例状态目录：`%USERPROFILE%\.browse-rs[\<name>]`。
+/// 返回本实例状态目录（`%USERPROFILE%\.browse-rs[\<name>]`）。
 pub fn state_dir() -> PathBuf {
     state_dir_for(&instance_name())
 }
@@ -61,7 +61,8 @@ fn fnv1a(s: &str) -> u64 {
     h
 }
 
-/// 名字稳定派生端口（9900..=9999）。同名恒同口（重启不变）；
+/// 把名字稳定派生成 9900..=9999 区间的端口，同名恒同口（重启不变）。
+///
 /// 异名可能碰撞（~1% 概率），撞上用 `BROWSE_PORT` 显式指定。
 ///
 /// # Examples
@@ -76,7 +77,7 @@ pub fn derived_port(name: &str) -> u16 {
     DERIVED_PORT_MIN + (fnv1a(name) % 100) as u16
 }
 
-/// 本实例 daemon 端口：`BROWSE_PORT` 显式优先，其次按 `BROWSE_NAME`
+/// 返回本实例 daemon 端口：`BROWSE_PORT` 显式优先，其次按 `BROWSE_NAME`
 /// 派生，缺省 9880。
 ///
 /// # Examples
@@ -96,7 +97,7 @@ pub fn daemon_port() -> u16 {
     instance_name().as_deref().map(derived_port).unwrap_or(9880)
 }
 
-/// 本实例引擎 profile：`<state>/engine-profile`（命名实例各自独占，
+/// 返回本实例引擎 profile（`<state>/engine-profile`；命名实例各自独占，
 /// 可同时 spawn chrome 不互锁）。
 ///
 /// # Examples

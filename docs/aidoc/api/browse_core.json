@@ -15,12 +15,12 @@
     {
       "path": "browse_core::engine::EngineSource",
       "kind": "enum",
-      "docs": "引擎现状（可序列化，`/health` 面直接用）。"
+      "docs": "引擎现状的可序列化快照，`/health` 面直接用。"
     },
     {
       "path": "browse_core::engine::EngineSpec",
       "kind": "enum",
-      "docs": "引擎指令：CLI 旗标 / 环境变量解析出的意图。"
+      "docs": "引擎指令意图，由 CLI 旗标或环境变量解析而来。"
     },
     {
       "path": "browse_core::js_host",
@@ -30,7 +30,7 @@
     {
       "path": "browse_core::js_host::JsHost",
       "kind": "struct",
-      "docs": "方言宿主：一个 CDP [`Session`] + 一份跨片段持久的变量表。"
+      "docs": "方言宿主：持有一个 CDP [`Session`] 加一份跨片段持久的变量表。"
     },
     {
       "path": "browse_core::js_host::render_result",
@@ -45,12 +45,12 @@
     {
       "path": "browse_core::parser::Expr",
       "kind": "enum",
-      "docs": "表达式节点。"
+      "docs": "方言的表达式节点，构成求值树。"
     },
     {
       "path": "browse_core::parser::Stmt",
       "kind": "enum",
-      "docs": "语句：声明、表达式或 return。"
+      "docs": "方言的顶层语句形态：声明、表达式或 return。"
     },
     {
       "path": "browse_core::parser::loc",
@@ -60,22 +60,22 @@
     {
       "path": "browse_core::parser::parse_script",
       "kind": "function",
-      "docs": "解析整段片段为语句列表（先剥 `//` 注释）。\n\n# Errors\n\n- 含方言外语法（见 [`UNSUPPORTED_HINT`]）。\n- token 残缺（未闭合字符串、缺 `=` / `]` / `,` 等），错误信息带停住的位置。\n- 末尾有解析不掉的余量。\n\n# Examples\n\n```\nuse browse_core::parser::{parse_script, Stmt};\n\nlet stmts = parse_script(\"const n = 1\").unwrap();\nassert!(matches!(stmts[0], Stmt::Let { .. }));\nassert!(parse_script(\"if (x) { y() }\").is_err()); // 方言外\n```"
+      "docs": "把整段片段解析成语句列表（先剥 `//` 注释）。\n\n# Errors\n\n- 含方言外语法（if/for/while/函数/模板字符串，报错带下一步 CTA）。\n- token 残缺（未闭合字符串、缺 `=` / `]` / `,` 等），错误信息带停住的位置。\n- 末尾有解析不掉的余量。\n\n# Examples\n\n```\nuse browse_core::parser::{parse_script, Stmt};\n\nlet stmts = parse_script(\"const n = 1\").unwrap();\nassert!(matches!(stmts[0], Stmt::Let { .. }));\nassert!(parse_script(\"if (x) { y() }\").is_err()); // 方言外\n```"
     },
     {
       "path": "browse_core::parser::render",
       "kind": "function",
-      "docs": "语句列表回显成源码（诊断与 doctest 用，非规范格式化器）。\n\n# Examples\n\n```\nuse browse_core::parser::{parse_script, render};\nlet stmts = parse_script(\"await session.Page.navigate({url:\\\"https://example.com\\\"})\").unwrap();\nassert_eq!(render(&stmts), r#\"await session.Page.navigate({url: \"https://example.com\"})\"#);\n```"
+      "docs": "把语句列表回显成源码（诊断与 doctest 用，非规范格式化器）。\n\n# Examples\n\n```\nuse browse_core::parser::{parse_script, render};\nlet stmts = parse_script(\"await session.Page.navigate({url:\\\"https://example.com\\\"})\").unwrap();\nassert_eq!(render(&stmts), r#\"await session.Page.navigate({url: \"https://example.com\"})\"#);\n```"
     },
     {
       "path": "browse_core::parser::snippet_complete",
       "kind": "function",
-      "docs": "片段是否括号配平（stdin/TTY 增量读入用：配平才送求值）。\n\n# Examples\n\n```\nassert!(browse_core::snippet_complete(\"await session.use(tabs[0].targetId)\"));\nassert!(!browse_core::snippet_complete(\"const x = {a: 1\"));\n```"
+      "docs": "判断片段括号是否配平（stdin/TTY 增量读入用：配平才送求值）。\n\n# Examples\n\n```\nassert!(browse_core::snippet_complete(\"await session.use(tabs[0].targetId)\"));\nassert!(!browse_core::snippet_complete(\"const x = {a: 1\"));\n```"
     },
     {
       "path": "browse_core::parser::strip_comments",
       "kind": "function",
-      "docs": "剥掉 `//` 行注释（保留字符串字面量里的 `//`）。\n\n# Examples\n\n```\nassert_eq!(browse_core::parser::strip_comments(\"a // 尾注\\nb\"), \"a \\nb\");\nassert_eq!(browse_core::parser::strip_comments(r#\"\"http://x\"\"#), r#\"\"http://x\"\"#);\n```"
+      "docs": "把 `//` 行注释剥掉，保留字符串字面量里的 `//`。\n\n# Examples\n\n```\nassert_eq!(browse_core::parser::strip_comments(\"a // 尾注\\nb\"), \"a \\nb\");\nassert_eq!(browse_core::parser::strip_comments(r#\"\"http://x\"\"#), r#\"\"http://x\"\"#);\n```"
     },
     {
       "path": "browse_core::paths",
@@ -85,37 +85,37 @@
     {
       "path": "browse_core::paths::DERIVED_PORT_MIN",
       "kind": "constant",
-      "docs": "命名实例缺省端口下界（派生区间 9900..=9999，避开默认 9880 与 bh 的 9876）。"
+      "docs": "命名实例派生端口的下界（区间 9900..=9999，避开默认 9880 与 bh 的 9876）。"
     },
     {
       "path": "browse_core::paths::daemon_port",
       "kind": "function",
-      "docs": "本实例 daemon 端口：`BROWSE_PORT` 显式优先，其次按 `BROWSE_NAME`\n派生，缺省 9880。\n\n# Examples\n\n```\n// 未设任何变量时是默认口\nif std::env::var_os(\"BROWSE_PORT\").is_none() && std::env::var_os(\"BROWSE_NAME\").is_none() {\n    assert_eq!(browse_core::paths::daemon_port(), 9880);\n}\n```"
+      "docs": "返回本实例 daemon 端口：`BROWSE_PORT` 显式优先，其次按 `BROWSE_NAME`\n派生，缺省 9880。\n\n# Examples\n\n```\n// 未设任何变量时是默认口\nif std::env::var_os(\"BROWSE_PORT\").is_none() && std::env::var_os(\"BROWSE_NAME\").is_none() {\n    assert_eq!(browse_core::paths::daemon_port(), 9880);\n}\n```"
     },
     {
       "path": "browse_core::paths::derived_port",
       "kind": "function",
-      "docs": "名字稳定派生端口（9900..=9999）。同名恒同口（重启不变）；\n异名可能碰撞（~1% 概率），撞上用 `BROWSE_PORT` 显式指定。\n\n# Examples\n\n```\nlet p = browse_core::paths::derived_port(\"worker-1\");\nassert!((9900..=9999).contains(&p));\nassert_eq!(p, browse_core::paths::derived_port(\"worker-1\"), \"同名同口\");\nassert_ne!(p, browse_core::paths::derived_port(\"worker-2\"));\n```"
+      "docs": "把名字稳定派生成 9900..=9999 区间的端口，同名恒同口（重启不变）。\n\n异名可能碰撞（~1% 概率），撞上用 `BROWSE_PORT` 显式指定。\n\n# Examples\n\n```\nlet p = browse_core::paths::derived_port(\"worker-1\");\nassert!((9900..=9999).contains(&p));\nassert_eq!(p, browse_core::paths::derived_port(\"worker-1\"), \"同名同口\");\nassert_ne!(p, browse_core::paths::derived_port(\"worker-2\"));\n```"
     },
     {
       "path": "browse_core::paths::engine_profile_dir",
       "kind": "function",
-      "docs": "本实例引擎 profile：`<state>/engine-profile`（命名实例各自独占，\n可同时 spawn chrome 不互锁）。\n\n# Examples\n\n```\nlet dir = browse_core::paths::engine_profile_dir();\nassert!(dir.ends_with(\"engine-profile\"));\n```"
+      "docs": "返回本实例引擎 profile（`<state>/engine-profile`；命名实例各自独占，\n可同时 spawn chrome 不互锁）。\n\n# Examples\n\n```\nlet dir = browse_core::paths::engine_profile_dir();\nassert!(dir.ends_with(\"engine-profile\"));\n```"
     },
     {
       "path": "browse_core::paths::instance_name",
       "kind": "function",
-      "docs": "实例名：`BROWSE_NAME` 的非空值；未设即默认实例（`None`）。\n\n# Examples\n\n```\n// 未设 BROWSE_NAME 时是默认实例\nif std::env::var_os(\"BROWSE_NAME\").is_none() {\n    assert_eq!(browse_core::paths::instance_name(), None);\n}\n```"
+      "docs": "返回实例名（`BROWSE_NAME` 的非空值）；未设即默认实例（`None`）。\n\n# Examples\n\n```\n// 未设 BROWSE_NAME 时是默认实例\nif std::env::var_os(\"BROWSE_NAME\").is_none() {\n    assert_eq!(browse_core::paths::instance_name(), None);\n}\n```"
     },
     {
       "path": "browse_core::paths::state_dir",
       "kind": "function",
-      "docs": "本实例状态目录：`%USERPROFILE%\\.browse-rs[\\<name>]`。"
+      "docs": "返回本实例状态目录（`%USERPROFILE%\\.browse-rs[\\<name>]`）。"
     },
     {
       "path": "browse_core::paths::state_dir_for",
       "kind": "function",
-      "docs": "按名取状态目录（纯函数，可单测）。\n\n# Examples\n\n```\nlet d = browse_core::paths::state_dir_for(&Some(\"t1\".into()));\nassert!(d.ends_with(r\".browse-rs\\t1\") || d.ends_with(\".browse-rs/t1\"));\n```"
+      "docs": "把实例名映射到状态目录的纯函数（同输入恒同输出，可单测）。\n\n# Examples\n\n```\nlet d = browse_core::paths::state_dir_for(&Some(\"t1\".into()));\nassert!(d.ends_with(r\".browse-rs\\t1\") || d.ends_with(\".browse-rs/t1\"));\n```"
     },
     {
       "path": "browse_core::record",
@@ -125,12 +125,12 @@
     {
       "path": "browse_core::record::Recorder",
       "kind": "struct",
-      "docs": "一场进行中的录制：目录、计数器、停泵旗标与泵任务句柄。"
+      "docs": "承载一场进行中的录制，聚合目录、计数器、停泵旗标与泵任务句柄。"
     },
     {
       "path": "browse_core::record::start",
       "kind": "function",
-      "docs": "开始录制。`opts`（都可省）：`everyNthFrame`（抽帧，源端剪辑）、\n`maxWidth`/`maxHeight`（缩放）、`quality`（JPEG 质量；本实现恒 PNG，\n留作向后兼容）。帧写 `<state>/record-<ts>/frame-NNNNNN.png`。\n\n# Errors\n\n未连接、`Page.startScreencast` 失败、目录建不出来。"
+      "docs": "开始一场屏幕录制，帧由常驻泵任务落盘。\n\n`opts`（都可省）：`everyNthFrame`（抽帧，源端剪辑）、`maxWidth`/`maxHeight`\n（缩放）、`quality`（JPEG 质量；本实现恒 PNG，留作向后兼容）。帧写\n`<state>/record-<ts>/frame-NNNNNN.png`。\n\n# Errors\n\n未连接、`Page.startScreencast` 失败、目录建不出来。"
     },
     {
       "path": "browse_core::record::stop",
@@ -145,17 +145,17 @@
     {
       "path": "browse_core::semantic::click_at",
       "kind": "function",
-      "docs": "真点击：`Input.dispatchMouseEvent` pressed+released 于视口坐标 (x,y)。\n事件是 trusted 的；坐标命中的是当前可见物。不自动激活 tab（人机共存）。\n\n# Errors\n\n未连接或派发失败。从未激活的后台 tab 可能挂起（30s 超时），届时按错误\nCTA 先 `session.Target.activateTarget({targetId})`。"
+      "docs": "用 `Input.dispatchMouseEvent` pressed+released 在视口坐标 (x,y) 派发\ntrusted 的真点击。\n\n坐标命中的是当前可见物；不自动激活 tab（人机共存）。\n\n# Errors\n\n未连接或派发失败。从未激活的后台 tab 可能挂起（30s 超时），届时按错误\nCTA 先 `session.Target.activateTarget({targetId})`。"
     },
     {
       "path": "browse_core::semantic::click_ref",
       "kind": "function",
-      "docs": "按短 ref 点击：滚动可见 -> 量视口中心 -> **遮挡命中测试** -> 复用\n[`click_at`] 的 trusted 鼠标事件。命中测试（吸收 agent-browser 的\nblocker 思路）：`elementFromPoint` 看点击点实际落谁头上，落点与目标\n无祖孙/label 关联即判被遮挡（consent banner、modal 场景），报遮挡\n元素描述并拒绝点击：绝不静默点错位置。`clickAt` 是显式「点可见物」，\n不做此检查。\n\n# Errors\n\nref 失效（节点没了）、取不到中心（不可见）、被遮挡（错误附遮挡元素）、\n派发失败。"
+      "docs": "按短 ref 点击：滚动可见 -> 量视口中心 -> **遮挡命中测试** -> 复用\n[`click_at`] 的 trusted 鼠标事件。\n\n命中测试（吸收 agent-browser 的 blocker 思路）：`elementFromPoint` 看\n点击点实际落谁头上，落点与目标无祖孙/label 关联即判被遮挡（consent\nbanner、modal 场景），报遮挡元素描述并拒绝点击：绝不静默点错位置。\n`clickAt` 是显式「点可见物」，不做此检查。\n\n# Errors\n\nref 失效（节点没了）、取不到中心（不可见）、被遮挡（错误附遮挡元素）、\n派发失败。"
     },
     {
       "path": "browse_core::semantic::close_tab",
       "kind": "function",
-      "docs": "关 tab；缺省关当前活动 tab。守卫层只放行本会话自建 tab：用户 tab 一律拒绝。\n\n# Errors\n\n目标不是自建 tab（守卫拦截），或 closeTarget 失败。"
+      "docs": "关 tab（缺省关当前活动 tab）；守卫层只放行本会话自建 tab，用户 tab 一律拒绝。\n\n# Errors\n\n目标不是自建 tab（守卫拦截），或 closeTarget 失败。"
     },
     {
       "path": "browse_core::semantic::current_tab",
@@ -165,7 +165,7 @@
     {
       "path": "browse_core::semantic::fill_input",
       "kind": "function",
-      "docs": "按 CSS 选择器填输入框：focus -> 全选（commands，不发 Ctrl+A）-> 可选\nBackspace 清空 -> `Input.insertText` -> 回读严格验证。只支持文本类控件；\n`<select>` 用 `Runtime.evaluate` 设 value 并派发 change 事件（CTA 给写法）。\n\n# Errors\n\n选择器未命中、readOnly、回读不一致（错误附回读值）。"
+      "docs": "按 CSS 选择器填输入框：focus -> 全选（commands，不发 Ctrl+A）-> 可选\nBackspace 清空 -> `Input.insertText` -> 回读严格验证。\n\n只支持文本类控件；`<select>` 用 `Runtime.evaluate` 设 value 并派发\nchange 事件（CTA 给写法）。\n\n# Errors\n\n选择器未命中、readOnly、回读不一致（错误附回读值）。"
     },
     {
       "path": "browse_core::semantic::fill_ref",
@@ -180,17 +180,17 @@
     {
       "path": "browse_core::semantic::pdf",
       "kind": "function",
-      "docs": "当前页存 PDF（`Page.printToPDF`，`printBackground`+`preferCSSPageSize`）。\n仅无头 chrome 支持（Chromium 限制）。路径缺省落 `<state>/pdf-<ts>.pdf`，\n回 `{path,bytes}`：screenshot 的姊妹件，agent 存档页面用。\n\n# Errors\n\n有头 chrome（CTP 拒绝）、PDF 生成或写盘失败。"
+      "docs": "当前页存 PDF（`Page.printToPDF`，`printBackground`+`preferCSSPageSize`），\n仅无头 chrome 支持（Chromium 限制）。\n\n路径缺省落 `<state>/pdf-<ts>.pdf`，回 `{path,bytes}`：screenshot 的\n姊妹件，agent 存档页面用。\n\n# Errors\n\n有头 chrome（CTP 拒绝）、PDF 生成或写盘失败。"
     },
     {
       "path": "browse_core::semantic::press_key",
       "kind": "function",
-      "docs": "按一个键：`Input.dispatchKeyEvent` keyDown(+text)+keyUp。Enter 的 text\n是 `\\r`（CDP 契约）；可打印单字符带自身为 text。\n\n# Errors\n\n未连接或派发失败。"
+      "docs": "用 `Input.dispatchKeyEvent` keyDown(+text)+keyUp 按一个键；Enter 的\ntext 是 `\\r`（CDP 契约），可打印单字符带自身为 text。\n\n# Errors\n\n未连接或派发失败。"
     },
     {
       "path": "browse_core::semantic::select_option",
       "kind": "function",
-      "docs": "按短 ref 选下拉框选项：value 或可见 label 匹配，设值并派发 input+change\n（不发鼠标事件，确定性路径）。回 `{value,label}`。选择器版的入口是\n`fillInput` 的 SELECT CTA（指向本函数先 snapshot 取 ref）。\n\n# Errors\n\nref 失效、目标不是 `<select>`、没有匹配选项（错误附全部可选 value）。"
+      "docs": "按短 ref 选下拉框选项：value 或可见 label 匹配，设值并派发 input+change\n（不发鼠标事件，确定性路径），回 `{value,label}`。\n\n选择器版的入口是 `fillInput` 的 SELECT CTA（指向本函数先 snapshot 取 ref）。\n\n# Errors\n\nref 失效、目标不是 `<select>`、没有匹配选项（错误附全部可选 value）。"
     },
     {
       "path": "browse_core::semantic::switch_tab",
@@ -200,12 +200,12 @@
     {
       "path": "browse_core::semantic::wait_idle",
       "kind": "function",
-      "docs": "等 network 静默：从调用时刻起观察 `Network.requestWillBeSent` 与\n`loadingFinished/loadingFailed` 的差值，连续两拍在飞为 0 即静默。\n起点之前挂着的请求不在观察内（窗口语义，同 bh wait_for_network_idle）。\n\n# Errors\n\n`ms` 内未静默。"
+      "docs": "等 network 静默：从调用时刻起观察 `Network.requestWillBeSent` 与\n`loadingFinished/loadingFailed` 的差值，连续两拍在飞为 0 即静默。\n\n起点之前挂着的请求不在观察内（窗口语义，同 bh wait_for_network_idle）。\n\n# Errors\n\n`ms` 内未静默。"
     },
     {
       "path": "browse_core::semantic::wait_load",
       "kind": "function",
-      "docs": "等 load：先宽容地等一次 frameNavigated（导航可能已完成，超时忽略），\n再等 `document.readyState === 'complete'`。已加载页面立即返回。\n\n# Errors\n\n`ms` 内 readyState 不到 complete。"
+      "docs": "等页面 load 完成：先宽容地等一次 frameNavigated（导航可能已完成，\n超时忽略），再等 `document.readyState === 'complete'`。\n\n已加载页面立即返回。\n\n# Errors\n\n`ms` 内 readyState 不到 complete。"
     },
     {
       "path": "browse_core::server",
@@ -215,17 +215,17 @@
     {
       "path": "browse_core::server::Daemon",
       "kind": "struct",
-      "docs": "daemon 运行面：宿主、引擎、缺省引擎意图、单飞槽与退出旗标。"
+      "docs": "HTTP daemon 的运行面聚合：宿主、引擎、缺省引擎意图、单飞槽与退出旗标。"
     },
     {
       "path": "browse_core::server::EngineUpRequest",
       "kind": "struct",
-      "docs": "`/engine/up` 请求体。"
+      "docs": "描述 POST /engine/up 的请求体。"
     },
     {
       "path": "browse_core::server::EvalRequest",
       "kind": "struct",
-      "docs": "`/eval` 请求体。"
+      "docs": "描述 POST /eval 的请求体。"
     },
     {
       "path": "browse_core::server::serve",
@@ -235,52 +235,52 @@
     {
       "path": "browse_core::surface",
       "kind": "module",
-      "docs": "命令面目录（incur-rs 原则的方言版适配）：CLI 子命令、方言全局函数、\nsession 方法**只在这一处登记为数据**，JSON Schema、LLM 清单\n（`llms.txt` / `llms-full.txt`）与技能（`SKILL.md`）全部由\n[`render`] 系列从本目录派生（`browse --gen-surface docs/surface`\n重生成），`tests/surface_contract.rs` 锁漂移。\n\n与 incur（derive 宏命令图）的差异：我们的接口面是方言片段而非结构化\n参数，故目录手写为 `const`，派生物种取同样的三件（schema/llms/skill）。"
+      "docs": "命令面目录（incur-rs 原则的方言版适配）：CLI 子命令、方言全局函数、\nsession 方法**只在这一处登记为数据**，JSON Schema、LLM 清单\n（`llms.txt` / `llms-full.txt`）与技能（`SKILL.md`）全部由\n[`render_llms`] 系列派生函数从本目录生成（`browse --gen-surface docs/surface`\n重生成），`tests/surface_contract.rs` 锁漂移。\n\n与 incur（derive 宏命令图）的差异：我们的接口面是方言片段而非结构化\n参数，故目录手写为 `const`，派生物种取同样的三件（schema/llms/skill）。"
     },
     {
       "path": "browse_core::surface::ArgSpec",
       "kind": "struct",
-      "docs": "一个参数的形状。"
+      "docs": "描述一个参数的形状：名、类型、必填与否与缺省。"
     },
     {
       "path": "browse_core::surface::COMMANDS",
       "kind": "constant",
-      "docs": "命令目录（单一真相源）。"
+      "docs": "全量命令目录，CLI/方言/session 三面的单一真相源。"
     },
     {
       "path": "browse_core::surface::CmdKind",
       "kind": "enum",
-      "docs": "命令种类。"
+      "docs": "命令在目录中的种类：CLI 子命令、方言全局函数或 session 方法。"
     },
     {
       "path": "browse_core::surface::CmdSpec",
       "kind": "struct",
-      "docs": "一条命令的登记项。"
+      "docs": "命令目录里一条命令的登记项。"
     },
     {
       "path": "browse_core::surface::catalog_json",
       "kind": "function",
-      "docs": "目录的运行时 JSON（hostFunctions 探针的返回体）。"
+      "docs": "返回目录的运行时 JSON，即 hostFunctions 探针的返回体。"
     },
     {
       "path": "browse_core::surface::render_llms",
       "kind": "function",
-      "docs": "紧凑 LLM 清单（llms.txt）。"
+      "docs": "渲染紧凑 LLM 清单 `llms.txt`（索引层，一行一命令）。"
     },
     {
       "path": "browse_core::surface::render_llms_full",
       "kind": "function",
-      "docs": "完整 LLM 清单（llms-full.txt）：索引 + 逐命令参数与示例。"
+      "docs": "渲染完整 LLM 清单 `llms-full.txt`：索引加逐命令参数与示例。"
     },
     {
       "path": "browse_core::surface::render_schema",
       "kind": "function",
-      "docs": "JSON Schema 包（每命令一个 definition；输入按目录，输出是运行时 JSON）。"
+      "docs": "渲染 JSON Schema 包：每命令一个 definition，输入按目录、输出是运行时 JSON。"
     },
     {
       "path": "browse_core::surface::render_skill",
       "kind": "function",
-      "docs": "技能文件（SKILL.md，incur 同款 frontmatter 契约）。"
+      "docs": "渲染技能文件 `SKILL.md`（incur 同款 frontmatter 契约）。"
     },
     {
       "path": "browse_core::surface::write_surface_files",

@@ -1,7 +1,7 @@
 //! 命令面目录（incur-rs 原则的方言版适配）：CLI 子命令、方言全局函数、
 //! session 方法**只在这一处登记为数据**，JSON Schema、LLM 清单
 //! （`llms.txt` / `llms-full.txt`）与技能（`SKILL.md`）全部由
-//! [`render`] 系列从本目录派生（`browse --gen-surface docs/surface`
+//! [`render_llms`] 系列派生函数从本目录生成（`browse --gen-surface docs/surface`
 //! 重生成），`tests/surface_contract.rs` 锁漂移。
 //!
 //! 与 incur（derive 宏命令图）的差异：我们的接口面是方言片段而非结构化
@@ -9,7 +9,7 @@
 
 use serde_json::{Value, json};
 
-/// 命令种类。
+/// 命令在目录中的种类：CLI 子命令、方言全局函数或 session 方法。
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum CmdKind {
     /// CLI 子命令或旗标形态。
@@ -30,7 +30,7 @@ impl CmdKind {
     }
 }
 
-/// 一个参数的形状。
+/// 描述一个参数的形状：名、类型、必填与否与缺省。
 pub struct ArgSpec {
     /// 参数名。
     pub name: &'static str,
@@ -42,7 +42,7 @@ pub struct ArgSpec {
     pub default: Option<&'static str>,
 }
 
-/// 一条命令的登记项。
+/// 命令目录里一条命令的登记项。
 pub struct CmdSpec {
     /// 调用名（全局函数裸名；session 方法不带前缀）。
     pub name: &'static str,
@@ -77,7 +77,7 @@ macro_rules! arg {
     };
 }
 
-/// 命令目录（单一真相源）。
+/// 全量命令目录，CLI/方言/session 三面的单一真相源。
 pub const COMMANDS: &[CmdSpec] = &[
     // ---- CLI ----
     CmdSpec {
@@ -529,7 +529,7 @@ pub const COMMANDS: &[CmdSpec] = &[
     },
 ];
 
-/// 目录的运行时 JSON（hostFunctions 探针的返回体）。
+/// 返回目录的运行时 JSON，即 hostFunctions 探针的返回体。
 pub fn catalog_json() -> Value {
     Value::Array(
         COMMANDS
@@ -587,7 +587,7 @@ fn def_name(c: &CmdSpec) -> String {
     }
 }
 
-/// JSON Schema 包（每命令一个 definition；输入按目录，输出是运行时 JSON）。
+/// 渲染 JSON Schema 包：每命令一个 definition，输入按目录、输出是运行时 JSON。
 pub fn render_schema() -> Value {
     let mut defs = serde_json::Map::new();
     for c in COMMANDS {
@@ -610,7 +610,7 @@ pub fn render_schema() -> Value {
     })
 }
 
-/// 紧凑 LLM 清单（llms.txt）。
+/// 渲染紧凑 LLM 清单 `llms.txt`（索引层，一行一命令）。
 pub fn render_llms() -> String {
     let mut out = String::from(
         "# browse-rs 命令清单\n\n给 agent 用的 clean-chrome browse CLI。\
@@ -633,7 +633,7 @@ pub fn render_llms() -> String {
     out
 }
 
-/// 完整 LLM 清单（llms-full.txt）：索引 + 逐命令参数与示例。
+/// 渲染完整 LLM 清单 `llms-full.txt`：索引加逐命令参数与示例。
 pub fn render_llms_full() -> String {
     let mut out = render_llms();
     out.push_str("\n---\n");
@@ -657,7 +657,7 @@ pub fn render_llms_full() -> String {
     out
 }
 
-/// 技能文件（SKILL.md，incur 同款 frontmatter 契约）。
+/// 渲染技能文件 `SKILL.md`（incur 同款 frontmatter 契约）。
 pub fn render_skill() -> String {
     let mut out = String::from(
         "---\nname: browse\ndescription: \"Drive clean-chrome via the browse CLI with JS-dialect snippets. Run `browse --help` for usage details.\"\nrequires_bin: browse\ncommand: browse\n---\n",

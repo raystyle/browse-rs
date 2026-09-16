@@ -9,5 +9,5 @@
 
 ## Constants
 
-- `DROP_THRESHOLD` — 触发落盘的阈值（字节）。序列化后的打印串超过即落盘。
+- `DROP_THRESHOLD` — 序列化后的打印串超过本阈值（字节）即落盘，保护 agent 上下文。
 

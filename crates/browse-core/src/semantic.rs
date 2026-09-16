@@ -56,7 +56,7 @@ pub async fn current_tab(s: &Session) -> Result<Value> {
         .unwrap_or(Value::Null))
 }
 
-/// 关 tab；缺省关当前活动 tab。守卫层只放行本会话自建 tab：用户 tab 一律拒绝。
+/// 关 tab（缺省关当前活动 tab）；守卫层只放行本会话自建 tab，用户 tab 一律拒绝。
 ///
 /// # Errors
 ///
@@ -74,8 +74,10 @@ pub async fn close_tab(s: &Session, target_id: Option<&str>) -> Result<Value> {
     Ok(json!(true))
 }
 
-/// 真点击：`Input.dispatchMouseEvent` pressed+released 于视口坐标 (x,y)。
-/// 事件是 trusted 的；坐标命中的是当前可见物。不自动激活 tab（人机共存）。
+/// 用 `Input.dispatchMouseEvent` pressed+released 在视口坐标 (x,y) 派发
+/// trusted 的真点击。
+///
+/// 坐标命中的是当前可见物；不自动激活 tab（人机共存）。
 ///
 /// # Errors
 ///
@@ -94,8 +96,10 @@ pub async fn click_at(s: &Session, x: i64, y: i64) -> Result<Value> {
 }
 
 /// 按 CSS 选择器填输入框：focus -> 全选（commands，不发 Ctrl+A）-> 可选
-/// Backspace 清空 -> `Input.insertText` -> 回读严格验证。只支持文本类控件；
-/// `<select>` 用 `Runtime.evaluate` 设 value 并派发 change 事件（CTA 给写法）。
+/// Backspace 清空 -> `Input.insertText` -> 回读严格验证。
+///
+/// 只支持文本类控件；`<select>` 用 `Runtime.evaluate` 设 value 并派发
+/// change 事件（CTA 给写法）。
 ///
 /// # Errors
 ///
@@ -174,8 +178,8 @@ pub async fn fill_input(s: &Session, selector: &str, text: &str) -> Result<Value
     Ok(json!(text))
 }
 
-/// 按一个键：`Input.dispatchKeyEvent` keyDown(+text)+keyUp。Enter 的 text
-/// 是 `\r`（CDP 契约）；可打印单字符带自身为 text。
+/// 用 `Input.dispatchKeyEvent` keyDown(+text)+keyUp 按一个键；Enter 的
+/// text 是 `\r`（CDP 契约），可打印单字符带自身为 text。
 ///
 /// # Errors
 ///
@@ -204,8 +208,10 @@ pub async fn press_key(s: &Session, key: &str) -> Result<Value> {
     Ok(json!(true))
 }
 
-/// 等 load：先宽容地等一次 frameNavigated（导航可能已完成，超时忽略），
-/// 再等 `document.readyState === 'complete'`。已加载页面立即返回。
+/// 等页面 load 完成：先宽容地等一次 frameNavigated（导航可能已完成，
+/// 超时忽略），再等 `document.readyState === 'complete'`。
+///
+/// 已加载页面立即返回。
 ///
 /// # Errors
 ///
@@ -244,6 +250,7 @@ pub async fn wait_load(s: &Session, ms: u64) -> Result<Value> {
 
 /// 等 network 静默：从调用时刻起观察 `Network.requestWillBeSent` 与
 /// `loadingFinished/loadingFailed` 的差值，连续两拍在飞为 0 即静默。
+///
 /// 起点之前挂着的请求不在观察内（窗口语义，同 bh wait_for_network_idle）。
 ///
 /// # Errors
@@ -285,16 +292,14 @@ pub async fn wait_idle(s: &Session, ms: u64) -> Result<Value> {
     }
 }
 
-/// 派发一串 Input 域调用；撞 `cdp timeout`（从未激活的后台 tab 收 Input
-/// 的典型症状）时 `Target.activateTarget` 后整串重试一次；bh 内置激活
-/// 重试同款：只在挂起时自愈，不主动抢用户前台。
-/// 元素引用（D35-lite）：backendNodeId 锚定的真交互。ref 的短名映射在
-/// [`crate::js_host`]（每次 `snapshot()` 整表替换）；本层只管把
-/// backendNodeId 变成 focus/click。引用失效是被动发现的：导航后节点
-/// 没了，`DOM.resolveNode` 报错 -> CTA 重新 snapshot。
+/// 把 backendNodeId 解析成 Runtime objectId（`DOM.resolveNode`）。
 ///
-/// backendNodeId -> Runtime objectId（`DOM.resolveNode`）。节点已不在
-/// 当前页面（导航/移除）时报错并带重取 ref 的 CTA。
+/// 节点已不在当前页面（导航/移除）时报错并带重取 ref 的 CTA。
+///
+/// 元素引用（D35-lite）背景：backendNodeId 锚定真交互，ref 的短名映射在
+/// [`crate::js_host`]（每次 `snapshot()` 整表替换），本层只管把
+/// backendNodeId 变成 focus/click；引用失效是被动发现的（导航后节点
+/// 没了，`DOM.resolveNode` 报错 -> CTA 重新 snapshot）。
 async fn resolve_node_object(s: &Session, backend_node_id: i64) -> Result<String> {
     match s
         .call("DOM.resolveNode", json!({ "backendNodeId": backend_node_id }))
@@ -314,11 +319,12 @@ async fn resolve_node_object(s: &Session, backend_node_id: i64) -> Result<String
 }
 
 /// 按短 ref 点击：滚动可见 -> 量视口中心 -> **遮挡命中测试** -> 复用
-/// [`click_at`] 的 trusted 鼠标事件。命中测试（吸收 agent-browser 的
-/// blocker 思路）：`elementFromPoint` 看点击点实际落谁头上，落点与目标
-/// 无祖孙/label 关联即判被遮挡（consent banner、modal 场景），报遮挡
-/// 元素描述并拒绝点击：绝不静默点错位置。`clickAt` 是显式「点可见物」，
-/// 不做此检查。
+/// [`click_at`] 的 trusted 鼠标事件。
+///
+/// 命中测试（吸收 agent-browser 的 blocker 思路）：`elementFromPoint` 看
+/// 点击点实际落谁头上，落点与目标无祖孙/label 关联即判被遮挡（consent
+/// banner、modal 场景），报遮挡元素描述并拒绝点击：绝不静默点错位置。
+/// `clickAt` 是显式「点可见物」，不做此检查。
 ///
 /// # Errors
 ///
@@ -473,9 +479,11 @@ pub async fn fill_ref(s: &Session, backend_node_id: i64, text: &str) -> Result<V
     Ok(json!(text))
 }
 
-/// 当前页存 PDF（`Page.printToPDF`，`printBackground`+`preferCSSPageSize`）。
-/// 仅无头 chrome 支持（Chromium 限制）。路径缺省落 `<state>/pdf-<ts>.pdf`，
-/// 回 `{path,bytes}`：screenshot 的姊妹件，agent 存档页面用。
+/// 当前页存 PDF（`Page.printToPDF`，`printBackground`+`preferCSSPageSize`），
+/// 仅无头 chrome 支持（Chromium 限制）。
+///
+/// 路径缺省落 `<state>/pdf-<ts>.pdf`，回 `{path,bytes}`：screenshot 的
+/// 姊妹件，agent 存档页面用。
 ///
 /// # Errors
 ///
@@ -513,8 +521,9 @@ pub async fn pdf(s: &Session, path: Option<&str>) -> Result<Value> {
 }
 
 /// 按短 ref 选下拉框选项：value 或可见 label 匹配，设值并派发 input+change
-/// （不发鼠标事件，确定性路径）。回 `{value,label}`。选择器版的入口是
-/// `fillInput` 的 SELECT CTA（指向本函数先 snapshot 取 ref）。
+/// （不发鼠标事件，确定性路径），回 `{value,label}`。
+///
+/// 选择器版的入口是 `fillInput` 的 SELECT CTA（指向本函数先 snapshot 取 ref）。
 ///
 /// # Errors
 ///
@@ -570,7 +579,7 @@ pub async fn select_option(s: &Session, backend_node_id: i64, value: &str) -> Re
     }))
 }
 
-/// 派发一串 Input 域调用。两个挂起自愈路径：
+/// 派发一串 Input 域调用，带两条挂起自愈路径：
 /// - 页面 JS 对话框开着：Input 被它挂起，立即报「先处理对话框」CTA，
 ///   不烧超时（状态来自 [`cdp::Session::pending_dialog`]，route 层截获）。
 /// - `cdp timeout`（从未激活的后台 tab 收 Input 的典型症状）：

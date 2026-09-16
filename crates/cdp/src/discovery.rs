@@ -9,7 +9,7 @@ use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-/// 解析端口字面量：`"9222"`、`"http://127.0.0.1:9222"`、`"127.0.0.1:9222/"` 都出 `9222`。
+/// 端口字面量的宽容解析：`"9222"`、`"http://127.0.0.1:9222"`、`"127.0.0.1:9222/"` 都出 `9222`。
 ///
 /// # Examples
 ///
@@ -55,9 +55,11 @@ pub fn ws_from_active_port_text(text: &str) -> Option<String> {
     }
 }
 
-/// 解析 [`super::ConnectOptions`] 为 WS URL。`profileDir` 路径会轮询等文件出现
-/// （Chrome 启动到写文件有窗口期），其余立即解析；整体超时由
-/// [`super::ConnectOptions::timeout_ms`] 控制（缺省 5 秒）。
+/// 把 [`super::ConnectOptions`] 三线索解析成 WS URL。
+///
+/// `profileDir` 路径会轮询等文件出现（Chrome 启动到写文件有窗口期），
+/// 其余立即解析；整体超时由 [`super::ConnectOptions::timeout_ms`] 控制
+/// （缺省 5 秒）。
 ///
 /// # Errors
 ///
@@ -126,7 +128,7 @@ pub async fn wait_active_port_file(profile_dir: &Path, timeout: Duration) -> Res
     }
 }
 
-/// clean-chrome / Chromium / Chrome 的默认 user-data 目录（按探测优先序）。
+/// 返回默认 user-data 目录清单（clean-chrome / Chromium / Chrome，按探测优先序）。
 ///
 /// clean-chrome 是 Chromium 品牌，profile 在 `%LOCALAPPDATA%\Chromium\User Data`。
 pub fn default_profile_dirs() -> Vec<PathBuf> {
@@ -143,7 +145,7 @@ pub fn default_profile_dirs() -> Vec<PathBuf> {
     dirs
 }
 
-/// 引擎附着探测：返回本机已开调试口浏览器的 WS URL，没有则 `None`。
+/// 探测本机已开调试口的浏览器，返回其 WS URL；没有则 `None`。
 ///
 /// 顺序：默认端口 9222 的 `/json/version`（300ms 短超时，别让缺浏览器拖慢冷启动）
 /// -> 各默认 profile 目录下的 `DevToolsActivePort` 文件（静态读一次，
@@ -169,7 +171,7 @@ pub async fn probe_default() -> Option<String> {
     None
 }
 
-/// 一个可附着浏览器的候选描述（`detect_browsers` 的产物）。
+/// 可附着浏览器的候选描述，由 [`detect_browsers`] 产出。
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct DetectedBrowser {
     /// user-data 目录（候选来源）。
@@ -182,13 +184,14 @@ pub struct DetectedBrowser {
     pub mtime_ms: u128,
 }
 
-/// 扫默认 profile 目录列出所有可附着候选（对齐官方 harness 的
-/// `detectBrowsers()`）：读各目录的 `DevToolsActivePort`，按 mtime 降序
-/// （最近启动优先）。同步、零网络。
+/// 扫默认 profile 目录列出所有可附着候选：读各目录的 `DevToolsActivePort`
+/// 按 mtime 降序（最近启动优先），同步、零网络，对齐官方 harness 的
+/// `detectBrowsers()`。
 ///
 /// # Examples
 ///
 /// ```no_run
+/// # // no_run：扫的是本机真实 profile 目录，结果随机器而变，不可断言
 /// # async fn demo() {
 /// for b in cdp::discovery::detect_browsers() {
 ///     println!("{} port={} mtime={}", b.profile_dir.display(), b.port, b.mtime_ms);

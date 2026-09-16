@@ -12,8 +12,8 @@ private_intra_doc_links = "deny"
 [workspace.lints.clippy]
 empty_docs = "deny"
 missing_safety_doc = "deny"
-missing_errors_doc = "warn"
-missing_panics_doc = "warn"
+missing_errors_doc = "deny"
+missing_panics_doc = "deny"
 
 [workspace.package]
 version = "0.1.0"

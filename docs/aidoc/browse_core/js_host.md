@@ -16,5 +16,5 @@
 
 ## Types
 
-- `JsHost` — 方言宿主：一个 CDP [`Session`] + 一份跨片段持久的变量表。
+- `JsHost` — 方言宿主：持有一个 CDP [`Session`] 加一份跨片段持久的变量表。
 

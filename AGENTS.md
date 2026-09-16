@@ -18,6 +18,7 @@ Rust workspace（crates/cdp、browse-core、browse-cli）。公开契约以 `///
 ## Must
 
 - 改 pub 项：同步 `///` 与 doctest（missing_docs 是 deny，CI 必红），并 `cargo aidoc` 后提交 `docs/aidoc/`
+- 契约注释三纪律（dev-evo 第六十批）：首句成句（做什么+何时用+边界，不以项名开头，细节隔空行）；返 `Result` 必备 `# Errors`、可能 panic 必备 `# Panics`（clippy missing_errors_doc/missing_panics_doc/missing_safety_doc 已 deny）；示例断言收尾，`no_run` 注明原因
 - 不可逆技术选择：先写 docs/adr/ 或改旧 ADR 的 Status
 - 文档链接只用 intra-doc（`` [`Session::call`] ``）
 - I/O 类示例标 no_run，不标 ignore
@@ -47,3 +48,4 @@ Rust workspace（crates/cdp、browse-core、browse-cli）。公开契约以 `///
 - 652 命令清单 crates/cdp/src/methods.txt 是生成物（tools/gen-cdp-methods.py，源头 refs/ 不入库）；改协议版本重跑生成再提交
 - daemon 日志：`%USERPROFILE%\.browse-rs\daemon.log`；引擎 chrome 诊断：同目录 `engine.log`（不继承调用方句柄）
 - 本机引擎 profile：`%USERPROFILE%\.browse-rs\engine-profile`（down 不删，复用登录态）
+- 全平台矩阵：WSL 内 `ssh lan-mac` / `ssh lan-ubuntu`（`~/browse-rs` 是 rsync 副本非 git 仓，先 rsync 源树再跑门禁）；Windows 宿主机同树直跑 `cargo.exe`（aidoc 投影必须在宿主机侧重生成，manifest 钉 msvc）

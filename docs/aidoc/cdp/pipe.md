@@ -13,6 +13,6 @@ Windows 直接用 `CreatePipe`，POSIX 用 `pipe(2)`。
 
 ## Types
 
-- `PipeReader` — 管道读端（启动器持有，读 chrome 写出的 CDP）。
-- `PipeWriter` — 管道写端（启动器持有，往 chrome 写 CDP）。
+- `PipeReader` — CDP 管道的读端，启动器持有，读 chrome 写出的字节流。
+- `PipeWriter` — CDP 管道的写端，启动器持有，往 chrome 写 CDP 字节流。
 

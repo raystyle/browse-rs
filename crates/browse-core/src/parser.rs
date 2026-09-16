@@ -8,7 +8,7 @@
 use anyhow::{Result, anyhow, bail};
 use serde_json::{Value, json};
 
-/// 语句：声明、表达式或 return。
+/// 方言的顶层语句形态：声明、表达式或 return。
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
     /// `const/let/var name = expr`
@@ -30,7 +30,7 @@ pub enum Stmt {
     ),
 }
 
-/// 表达式节点。
+/// 方言的表达式节点，构成求值树。
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     /// JSON 字面量。
@@ -66,8 +66,9 @@ pub enum Expr {
     Array(Vec<Expr>),
 }
 
-/// 不支持语式的统一报错（CTA：诊断 + 下一步）。保留关键字
-/// `Runtime.evaluate`，契约测试锁它。
+/// 不支持语式的统一报错（CTA：诊断 + 下一步）。
+///
+/// 保留关键字 `Runtime.evaluate`，契约测试锁它。
 const UNSUPPORTED_HINT: &str = "方言不支持该语法（if/for/while/函数/模板字符串）；下一步：页面逻辑放 Runtime.evaluate 的 expression 字符串，宿主侧只留 CDP 调用与取值";
 
 /// 把字节偏移换算成「行L:列C」（错误定位用，CTA 的一半是位置）。
@@ -92,11 +93,11 @@ pub fn loc(src: &str, pos: usize) -> String {
     format!("行{line}:列{col}")
 }
 
-/// 解析整段片段为语句列表（先剥 `//` 注释）。
+/// 把整段片段解析成语句列表（先剥 `//` 注释）。
 ///
 /// # Errors
 ///
-/// - 含方言外语法（见 [`UNSUPPORTED_HINT`]）。
+/// - 含方言外语法（if/for/while/函数/模板字符串，报错带下一步 CTA）。
 /// - token 残缺（未闭合字符串、缺 `=` / `]` / `,` 等），错误信息带停住的位置。
 /// - 末尾有解析不掉的余量。
 ///
@@ -128,7 +129,7 @@ pub fn parse_script(source: &str) -> Result<Vec<Stmt>> {
     Ok(stmts)
 }
 
-/// 片段是否括号配平（stdin/TTY 增量读入用：配平才送求值）。
+/// 判断片段括号是否配平（stdin/TTY 增量读入用：配平才送求值）。
 ///
 /// # Examples
 ///
@@ -179,7 +180,7 @@ fn depth_ok(s: &str) -> bool {
     quote.is_none() && par <= 0 && br <= 0 && sq <= 0
 }
 
-/// 剥掉 `//` 行注释（保留字符串字面量里的 `//`）。
+/// 把 `//` 行注释剥掉，保留字符串字面量里的 `//`。
 ///
 /// # Examples
 ///
@@ -222,7 +223,7 @@ pub fn strip_comments(s: &str) -> String {
     out
 }
 
-/// 语句列表回显成源码（诊断与 doctest 用，非规范格式化器）。
+/// 把语句列表回显成源码（诊断与 doctest 用，非规范格式化器）。
 ///
 /// # Examples
 ///

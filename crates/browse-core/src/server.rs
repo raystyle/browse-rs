@@ -21,7 +21,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 use tokio::net::TcpListener;
 
-/// `/eval` 请求体。
+/// 描述 POST /eval 的请求体。
 #[derive(Debug, Deserialize)]
 pub struct EvalRequest {
     /// 方言片段源码（或裸 JS，由 body 形态决定，见 [`serve`]）。
@@ -31,7 +31,7 @@ pub struct EvalRequest {
     pub new_tab: bool,
 }
 
-/// `/engine/up` 请求体。
+/// 描述 POST /engine/up 的请求体。
 #[derive(Debug, Default, Deserialize)]
 pub struct EngineUpRequest {
     /// spawn 时无头。
@@ -48,7 +48,7 @@ pub struct EngineUpRequest {
     pub pipe: bool,
 }
 
-/// daemon 运行面：宿主、引擎、缺省引擎意图、单飞槽与退出旗标。
+/// HTTP daemon 的运行面聚合：宿主、引擎、缺省引擎意图、单飞槽与退出旗标。
 pub struct Daemon {
     /// 方言宿主（vars 跨请求持久）。
     pub host: Arc<JsHost>,
@@ -65,17 +65,19 @@ pub struct Daemon {
 }
 
 impl Daemon {
-    /// 组装运行面。
+    /// 把宿主、引擎与缺省意图组装成运行面。
     ///
     /// # Examples
     ///
     /// ```no_run
+    /// # // no_run：JsHost 构造会 spawn watcher 任务，需要 tokio runtime
     /// let session = cdp::Session::new();
     /// let d = browse_core::server::Daemon::new(
     ///     browse_core::JsHost::new(session.clone()),
     ///     browse_core::Engine::new(session),
     ///     browse_core::EngineSpec::from_env(None, false, false),
     /// );
+    /// assert!(std::sync::Arc::strong_count(&d) >= 1);
     /// ```
     pub fn new(host: Arc<JsHost>, engine: Arc<Engine>, spec: EngineSpec) -> Arc<Self> {
         Arc::new(Self {

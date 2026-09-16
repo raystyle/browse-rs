@@ -10,13 +10,13 @@ browser-harness-js 片段方言的语法分析器（纯函数）。
 ## Functions
 
 - `loc` — 把字节偏移换算成「行L:列C」（错误定位用，CTA 的一半是位置）。
-- `parse_script` — 解析整段片段为语句列表（先剥 `//` 注释）。
-- `render` — 语句列表回显成源码（诊断与 doctest 用，非规范格式化器）。
-- `snippet_complete` — 片段是否括号配平（stdin/TTY 增量读入用：配平才送求值）。
-- `strip_comments` — 剥掉 `//` 行注释（保留字符串字面量里的 `//`）。
+- `parse_script` — 把整段片段解析成语句列表（先剥 `//` 注释）。
+- `render` — 把语句列表回显成源码（诊断与 doctest 用，非规范格式化器）。
+- `snippet_complete` — 判断片段括号是否配平（stdin/TTY 增量读入用：配平才送求值）。
+- `strip_comments` — 把 `//` 行注释剥掉，保留字符串字面量里的 `//`。
 
 ## Types
 
-- `Expr` — 表达式节点。
-- `Stmt` — 语句：声明、表达式或 return。
+- `Expr` — 方言的表达式节点，构成求值树。
+- `Stmt` — 方言的顶层语句形态：声明、表达式或 return。
 

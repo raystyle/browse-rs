@@ -10,47 +10,47 @@
     {
       "path": "browse_cli::client::DEFAULT_PORT",
       "kind": "constant",
-      "docs": "daemon 缺省端口（`BROWSE_PORT` / `BROWSE_NAME` 派生可覆盖）。避开 bh 的 9876。"
+      "docs": "daemon 的缺省端口，`BROWSE_PORT` 与 `BROWSE_NAME` 派生端口可覆盖。\n\n取 9880 是为避开 bh 的 9876。"
     },
     {
       "path": "browse_cli::client::daemon_alive",
       "kind": "function",
-      "docs": "daemon 是否在跑（GET /health 通即为在）。"
+      "docs": "探测 daemon 是否在跑：GET /health 通即为在。"
     },
     {
       "path": "browse_cli::client::daemon_bind",
       "kind": "function",
-      "docs": "daemon 的 `host:port` 绑定串（多实例：`BROWSE_NAME` 派生端口，见 ADR-0006）。\n\n# Examples\n\n```\n# // BROWSE_PORT/BROWSE_NAME 均未设时才是默认口（CI 干净环境成立）\nif std::env::var_os(\"BROWSE_PORT\").is_none() && std::env::var_os(\"BROWSE_NAME\").is_none() {\n    assert_eq!(browse_cli::client::daemon_bind(), \"127.0.0.1:9880\");\n}\n```"
+      "docs": "返回 daemon 监听的 `host:port` 串；多实例由 `BROWSE_NAME` 派生端口（ADR-0006）。\n\n# Examples\n\n```\n# // BROWSE_PORT/BROWSE_NAME 均未设时才是默认口（CI 干净环境成立）\nif std::env::var_os(\"BROWSE_PORT\").is_none() && std::env::var_os(\"BROWSE_NAME\").is_none() {\n    assert_eq!(browse_cli::client::daemon_bind(), \"127.0.0.1:9880\");\n}\n```"
     },
     {
       "path": "browse_cli::client::engine_up",
       "kind": "function",
-      "docs": "POST /engine/up（显式起引擎）。\n\n# Errors\n\nHTTP 失败或引擎 ensure 失败（连不上、chrome 找不到、spawn 超时）。"
+      "docs": "POST /engine/up 显式起引擎，走 ensure 全链（附着优先缺则 spawn）。\n\n# Errors\n\nHTTP 失败或引擎 ensure 失败（连不上、chrome 找不到、spawn 超时）。"
     },
     {
       "path": "browse_cli::client::ensure_daemon",
       "kind": "function",
-      "docs": "确保 daemon 在跑：不通就 detached 拉起 `browse --serve`，再探活。\n\n# Errors\n\n拉起失败（exe 找不到）或 10 秒内 /health 不通。"
+      "docs": "daemon 不在跑时 detached 拉起 `browse --serve` 并探活到通；已在跑则直接返回。\n\n# Errors\n\n拉起失败（exe 找不到）或 10 秒内 /health 不通。"
     },
     {
       "path": "browse_cli::client::eval",
       "kind": "function",
-      "docs": "POST /eval。返回片段求值结果；daemon 侧错误进 `Err`（错误串已是给人/agent 的下一步指令形态）。\n\n# Errors\n\nHTTP 失败或 daemon 求值失败（语法错、CDP 错、守卫拦截、超时）。"
+      "docs": "把方言片段 POST 到 daemon 的 /eval 求值。\n\n返回最后一条语句的值；daemon 侧错误进 `Err`（错误串已是给人/agent 的下一步指令形态）。\n\n# Errors\n\nHTTP 失败或 daemon 求值失败（语法错、CDP 错、守卫拦截、超时）。"
     },
     {
       "path": "browse_cli::client::health",
       "kind": "function",
-      "docs": "GET /health。\n\n# Errors\n\ndaemon 不在或响应坏。"
+      "docs": "GET /health 取 daemon 状态面；daemon 不在时报可照抄的拉起提示。\n\n# Errors\n\ndaemon 不在或响应坏。"
     },
     {
       "path": "browse_cli::client::quit",
       "kind": "function",
-      "docs": "POST /quit（退 daemon；daemon 侧顺带只终结自起引擎）。\n\n# Errors\n\ndaemon 不在（幂等场景调用方先判活）或 HTTP 失败。"
+      "docs": "POST /quit 退 daemon，daemon 侧顺带只终结自起引擎（附着来源不动）。\n\n# Errors\n\ndaemon 不在（幂等场景调用方先判活）或 HTTP 失败。"
     },
     {
       "path": "browse_cli::client::state_dir",
       "kind": "function",
-      "docs": "daemon 日志与运行面目录：`%USERPROFILE%\\.browse-rs[\\<name>]`（多实例）。"
+      "docs": "返回 daemon 日志与运行面目录（`%USERPROFILE%\\.browse-rs[\\<name>]`，多实例各一份）。"
     },
     {
       "path": "browse_cli::render",
@@ -60,7 +60,7 @@
     {
       "path": "browse_cli::render::DROP_THRESHOLD",
       "kind": "constant",
-      "docs": "触发落盘的阈值（字节）。序列化后的打印串超过即落盘。"
+      "docs": "序列化后的打印串超过本阈值（字节）即落盘，保护 agent 上下文。"
     },
     {
       "path": "browse_cli::render::render_or_drop_sync",

@@ -24,7 +24,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 
-/// 引擎指令：CLI 旗标 / 环境变量解析出的意图。
+/// 引擎指令意图，由 CLI 旗标或环境变量解析而来。
 #[derive(Debug, Clone)]
 pub enum EngineSpec {
     /// 显式 WS URL 直连（`--ws` / `BROWSE_CDP_WS`）。
@@ -74,7 +74,7 @@ impl EngineSpec {
     }
 }
 
-/// 引擎现状（可序列化，`/health` 面直接用）。
+/// 引擎现状的可序列化快照，`/health` 面直接用。
 #[derive(Debug, Clone, Serialize)]
 pub enum EngineSource {
     /// 未连接。
@@ -114,12 +114,13 @@ struct EngineInner {
 }
 
 impl Engine {
-    /// 绑定会话建引擎。冷态是 [`EngineSource::NotConnected`]。
+    /// 绑定一条会话建引擎；冷态是 [`EngineSource::NotConnected`]。
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```
     /// let engine = browse_core::Engine::new(cdp::Session::new());
+    /// assert!(!engine.session().is_connected());
     /// ```
     pub fn new(session: Arc<Session>) -> Arc<Self> {
         Arc::new(Self {
@@ -131,17 +132,17 @@ impl Engine {
         })
     }
 
-    /// 共享会话。
+    /// 返回引擎绑定的共享会话（clone `Arc` 同一条连接）。
     pub fn session(&self) -> Arc<Session> {
         self.session.clone()
     }
 
-    /// 当前引擎来源快照。
+    /// 返回当前引擎来源的快照。
     pub async fn source(&self) -> EngineSource {
         self.inner.lock().await.source.clone()
     }
 
-    /// 确保引擎在线（幂等：已连接直接返回现状）。
+    /// 把引擎带到在线状态（幂等：已连接直接返回现状）。
     ///
     /// # Errors
     ///
@@ -351,9 +352,11 @@ impl Engine {
         Ok(id)
     }
 
-    /// 终结引擎：只对 [`EngineSource::Spawned`] 生效；先 `Browser.close`
-    /// 优雅退（走守卫旁路），5 秒内 `try_wait` 轮询等退，不退兜底杀进程树；
-    /// 附着来源原样保留（铁律：绝不关用户的浏览器）。
+    /// 终结引擎，只对 [`EngineSource::Spawned`] 生效；附着来源原样保留
+    /// （铁律：绝不关用户的浏览器）。
+    ///
+    /// 自起实例先 `Browser.close` 优雅退（走守卫旁路），5 秒内 `try_wait`
+    /// 轮询等退，不退兜底杀进程树。
     ///
     /// # Errors
     ///
@@ -387,7 +390,7 @@ impl Engine {
         Ok(())
     }
 
-    /// `/health` 面的状态 JSON。
+    /// 产出 `/health` 面的状态 JSON（实例名、引擎来源、连接与活动路由）。
     pub async fn health_json(&self, uptime: Duration) -> serde_json::Value {
         let source = self.source().await;
         let mut v = json!({

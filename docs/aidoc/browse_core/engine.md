@@ -19,6 +19,6 @@ clean-chrome 专为自动化而生（`--auto-allow-devtools-connections` 免确�
 ## Types
 
 - `Engine` — 引擎状态机：确保连接、报告来源、只终结自己 spawn 的。
-- `EngineSource` — 引擎现状（可序列化，`/health` 面直接用）。
-- `EngineSpec` — 引擎指令：CLI 旗标 / 环境变量解析出的意图。
+- `EngineSource` — 引擎现状的可序列化快照，`/health` 面直接用。
+- `EngineSpec` — 引擎指令意图，由 CLI 旗标或环境变量解析而来。
 

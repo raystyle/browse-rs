@@ -15,13 +15,13 @@ use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio::time::timeout;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 
-/// 事件环形缓冲上限。超过后丢最老的事件，防 daemon 长跑内存泄漏。
+/// 事件环形缓冲的条数上限；超过后丢最老的事件，防 daemon 长跑内存泄漏。
 const EVENT_BUFFER_CAP: usize = 1000;
 
-/// 单条 CDP 调用的超时（秒）。
+/// 单条 CDP 调用的超时秒数，到点报 `cdp timeout`。
 const CALL_TIMEOUT_SECS: u64 = 30;
 
-/// 走 browser 端点、不带 sessionId 的域前缀。
+/// 这些前缀的域走 browser 端点，调用时不附 `sessionId`。
 const BROWSER_METHODS: &[&str] = &[
     "Browser.",
     "Target.",
@@ -32,7 +32,7 @@ const BROWSER_METHODS: &[&str] = &[
     "Extensions.",
 ];
 
-/// 一个可附着的 page target（已滤 `chrome://`、`devtools://`）。
+/// 描述一个可附着的 page target；已滤 `chrome://`、`devtools://` 干扰目标。
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct PageTarget {
     /// CDP targetId，用于 [`Session::use_target`]。
@@ -49,7 +49,7 @@ pub struct PageTarget {
     pub own: bool,
 }
 
-/// 连接线索三选一：`wsUrl` / `port` / `profileDir`。
+/// 连接线索三选一（`wsUrl` / `port` / `profileDir`），全部可缺省走自动策略。
 #[derive(Debug, Clone, Default)]
 pub struct ConnectOptions {
     /// 直接给 `ws://127.0.0.1:9222/devtools/browser/<uuid>`（或 http 端点，会取 `/json/version`）。
@@ -59,14 +59,15 @@ pub struct ConnectOptions {
     /// Chrome user-data 目录，读其中的 `DevToolsActivePort` 文件。
     pub profile_dir: Option<String>,
     /// 连接超时毫秒（发现轮询 + WS 握手 + `/json/version` 请求共用）。
+    ///
     /// 缺省 5000；要等人工点 Allow 的场景给 30000。对齐官方 harness。
     pub timeout_ms: Option<u64>,
 }
 
-/// 缺省连接超时（毫秒）。
+/// 缺省连接超时毫秒数，`ConnectOptions::timeout_ms` 未设时生效。
 const DEFAULT_CONNECT_TIMEOUT_MS: u64 = 5000;
 
-/// 常驻 CDP 会话。clone `Arc<Self>` 共享同一条连接。
+/// 常驻的 browser 级 CDP 会话；clone `Arc<Self>` 共享同一条连接。
 pub struct Session {
     outgoing: Mutex<Option<mpsc::UnboundedSender<Value>>>,
     pending: Arc<Mutex<HashMap<i64, oneshot::Sender<Value>>>>,
@@ -83,7 +84,9 @@ pub struct Session {
 }
 
 impl Session {
-    /// 建一个未连接的会话。连接用 [`Session::connect_opts`] 或 [`Session::connect`]。
+    /// 建一个未连接的会话。
+    ///
+    /// 连接用 [`Session::connect_opts`] 或 [`Session::connect`]。
     ///
     /// # Examples
     ///
@@ -106,12 +109,13 @@ impl Session {
         })
     }
 
-    /// 是否仍连着（WS 读循环存活期间为 true）。
+    /// 连接是否仍活着：WS/管道读循环存活期间为 true。
     pub fn is_connected(&self) -> bool {
         self.connected.load(Ordering::Relaxed)
     }
 
-    /// 按线索连接（超时由 [`ConnectOptions::timeout_ms`] 控制，缺省 5 秒）。
+    /// 按线索连接，超时由 [`ConnectOptions::timeout_ms`] 控制（缺省 5 秒）。
+    ///
     /// 已连接时重复调用会再开一条连接（先 [`Session::connect`] 前自查）。
     ///
     /// # Errors
@@ -127,8 +131,8 @@ impl Session {
         Ok(())
     }
 
-    /// 按字符串连接：`ws://`/`wss://` 直用；`9222` 或 `http://127.0.0.1:9222` 解析端口；
-    /// 其余当 http 端点取 `/json/version`。
+    /// 字符串线索的宽容连接：`ws://`/`wss://` 直用，`9222` 或
+    /// `http://127.0.0.1:9222` 解析端口，其余当 http 端点取 `/json/version`。
     ///
     /// # Errors
     ///
@@ -159,8 +163,8 @@ impl Session {
         self.connect_opts(opts).await
     }
 
-    /// 事件缓冲当前水位（最新事件的 seq，空缓冲为 0）。
-    /// `peek_events_since` 的增量起点用。
+    /// 返回事件缓冲当前水位（最新事件的 seq，空缓冲为 0），作
+    /// [`Session::peek_events_since`] 的增量起点。
     pub async fn last_seq(&self) -> u64 {
         self.events
             .lock()
@@ -170,13 +174,15 @@ impl Session {
             .unwrap_or(0)
     }
 
-    /// 当前活动 tab 的 targetId（[`Session::use_target`] 设置）。
+    /// 返回当前活动 tab 的 targetId（由 [`Session::use_target`] 设置）。
     pub async fn active_target(&self) -> Option<String> {
         self.target_id.lock().await.clone()
     }
 
-    /// 当前打开的 JS 对话框事件（`Page.javascriptDialogOpening` 全量，
-    /// 无则 `None`）。对话框会挂起 Input/evaluate，调用方应先看它再行动。
+    /// 返回当前打开的 JS 对话框事件（`Page.javascriptDialogOpening` 全量），
+    /// 无则 `None`。
+    ///
+    /// 对话框会挂起 Input/evaluate，调用方应先看它再行动。
     pub async fn pending_dialog(&self) -> Option<Value> {
         self.pending_dialog.lock().await.clone()
     }
@@ -312,7 +318,7 @@ impl Session {
         Ok(())
     }
 
-    /// 发一条 CDP 命令。非 browser 域自动带活动 tab 的 `sessionId`。
+    /// 发一条 CDP 命令并等回应；非 browser 域自动带活动 tab 的 `sessionId`。
     ///
     /// 安全守卫（取自 bh 硬边界契约，程序级强制）：
     /// `Browser.close` / `Browser.setWindowBounds` 一律拒绝；
@@ -374,6 +380,7 @@ impl Session {
     }
 
     /// 仅供引擎自己对 spawn 出来的浏览器做优雅退出：直发 `Browser.close`，绕过守卫。
+    ///
     /// 附着来源绝不允许调用（调用方自查来源）。
     ///
     /// # Errors
@@ -392,7 +399,8 @@ impl Session {
         self.send_with(method, params, sid).await
     }
 
-    /// 显式路由目标的调用：`sessionId` 用给定值（不走活动路由）。
+    /// 显式路由目标的调用，`sessionId` 用给定值（不走活动路由）。
+    ///
     /// 给「回执必须回到事件来源 session」的场合：典型是录制的
     /// `Page.screencastFrameAck`，它要应答帧自带的 sessionId。
     ///
@@ -486,7 +494,7 @@ impl Session {
         *self.session_id.lock().await = session_id;
     }
 
-    /// 当前活动 sessionId（无则 `None`）。
+    /// 返回当前活动 sessionId（无则 `None`）。
     pub async fn get_active_session(&self) -> Option<String> {
         self.session_id.lock().await.clone()
     }
@@ -550,17 +558,21 @@ impl Session {
             .ok_or_else(|| anyhow!("createTarget: no targetId"))
     }
 
-    /// 断开连接（不关浏览器）。丢弃发送端，写循环随之退出、socket 关闭；
-    /// `is_connected` 立即为 false。之后可重新 `connect` 或由引擎策略重拉。
-    /// 对齐官方 harness 的 `session.close()`。
+    /// 断开连接但不关浏览器；`is_connected` 立即为 false，之后可重新
+    /// `connect` 或由引擎策略重拉。
+    ///
+    /// 实现是丢弃发送端，写循环随之退出、socket 关闭。对齐官方 harness
+    /// 的 `session.close()`。
     pub async fn close(&self) {
         *self.outgoing.lock().await = None;
         self.connected.store(false, Ordering::Relaxed);
     }
 
-    /// 非破坏窥视事件缓冲：返回 `method` 匹配的前 `n` 条（不消费，
-    /// `wait_for` 仍能取到它们）。给 agent 轮询消费事件流用，
-    /// 是官方 `onEvent` 回调在方言（无函数）下的等价面。
+    /// 非破坏窥视事件缓冲：返回 `method` 匹配的前 `n` 条，不消费
+    /// （`wait_for` 仍能取到它们）。
+    ///
+    /// 给 agent 轮询消费事件流用，是官方 `onEvent` 回调在方言（无函数）
+    /// 下的等价面。
     ///
     /// 事件自带 [`Session::peek_events_since`] 用的 `seq` 游标。
     pub async fn peek_events(&self, method: &str, n: usize) -> Vec<Value> {
@@ -574,7 +586,8 @@ impl Session {
             .collect()
     }
 
-    /// 增量窥视：只回 `seq > since_seq` 的匹配事件（非破坏）。
+    /// 增量窥视事件缓冲：只回 `seq > since_seq` 的匹配事件（非破坏）。
+    ///
     /// 轮询模式：首拍 `since_seq=0`，之后用上一拍最后一条的 `seq`，
     /// 不重复看旧事件。被环形淘汰的事件自然跳过。
     pub async fn peek_events_since(&self, method: &str, since_seq: u64, n: usize) -> Vec<Value> {
@@ -594,8 +607,10 @@ impl Session {
     }
 
     /// 等值过滤窥视：`method` 匹配且 `path` 点分路径（如 `params.requestId`）
-    /// 指到的值 `==` `value` 的前 `n` 条（非破坏）。方言无谓词函数，
-    /// 这是「挑特定 requestId / 特定 frame 的事件」的结构化等价面。
+    /// 指到的值 `==` `value` 的前 `n` 条（非破坏）。
+    ///
+    /// 方言无谓词函数，这是「挑特定 requestId / 特定 frame 的事件」的
+    /// 结构化等价面。
     pub async fn find_events(
         &self,
         method: &str,
@@ -616,9 +631,11 @@ impl Session {
             .collect()
     }
 
-    /// 消费式取事件：移除并返回缓冲里全部 `method` 匹配（peek 家族的
-    /// 破坏性对偶）。给常驻消费任务用（录帧泵）；取走后 `waitFor`/`peek`
-    /// 就见不到这些事件了。
+    /// 消费式取事件：移除并返回缓冲里全部 `method` 匹配，是 peek 家族
+    /// 的破坏性对偶。
+    ///
+    /// 给常驻消费任务用（录帧泵）；取走后 `waitFor`/`peek` 就见不到这些
+    /// 事件了。
     pub async fn drain_events(&self, method: &str) -> Vec<Value> {
         let mut evs = self.events.lock().await;
         let mut out = Vec::new();
@@ -633,7 +650,7 @@ impl Session {
         out
     }
 
-    /// 从环形缓冲里找第一个 `method` 事件（取出即移除）。超时报错。
+    /// 从环形缓冲里等第一个 `method` 事件（取出即移除），超时报错。
     ///
     /// # Errors
     ///
@@ -659,6 +676,7 @@ impl Session {
 }
 
 /// 把一条入站 JSON-RPC 消息路由到 pending 应答或事件缓冲（WS/管道共用）。
+///
 /// 进缓冲的事件盖上单调 `seq`（从 1 起）：`waitFor`/`peek` 拿到的事件自带
 /// 游标，供 [`Session::peek_events_since`] 增量轮询。顺带截获对话框事件
 /// 维护 [`Session::pending_dialog`]（开着对话框时 Input/evaluate 会挂起，
@@ -696,7 +714,8 @@ async fn route(
     }
 }
 
-/// 按点分路径取 JSON 子值：`json_path(v, "params.requestId")`。
+/// 按点分路径取 JSON 子值，如 `json_path(v, "params.requestId")`。
+///
 /// 段名按对象字段取（空段跳过，空路径返回整值）；路径不存在返回 `None`。
 fn json_path<'a>(v: &'a Value, path: &str) -> Option<&'a Value> {
     path.split('.')
@@ -705,7 +724,8 @@ fn json_path<'a>(v: &'a Value, path: &str) -> Option<&'a Value> {
 }
 
 /// 域策略命中则返回违规原因（deny 命中 / 不在 allow 清单），否则 `None`。
-/// 未配置任何规则时恒 `None`。deny 优先于 allow。行为契约见 src 内单元测试。
+///
+/// 未配置任何规则时恒 `None`；deny 优先于 allow。行为契约见 src 内单元测试。
 fn domain_policy_violation(url: &str) -> Option<&'static str> {
     let (allow, deny) = domain_rules();
     if allow.is_empty() && deny.is_empty() {
@@ -727,7 +747,9 @@ fn domain_policy_violation(url: &str) -> Option<&'static str> {
 }
 
 /// 解析 `BROWSE_ALLOW_DOMAINS` / `BROWSE_DENY_DOMAINS`（逗号分隔，
-/// `*.` 前缀与裸域名都按后缀匹配）。`'static` 由 leak 一次性换来（进程级配置）。
+/// `*.` 前缀与裸域名都按后缀匹配）。
+///
+/// `'static` 由 leak 一次性换来（进程级配置只解析一次）。
 fn domain_rules() -> (Vec<&'static str>, Vec<&'static str>) {
     use std::sync::OnceLock;
     static RULES: OnceLock<(Vec<&'static str>, Vec<&'static str>)> = OnceLock::new();
@@ -767,7 +789,7 @@ fn host_matches(host: &str, rule: &str) -> bool {
     host == rule || host.strip_suffix(rule).is_some_and(|h| h.ends_with('.'))
 }
 
-/// 方法是否属于 browser 端点域（不附 `sessionId`）。
+/// 判断方法是否属于 browser 端点域（这类方法不附 `sessionId`）。
 ///
 /// # Examples
 ///

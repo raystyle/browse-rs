@@ -6,10 +6,12 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
 
-/// daemon 缺省端口（`BROWSE_PORT` / `BROWSE_NAME` 派生可覆盖）。避开 bh 的 9876。
+/// daemon 的缺省端口，`BROWSE_PORT` 与 `BROWSE_NAME` 派生端口可覆盖。
+///
+/// 取 9880 是为避开 bh 的 9876。
 pub const DEFAULT_PORT: u16 = 9880;
 
-/// daemon 的 `host:port` 绑定串（多实例：`BROWSE_NAME` 派生端口，见 ADR-0006）。
+/// 返回 daemon 监听的 `host:port` 串；多实例由 `BROWSE_NAME` 派生端口（ADR-0006）。
 ///
 /// # Examples
 ///
@@ -27,7 +29,7 @@ fn http() -> String {
     format!("http://{}", daemon_bind())
 }
 
-/// daemon 日志与运行面目录：`%USERPROFILE%\.browse-rs[\<name>]`（多实例）。
+/// 返回 daemon 日志与运行面目录（`%USERPROFILE%\.browse-rs[\<name>]`，多实例各一份）。
 pub fn state_dir() -> PathBuf {
     browse_core::paths::state_dir()
 }
@@ -41,7 +43,7 @@ fn client() -> reqwest::Client {
         .expect("reqwest client")
 }
 
-/// daemon 是否在跑（GET /health 通即为在）。
+/// 探测 daemon 是否在跑：GET /health 通即为在。
 pub async fn daemon_alive() -> Option<Value> {
     let c = reqwest::Client::builder()
         .no_proxy()
@@ -52,7 +54,7 @@ pub async fn daemon_alive() -> Option<Value> {
     resp.json::<Value>().await.ok()
 }
 
-/// 确保 daemon 在跑：不通就 detached 拉起 `browse --serve`，再探活。
+/// daemon 不在跑时 detached 拉起 `browse --serve` 并探活到通；已在跑则直接返回。
 ///
 /// # Errors
 ///
@@ -136,7 +138,9 @@ pub async fn ensure_daemon() -> Result<()> {
     ))
 }
 
-/// POST /eval。返回片段求值结果；daemon 侧错误进 `Err`（错误串已是给人/agent 的下一步指令形态）。
+/// 把方言片段 POST 到 daemon 的 /eval 求值。
+///
+/// 返回最后一条语句的值；daemon 侧错误进 `Err`（错误串已是给人/agent 的下一步指令形态）。
 ///
 /// # Errors
 ///
@@ -163,7 +167,7 @@ pub async fn eval(code: &str, new_tab: bool) -> Result<Value> {
     }
 }
 
-/// GET /health。
+/// GET /health 取 daemon 状态面；daemon 不在时报可照抄的拉起提示。
 ///
 /// # Errors
 ///
@@ -174,7 +178,7 @@ pub async fn health() -> Result<Value> {
         .ok_or_else(|| anyhow!("browse: daemon 不在（先随便跑一条片段自动拉起，或 browse up）"))
 }
 
-/// POST /engine/up（显式起引擎）。
+/// POST /engine/up 显式起引擎，走 ensure 全链（附着优先缺则 spawn）。
 ///
 /// # Errors
 ///
@@ -206,7 +210,7 @@ pub async fn engine_up(
     }
 }
 
-/// POST /quit（退 daemon；daemon 侧顺带只终结自起引擎）。
+/// POST /quit 退 daemon，daemon 侧顺带只终结自起引擎（附着来源不动）。
 ///
 /// # Errors
 ///

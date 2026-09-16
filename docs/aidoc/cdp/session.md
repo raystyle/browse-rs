@@ -8,11 +8,11 @@
 
 ## Functions
 
-- `is_browser_method` — 方法是否属于 browser 端点域（不附 `sessionId`）。
+- `is_browser_method` — 判断方法是否属于 browser 端点域（这类方法不附 `sessionId`）。
 
 ## Types
 
-- `ConnectOptions` — 连接线索三选一：`wsUrl` / `port` / `profileDir`。
-- `PageTarget` — 一个可附着的 page target（已滤 `chrome://`、`devtools://`）。
-- `Session` — 常驻 CDP 会话。clone `Arc<Self>` 共享同一条连接。
+- `ConnectOptions` — 连接线索三选一（`wsUrl` / `port` / `profileDir`），全部可缺省走自动策略。
+- `PageTarget` — 描述一个可附着的 page target；已滤 `chrome://`、`devtools://` 干扰目标。
+- `Session` — 常驻的 browser 级 CDP 会话；clone `Arc<Self>` 共享同一条连接。
 

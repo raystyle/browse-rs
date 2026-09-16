@@ -9,10 +9,10 @@
 //! CDP 报 `not found` 时给相近建议，以及给方言 `cdpMethods(domain)` 做
 //! 运行时探针（对齐 bh 的 `Object.keys(session.Network)`）。
 
-/// 全量命令清单（`Domain.Method` 每行一条）。
+/// 全量 CDP 命令清单，`Domain.Method` 每行一条（652 条）。
 pub const METHODS_RAW: &str = include_str!("methods.txt");
 
-/// 是否为清单内已知命令。
+/// 判断方法是否为清单内已知命令（被动增强用，不预拦未知方法）。
 ///
 /// # Examples
 ///
@@ -24,7 +24,7 @@ pub fn method_exists(method: &str) -> bool {
     METHODS_RAW.lines().any(|l| l == method)
 }
 
-/// 某域的全部命令（`cdpMethods("Network")` 的底座）。
+/// 返回某域的全部命令，是 `cdpMethods("Network")` 的底座。
 ///
 /// # Examples
 ///

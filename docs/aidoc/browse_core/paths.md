@@ -10,14 +10,14 @@
 
 ## Functions
 
-- `daemon_port` — 本实例 daemon 端口：`BROWSE_PORT` 显式优先，其次按 `BROWSE_NAME`
-- `derived_port` — 名字稳定派生端口（9900..=9999）。同名恒同口（重启不变）；
-- `engine_profile_dir` — 本实例引擎 profile：`<state>/engine-profile`（命名实例各自独占，
-- `instance_name` — 实例名：`BROWSE_NAME` 的非空值；未设即默认实例（`None`）。
-- `state_dir` — 本实例状态目录：`%USERPROFILE%\.browse-rs[\<name>]`。
-- `state_dir_for` — 按名取状态目录（纯函数，可单测）。
+- `daemon_port` — 返回本实例 daemon 端口：`BROWSE_PORT` 显式优先，其次按 `BROWSE_NAME`
+- `derived_port` — 把名字稳定派生成 9900..=9999 区间的端口，同名恒同口（重启不变）。
+- `engine_profile_dir` — 返回本实例引擎 profile（`<state>/engine-profile`；命名实例各自独占，
+- `instance_name` — 返回实例名（`BROWSE_NAME` 的非空值）；未设即默认实例（`None`）。
+- `state_dir` — 返回本实例状态目录（`%USERPROFILE%\.browse-rs[\<name>]`）。
+- `state_dir_for` — 把实例名映射到状态目录的纯函数（同输入恒同输出，可单测）。
 
 ## Constants
 
-- `DERIVED_PORT_MIN` — 命名实例缺省端口下界（派生区间 9900..=9999，避开默认 9880 与 bh 的 9876）。
+- `DERIVED_PORT_MIN` — 命名实例派生端口的下界（区间 9900..=9999，避开默认 9880 与 bh 的 9876）。
 

@@ -8,14 +8,14 @@
 
 ## Functions
 
-- `find_chrome` — 依优先序找 Chrome 可执行文件：`BROWSE_CHROME` 环境变量 ->
-- `spawn_engine` — 拉起专属引擎实例。参数：可执行文件、独立 profile 目录、是否无头。
+- `find_chrome` — 依优先序探测 Chrome 可执行文件，找不到返回 `None`。
+- `spawn_engine` — 拉起一个带调试口的专属引擎实例（独立 profile、端口自动分配）。
 - `spawn_engine_pipes` — 按管道契约拉起 clean-chrome（S005 / D02-6；Windows 句柄态与 POSIX
 - `terminate_pid` — 强杀进程树（优雅退出 `Browser.close` 失败后的兜底）。
-- `wait_devtools_ready` — 等 spawn 出来的实例调试口就绪（读它 profile 下的 `DevToolsActivePort`），
+- `wait_devtools_ready` — 等 spawn 出来的实例调试口就绪，返回 WS URL（读它 profile 下的
 
 ## Types
 
-- `PipeEngine` — 管道态引擎句柄：子进程 + 留在启动器侧的两条 CDP 管道端。
-- `PipeMode` — 管道通道三态：CLEAN_CHROME_DEBUG 的取值。
+- `PipeEngine` — 管道态引擎的句柄：chrome 子进程加留在启动器侧的两条 CDP 管道端。
+- `PipeMode` — 管道通道的开关取值，即 `CLEAN_CHROME_DEBUG` 环境变量的值域。
 

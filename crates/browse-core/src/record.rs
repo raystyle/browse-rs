@@ -16,7 +16,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
-/// 一场进行中的录制：目录、计数器、停泵旗标与泵任务句柄。
+/// 承载一场进行中的录制，聚合目录、计数器、停泵旗标与泵任务句柄。
 pub struct Recorder {
     dir: PathBuf,
     frames: Arc<AtomicU64>,
@@ -34,15 +34,17 @@ struct Counters {
 }
 
 impl Recorder {
-    /// 启动面简报（recordStart 的返回值）。
+    /// 返回启动面简报（recordStart 的返回值）。
     pub fn brief(&self) -> Value {
         json!({ "dir": self.dir.display().to_string() })
     }
 }
 
-/// 开始录制。`opts`（都可省）：`everyNthFrame`（抽帧，源端剪辑）、
-/// `maxWidth`/`maxHeight`（缩放）、`quality`（JPEG 质量；本实现恒 PNG，
-/// 留作向后兼容）。帧写 `<state>/record-<ts>/frame-NNNNNN.png`。
+/// 开始一场屏幕录制，帧由常驻泵任务落盘。
+///
+/// `opts`（都可省）：`everyNthFrame`（抽帧，源端剪辑）、`maxWidth`/`maxHeight`
+/// （缩放）、`quality`（JPEG 质量；本实现恒 PNG，留作向后兼容）。帧写
+/// `<state>/record-<ts>/frame-NNNNNN.png`。
 ///
 /// # Errors
 ///
@@ -114,6 +116,7 @@ pub async fn stop(s: &Session, rec: Recorder) -> Result<Value> {
 }
 
 /// 收一拍：drain 帧事件 -> 写盘 -> 按帧自带 sessionId ack。
+///
 /// 单帧失败只丢那一帧（计数不增），不倒整场录制。
 async fn pump_once(s: &Session, c: &mut Counters) {
     for ev in s.drain_events("Page.screencastFrame").await {
