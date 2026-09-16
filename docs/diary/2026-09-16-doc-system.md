@@ -104,3 +104,11 @@
 - 自证（对方陈述不作数）：cd632e3 在册且提交语含验收分工句；diary 2026-09-17 八处实证；本机探 Windows 恒定逻辑路径下 Release 与 Dev chrome.exe 双双在位（/mnt/c/dev-chrome/chromium/src/out/，Release 含部署面件）。[实证: ls 直读]
 - 用户令落账：chrome 产物验收测试自下窗起归本工位，clean-chrome 构建自证止于产物在位与自检冒烟；已入 AGENTS 环境节。155 编译窗的 browse 侧验收面（导入安装、驱动冒烟、跨端实测）届时随窗执行；R2 首版资产（zip 加边车）落桶后 REQ-003 happy-path 实测与 trace 回填同窗衔接。
 - 导入源衔接在册：Windows C:\dev-chrome\chromium\src\out\Release（恒定逻辑路径经 junction 可达）。
+
+## lan-linux 激活为无头验证端与平台测试分工（用户令 2026-09-17）
+
+- 用户令三句定型测试分工：wsl 与 lan-linux 走无头测试（lan-linux cp linux 产物专职无头验证），lan-win、lan-mac、lan-ubuntu 带桌面走有头与附着测试；已入 AGENTS 环境节 5端4机 行。
+- 产物管道：lan-ubuntu out/Release 精选运行时集合 867MB（chrome 661M 加 locales 125M 加 paks/icudtl/snapshot 双件加 libEGL 等七 so 加 IwaKeyDistribution/MEIPreload/PrivacySandbox/angledata 四目录）；ubuntu 至 lan-linux mesh 直连不通（ssh 255），tar 管道走 wsl 双跳中转；deploy-release.py 白名单是 Windows 形（chrome.exe/dll），linux 运行时集合系本批实证选取，候选 155 窗回填 clean-chrome 侧工具化。
+- lan-linux 全链五阶绿：chrome --version 直通（Chromium 152.0.7977.84，ldd 零缺库，服务器库面全）；browse 0.2.0 二进制直发（wsl glibc 2.39 产物跑 lan-linux 2.43，前向兼容实证）；chrome install 导入 480 文件/907MB 自动 pin；无头链 up --headless（spawn headless=true channel=port）加 navigate data: URL 加 evaluate 得值 lanlinux-headless-ok 加 doctor healthy/pinnedOk 双真加 down 干净退。[实证: 阶段标记 STAGE-UP/EVAL/DOCTOR/DOWN-OK 直读]
+- wsl 无头面同套激活：同集合导入后首跑缺 libnss3/libnspr4/libasound2t64 五库，apt 装后 ldd 零缺；无头链全绿（evaluate 得值 wsl-headless-ok，doctor 双真）。wsl 依赖面入账：最小 Ubuntu 缺 nss/alsa 族，lan-linux 服务器库面反而全。
+- REQ-003 跨平台注更新：Linux 运行时集实证可跑（两端无头全链），资产打包形候 155 窗。
