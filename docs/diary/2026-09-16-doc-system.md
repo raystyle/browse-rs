@@ -120,3 +120,12 @@
 - 真缺口一（bug，候 patch 批）：附着 tab 因页面导航换血断 socket 后，browse up --connect 9222 重附只重建 Engine 层（status 显示 attached），JsHost 内层 Session 仍持死 socket，一切求值 CDP socket closed，须 browse down 重起 daemon 才恢复；修法候选：engine 重附时同步重建 host 会话。
 - 真缺口二（行为澄清）：引擎已健康附着时 up --headless 不切换（attach-first 教义使然）；强制换 spawn 要 BROWSE_NO_ATTACH=1 且 daemon 进程须带该 env 起动（旧 daemon 不读新 env），实战记 down 后再带 env up。
 - 方言边界三处实踏（皆在册设计）：无箭头函数（过滤移 jq/shell）、无加号运算符（写字面量）、成员访问限 .prop 形（页面逻辑照旧走 Runtime.evaluate 的 expression）。
+
+## attach 断线不愈修复批（0.2.1，2026-09-17）
+
+- 病灶：Session 存活旗 connected 在 open_ws 与 connect_pipes 两处都被读循环写进**局部** Arc<AtomicBool>（新建对象），self.connected 永远停在 true；is_connected 谎报活着，Engine::ensure 开头短路不重连，server 求值前懒 ensure 同样不触发，附着 target 换血断线后一切求值 CDP socket closed 直到重启 daemon（x.com cookie 转移实测中首见）。
+- 修法：connected 字段转 Arc<AtomicBool>，两处读循环持克隆，WS EOF 与管道 EOF 即翻 false；零 pub 面变化（字段私有），aidoc 零漂移。
+- 回归测试 connected_flag_falls_when_ws_dies：本地 ws 服务端握手即断，断言旗必翻 false（旧实现此断言永败）。
+- 自愈实证（真场景复现）：spawn 无头引擎 pid 1290712 后 kill -9，下一次求值直接返回 healed-ok 并自动重起引擎 pid 1290949，status 健康；旧行为是永久 socket closed。
+- 观察入账：懒 ensure 重起走缺省 Auto 形态（headless=false，wslg 有显示面所以有头也能跑），显式 headless 要再 up --headless；后续如需「记住上次显式形态」另立行为批裁量。
+- 门禁：clippy 绿、12 组 test、10 doc test、aidoc check clean、PE-01 至 PE-12 exit 0；封 0.2.1（patch 判据：修复批）。

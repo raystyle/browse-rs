@@ -76,7 +76,11 @@ pub struct Session {
     session_id: Mutex<Option<String>>,
     target_id: Mutex<Option<String>>,
     own_targets: Arc<Mutex<HashSet<String>>>,
-    connected: AtomicBool,
+    /// 存活旗：读循环持有克隆，连接断开（WS EOF / 管道 EOF）即翻 false；
+    /// [`Session::is_connected`] 与引擎侧的懒 ensure 都看它。必须是
+    /// `Arc` 共享给 `'static` 读循环，否则死线只写进局部旗，会话永远
+    /// 谎报活着（attach 重附不重建的 2026-09-17 实测缺口即此）。
+    connected: Arc<AtomicBool>,
     next_seq: Arc<AtomicI64>,
     /// 当前打开的 `Page.javascriptDialogOpening` 事件（route 截获维护，
     /// Closed 清空）。对话框会挂起 Input/evaluate，消费方要能先看它。
@@ -103,7 +107,7 @@ impl Session {
             session_id: Mutex::new(None),
             target_id: Mutex::new(None),
             own_targets: Arc::new(Mutex::new(HashSet::new())),
-            connected: AtomicBool::new(false),
+            connected: Arc::new(AtomicBool::new(false)),
             next_seq: Arc::new(AtomicI64::new(1)),
             pending_dialog: Arc::new(Mutex::new(None)),
         })
@@ -212,8 +216,7 @@ impl Session {
         let events_r = self.events.clone();
         let seq_r = self.next_seq.clone();
         let dialog_r = self.pending_dialog.clone();
-        let connected = Arc::new(AtomicBool::new(true));
-        let flag = connected.clone();
+        let flag = self.connected.clone();
         tokio::spawn(async move {
             while let Some(Ok(Message::Text(t))) = read.next().await {
                 if let Ok(v) = serde_json::from_str::<Value>(&t) {
@@ -280,8 +283,7 @@ impl Session {
         let events_r = self.events.clone();
         let seq_r = self.next_seq.clone();
         let dialog_r = self.pending_dialog.clone();
-        let connected = Arc::new(AtomicBool::new(true));
-        let flag = connected.clone();
+        let flag = self.connected.clone();
         let (chunk_tx, mut chunk_rx) = mpsc::unbounded_channel::<Vec<u8>>();
         std::thread::Builder::new()
             .name("cdp-pipe-read".into())
@@ -804,6 +806,34 @@ pub fn is_browser_method(method: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 回归（2026-09-17 attach 重附不重建缺口）：对端断开后
+    /// [`Session::is_connected`] 必须翻 false。旧实现读循环把死线写进
+    /// 局部旗，会话永远谎报活着，引擎懒 ensure 因此短路不重连。
+    #[tokio::test]
+    async fn connected_flag_falls_when_ws_dies() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        // 服务端：完成握手随即丢弃连接（模拟附着 target 换血断线）
+        tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let ws = tokio_tungstenite::accept_async(stream).await.unwrap();
+            drop(ws);
+        });
+
+        let s = Session::new();
+        s.connect(&format!("ws://{addr}")).await.unwrap();
+        assert!(s.is_connected(), "握手成功即活着");
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while s.is_connected() && std::time::Instant::now() < deadline {
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        assert!(
+            !s.is_connected(),
+            "ws 断开后 is_connected 必须翻 false（引擎懒 ensure 靠它判定重连）"
+        );
+    }
 
     fn ev(method: &str, stamp: f64) -> Value {
         json!({ "method": method, "params": { "timestamp": stamp } })
