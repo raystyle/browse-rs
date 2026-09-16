@@ -286,8 +286,8 @@
       "type": "object"
     },
     "cli.up": {
-      "description": "browse up [--headless] [--pipe] [--chrome <path>] [--ws <url>] [--port <p>] 显式起引擎（附着优先，缺则 spawn clean-chrome 隔离实例）。",
-      "example": "browse up --headless --pipe",
+      "description": "browse up [--headless] [--pipe] [--chrome <path>] [--profile <dir>] [--ws <url>] [--port <p>] 显式起引擎（附着优先，缺则 spawn clean-chrome 隔离实例；--profile 自定义 user-data-dir，默认固定 profile 持久保存站点会话）。",
+      "example": "browse up --headless --profile ~/profiles/proj-a",
       "input": {
         "properties": {
           "chrome": {
@@ -305,6 +305,10 @@
           "port": {
             "description": "",
             "type": "number"
+          },
+          "profile": {
+            "description": "缺省 固定 engine-profile",
+            "type": "string"
           },
           "ws": {
             "description": "",

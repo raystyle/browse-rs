@@ -53,6 +53,7 @@ async fn main() -> Result<()> {
     let mut ws: Option<String> = None;
     let mut port: Option<u16> = None;
     let mut chrome: Option<String> = None;
+    let mut profile: Option<String> = None;
     let mut headless = false;
     let mut pipe = false;
     let mut json = false;
@@ -82,6 +83,7 @@ async fn main() -> Result<()> {
                 )
             }
             "--chrome" => chrome = Some(next("--chrome")?),
+            "--profile" => profile = Some(next("--profile")?),
             "--headless" => headless = true,
             "--pipe" => pipe = true,
             "--json" => json = true,
@@ -142,7 +144,16 @@ async fn main() -> Result<()> {
 
     if serve {
         let bind = bind.unwrap_or_else(client::daemon_bind);
-        return serve_foreground(bind, ws, port, chrome.map(Into::into), headless, pipe).await;
+        return serve_foreground(
+            bind,
+            ws,
+            port,
+            chrome.map(Into::into),
+            headless,
+            pipe,
+            profile,
+        )
+        .await;
     }
 
     // 维护命令：从 surface 目录重生成 schema/llms（提交 docs/surface/）
@@ -171,7 +182,7 @@ async fn main() -> Result<()> {
     match mode {
         Mode::Up => {
             client::ensure_daemon().await?;
-            let health = client::engine_up(headless, chrome, ws, port, pipe).await?;
+            let health = client::engine_up(headless, chrome, ws, port, pipe, profile).await?;
             print_health(&health, json);
             Ok(())
         }
@@ -236,7 +247,7 @@ async fn main() -> Result<()> {
             );
             Ok(())
         }
-        Mode::Eval => run_eval(snippets, new_tab, ws, port, chrome, headless, pipe).await,
+        Mode::Eval => run_eval(snippets, new_tab, ws, port, chrome, headless, pipe, profile).await,
     }
 }
 
@@ -244,6 +255,8 @@ fn mode_is_eval(m: &Mode) -> bool {
     matches!(m, Mode::Eval)
 }
 
+// 旗标原样透传求值前置的 engine_up，不做参数束重构（与 up 面同一套旗标族）
+#[allow(clippy::too_many_arguments)]
 async fn run_eval(
     snippets: Vec<String>,
     new_tab: bool,
@@ -252,11 +265,12 @@ async fn run_eval(
     chrome: Option<String>,
     headless: bool,
     pipe: bool,
+    profile: Option<String>,
 ) -> Result<()> {
     client::ensure_daemon().await?;
     // 显式连接意图先落引擎（up 面接受同样的旗标），再求值
-    if ws.is_some() || port.is_some() || chrome.is_some() || headless || pipe {
-        client::engine_up(headless, chrome, ws, port, pipe).await?;
+    if ws.is_some() || port.is_some() || chrome.is_some() || headless || pipe || profile.is_some() {
+        client::engine_up(headless, chrome, ws, port, pipe, profile).await?;
     }
     if !snippets.is_empty() {
         for snip in &snippets {
@@ -303,17 +317,24 @@ async fn serve_foreground(
     chrome: Option<std::path::PathBuf>,
     headless: bool,
     pipe: bool,
+    profile: Option<String>,
 ) -> Result<()> {
     let session = cdp::Session::new();
     let host = browse_core::JsHost::new(session.clone());
     let engine = browse_core::Engine::new(session);
-    let spec = if let Some(ws) = ws {
+    let mut spec = if let Some(ws) = ws {
         browse_core::EngineSpec::Attach { ws_url: ws }
     } else if let Some(p) = port {
         browse_core::EngineSpec::Port(p)
     } else {
         browse_core::EngineSpec::from_env(chrome, headless, pipe)
     };
+    // 显式 --profile 顶掉 from_env 的 BROWSE_PROFILE 缺省
+    if let (browse_core::EngineSpec::Auto { profile: p, .. }, Some(explicit)) =
+        (&mut spec, profile.map(std::path::PathBuf::from))
+    {
+        *p = Some(explicit);
+    }
     let daemon = browse_core::server::Daemon::new(host, engine, spec);
     browse_core::server::serve(daemon, &bind).await
 }
@@ -452,7 +473,7 @@ browse：给 agent 用的 browse CLI（clean-chrome 专属）
   browse -e '<片段>' | stdin | TTY REPL      其余两形态
   browse --new-tab '<片段>'                  先开 about:blank 再求值
   browse --connect <ws|端口> '<片段>'        显式附着
-  browse up [--headless] [--pipe] [--chrome <path>] [--ws <url>|--port <p>]   显式起引擎
+  browse up [--headless] [--pipe] [--chrome <path>] [--profile <dir>] [--ws <url>|--port <p>]   显式起引擎
   browse down                                退 daemon（只杀自起引擎）
   browse status [--json]                     状态
   browse --llms [--full|--json]              命令面清单直出 stdout（与 docs/surface 同源；
@@ -476,6 +497,8 @@ browse：给 agent 用的 browse CLI（clean-chrome 专属）
       BROWSE_CDP_WS（钉死连接）、BROWSE_NO_ATTACH=1（跳过附着探测强制 spawn）、
       BROWSE_EVAL_TIMEOUT（秒，默认 300）。
       --pipe：spawn 引擎走 CDP 管道通道（CLEAN_CHROME_DEBUG=pipe，零 TCP 面）。
+      --profile / BROWSE_PROFILE：spawn 引擎自定义 user-data-dir（默认固定
+      <state>/engine-profile，站点状态与会话跨跑持久；down 不删）。
 退出码：0 成功 / 1 执行失败 / 2 用法错。"
     );
 }

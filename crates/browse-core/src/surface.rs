@@ -128,16 +128,17 @@ pub const COMMANDS: &[CmdSpec] = &[
     CmdSpec {
         name: "up",
         kind: CmdKind::Cli,
-        signature: "browse up [--headless] [--pipe] [--chrome <path>] [--ws <url>] [--port <p>]",
+        signature: "browse up [--headless] [--pipe] [--chrome <path>] [--profile <dir>] [--ws <url>] [--port <p>]",
         args: &[
             arg!("headless", "boolean", false, "false"),
             arg!("pipe", "boolean", false, "false"),
             arg!("chrome", "string", false, "发现序"),
+            arg!("profile", "string", false, "固定 engine-profile"),
             arg!("ws", "string", false),
             arg!("port", "number", false),
         ],
-        description: "显式起引擎（附着优先，缺则 spawn clean-chrome 隔离实例）。",
-        example: "browse up --headless --pipe",
+        description: "显式起引擎（附着优先，缺则 spawn clean-chrome 隔离实例；--profile 自定义 user-data-dir，默认固定 profile 持久保存站点会话）。",
+        example: "browse up --headless --profile ~/profiles/proj-a",
     },
     CmdSpec {
         name: "down",

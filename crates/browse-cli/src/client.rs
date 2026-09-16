@@ -189,11 +189,12 @@ pub async fn engine_up(
     ws: Option<String>,
     port: Option<u16>,
     pipe: bool,
+    profile: Option<String>,
 ) -> Result<Value> {
     let c = client();
     let resp = c
         .post(format!("{}/engine/up", http()))
-        .json(&json!({ "headless": headless, "chrome": chrome, "ws": ws, "port": port, "pipe": pipe }))
+        .json(&json!({ "headless": headless, "chrome": chrome, "ws": ws, "port": port, "pipe": pipe, "profile": profile }))
         .send()
         .await
         .context("POST /engine/up")?;

@@ -46,6 +46,8 @@ pub struct EngineUpRequest {
     /// spawn 走 CDP 管道通道（S005，Windows）。
     #[serde(default)]
     pub pipe: bool,
+    /// spawn 引擎的自定义 profile（user-data-dir；缺省用固定 engine-profile）。
+    pub profile: Option<String>,
 }
 
 /// HTTP daemon 的运行面聚合：宿主、引擎、缺省引擎意图、单飞槽与退出旗标。
@@ -220,6 +222,7 @@ async fn engine_up_handler(
             chrome: req.chrome.map(Into::into),
             headless: req.headless,
             pipe: req.pipe,
+            profile: req.profile.map(Into::into),
         }
     };
     match st.daemon.engine.ensure(&spec).await {

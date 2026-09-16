@@ -37,7 +37,8 @@ pub enum EngineSpec {
         /// 调试端口。
         u16,
     ),
-    /// 自动策略：先探测附着，缺则 spawn（`--chrome` / `--headless` / `--pipe` 可约束 spawn 面）。
+    /// 自动策略：先探测附着，缺则 spawn（`--chrome` / `--headless` / `--pipe` /
+    /// `--profile` 可约束 spawn 面）。
     Auto {
         /// 指定 chrome 可执行文件（`None` 走发现序）。
         chrome: Option<PathBuf>,
@@ -45,6 +46,9 @@ pub enum EngineSpec {
         headless: bool,
         /// spawn 走 CDP 管道通道（`CLEAN_CHROME_DEBUG=pipe`，不开 9222）。
         pipe: bool,
+        /// spawn 引擎的自定义 profile（user-data-dir；`None` 用默认固定
+        /// `<state>/engine-profile`，持久保存站点状态与会话）。
+        profile: Option<PathBuf>,
     },
 }
 
@@ -70,6 +74,7 @@ impl EngineSpec {
             chrome,
             headless,
             pipe,
+            profile: std::env::var_os("BROWSE_PROFILE").map(Into::into),
         }
     }
 }
@@ -221,6 +226,7 @@ impl Engine {
                 chrome,
                 headless,
                 pipe,
+                profile,
             } => {
                 // BROWSE_NO_ATTACH=1：跳过附着探测，强制 spawn 隔离实例
                 // （测试确定性 / 「别碰我正开着的浏览器」的显式意图）
@@ -236,10 +242,12 @@ impl Engine {
                         .context("attach 已探测到的浏览器")?;
                     EngineSource::Attached { ws_url: ws }
                 } else if *pipe {
-                    return self.spawn_pipes(chrome.clone(), *headless).await;
+                    return self
+                        .spawn_pipes(chrome.clone(), *headless, profile.clone())
+                        .await;
                 } else {
                     // spawn 分支自己落状态（含 child 句柄）并 attach，提前返回
-                    return self.spawn(chrome.clone(), *headless).await;
+                    return self.spawn(chrome.clone(), *headless, profile.clone()).await;
                 }
             }
         };
@@ -251,13 +259,20 @@ impl Engine {
         Ok(source)
     }
 
-    async fn spawn(&self, chrome: Option<PathBuf>, headless: bool) -> Result<EngineSource> {
+    /// spawn 端口态引擎；`profile` 为自定义 user-data-dir（`None` 用默认
+    /// 固定 `<state>/engine-profile`，站点状态与会话跨跑持久）。
+    async fn spawn(
+        &self,
+        chrome: Option<PathBuf>,
+        headless: bool,
+        profile: Option<PathBuf>,
+    ) -> Result<EngineSource> {
         let chrome = cdp_spawn::find_chrome(resolve_chrome(chrome).as_deref()).ok_or_else(|| {
             anyhow!(
                 "browse: 找不到 chrome；下一步：browse chrome install <版本> <部署目录>（或 --chrome <path> / BROWSE_CHROME 显式指定）"
             )
         })?;
-        let profile = crate::paths::engine_profile_dir();
+        let profile = profile.unwrap_or_else(crate::paths::engine_profile_dir);
         let child = cdp_spawn::spawn_engine(&chrome, &profile, headless)?;
         let pid = child.id();
         // spawn 之后的任何失败都必须杀掉 child：std Child 的 Drop 不杀进程，
@@ -301,14 +316,20 @@ impl Engine {
         Ok(self.source().await)
     }
 
-    /// 管道态 spawn（S005 契约）：免端口探测、零 TCP 面、断管即关浏览器。
-    async fn spawn_pipes(&self, chrome: Option<PathBuf>, headless: bool) -> Result<EngineSource> {
+    /// 管道态 spawn（S005 契约）：免端口探测、零 TCP 面、断管即关浏览器；
+    /// `profile` 语义同 [`Engine::spawn`]。
+    async fn spawn_pipes(
+        &self,
+        chrome: Option<PathBuf>,
+        headless: bool,
+        profile: Option<PathBuf>,
+    ) -> Result<EngineSource> {
         let chrome = cdp_spawn::find_chrome(resolve_chrome(chrome).as_deref()).ok_or_else(|| {
             anyhow!(
                 "browse: 找不到 chrome；下一步：browse chrome install <版本> <部署目录>（或 --chrome <path> / BROWSE_CHROME 显式指定）"
             )
         })?;
-        let profile = crate::paths::engine_profile_dir();
+        let profile = profile.unwrap_or_else(crate::paths::engine_profile_dir);
         let engine =
             cdp_spawn::spawn_engine_pipes(&chrome, &profile, headless, cdp_spawn::PipeMode::Pipe)
                 .context("管道态 spawn")?;

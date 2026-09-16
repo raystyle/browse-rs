@@ -631,6 +631,7 @@ async fn spawn_port_channel_roundtrip() {
             chrome: None,
             headless: true,
             pipe: false,
+            profile: None,
         })
         .await
         .expect("端口态引擎起不来（BROWSE_CHROME 指到 clean-chrome 的 chrome.exe？）");
@@ -654,6 +655,7 @@ async fn spawn_pipe_channel_roundtrip() {
             chrome: None,
             headless: true,
             pipe: true,
+            profile: None,
         })
         .await
         .expect("管道态引擎起不来（需 clean-chrome 2026-09-14 后的 47 锚产物）");

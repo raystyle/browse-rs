@@ -129,3 +129,11 @@
 - 自愈实证（真场景复现）：spawn 无头引擎 pid 1290712 后 kill -9，下一次求值直接返回 healed-ok 并自动重起引擎 pid 1290949，status 健康；旧行为是永久 socket closed。
 - 观察入账：懒 ensure 重起走缺省 Auto 形态（headless=false，wslg 有显示面所以有头也能跑），显式 headless 要再 up --headless；后续如需「记住上次显式形态」另立行为批裁量。
 - 门禁：clippy 绿、12 组 test、10 doc test、aidoc check clean、PE-01 至 PE-12 exit 0；封 0.2.1（patch 判据：修复批）。
+
+## 自定义引擎 profile 批（0.3.0，用户令 2026-09-17）
+
+- 用户令：默认用固定 profile 持久保存站点状态与会话（既有 engine-profile 语义即此，down 不删、登录态复用，x.com cookie 注入即落此），并补自定义 profile 能力。
+- 实现：EngineSpec::Auto 增 profile 字段（pub 面，aidoc 25 artifacts 重生）；spawn 与 spawn_pipes 两通道同接（profile 缺省解到固定 engine-profile）；BROWSE_PROFILE 环境缺省由 from_env 读（daemon 懒 ensure 重起也吃），CLI --profile 显式顶掉；HTTP /engine/up 的 EngineUpRequest 增 profile；目录 up 条目签名与参数同步。
+- 冒烟 [实证: BROWSE_NO_ATTACH=1 up --headless --profile /tmp/custom-profile-a 得 spawned profile /tmp/custom-profile-a，目录落位，status 报同值；默认 profile 语义不变]。
+- 门禁：clippy 绿（run_eval 旗标族透传 allow too_many_arguments 在册注因）、12 组 test、10 doc test、surface 与 aidoc 重生、check clean、PE-01 至 PE-12 exit 0。封 0.3.0（minor 判据：能力新增）。
+- 踩坑注：down 后立即 up 偶发旧 daemon 未及退净致附着旧 9222，重跑即过；非本批引入，未立票。
