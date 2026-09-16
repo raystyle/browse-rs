@@ -19,6 +19,7 @@ Rust workspace（crates/cdp、browse-core、browse-cli）。公开契约以 `///
 
 - 改 pub 项：同步 `///` 与 doctest（missing_docs 是 deny，CI 必红），并 `cargo aidoc` 后提交 `docs/aidoc/`
 - 契约注释三纪律（dev-evo 第六十批）：首句成句（做什么+何时用+边界，不以项名开头，细节隔空行）；返 `Result` 必备 `# Errors`、可能 panic 必备 `# Panics`（clippy missing_errors_doc/missing_panics_doc/missing_safety_doc 已 deny）；示例断言收尾，`no_run` 注明原因
+- 版本载体唯一权威：Cargo.toml 的 workspace 版本；载体外出现版本号即第二真相，清理（ADR 冻结件里的决策语境散文不算）。semver 触发判据：文档/修复批取 patch，能力新增或行为变化取 minor，契约破裂或形态重构取 major；判据写在封版 REQ 里
 - 不可逆技术选择：先写 docs/adr/ 或改旧 ADR 的 Status
 - 文档链接只用 intra-doc（`` [`Session::call`] ``）
 - I/O 类示例标 no_run，不标 ignore
@@ -50,3 +51,4 @@ Rust workspace（crates/cdp、browse-core、browse-cli）。公开契约以 `///
 - 本机引擎 profile：`%USERPROFILE%\.browse-rs\engine-profile`（down 不删，复用登录态）
 - 四平台测试矩阵（用户宣言 2026-09-16，ohmycloud 总台周知）：lan-win（Windows 宿主 + WSL 总台）、lan-ubuntu（Linux NUC，全运行时）、lan-linux（Linux server）、lan-mac（macOS arm64），真实环境测试验收；验收按需向 ohmycloud 总台要端点测试支撑。本仓实操：WSL 直跑门禁 + 宿主机 `cargo.exe` 同树（aidoc 投影必须在宿主机侧重生成，manifest 钉 msvc）；`ssh lan-ubuntu` / `ssh lan-mac` 的 `~/browse-rs` 是 rsync 副本非 git 仓，先 rsync 源树再跑门禁；lan-linux 备用端点。远端建立后挂 Rust 三岗 CI（linux + win-gnu 交叉 + mac）
 - 连接姿势（口径全文见 dev-evo skill env-platform 第十节）：WSL 到宿主恒走 127.0.0.1 回环 ssh 与 interop 直调（`cargo.exe`、`/mnt/c` 互访），不走宿主 mesh IP（mirrored 网络下自连被 RST 属结构性，非配置可修）；lan 三端（lan-ubuntu / lan-linux / lan-mac）mesh 地址互访随时可用；连接问题先查姿势再查配置
+- 运维与验收脚本载体（口径见 env-platform 第十一节）：统一走 pwsh 一份（五端 pwsh 7.6.6 在位）；本仓既有跨平台脚本载体是 PEP 723 Python 经 uv（`tools/`），不强制迁移，验收与运维面新增脚本一律 pwsh
