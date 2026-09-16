@@ -20,3 +20,12 @@
 - 示例纪律：find_chrome 示例从 println 改为显式路径直通断言；Engine::new 示例从 no_run 升为可跑断言（纯构造无 IO）；五处 no_run（cdp lib/discovery/js_host/server）补注原因（需 tokio runtime 或本机真浏览器）。
 - 全平台矩阵首跑（用户指路）：WSL 本机、Windows 宿主机（cargo.exe）、lan-ubuntu、lan-mac 四面 clippy -D warnings 与 cargo test 全绿；mac 验了 POSIX pre_exec 布线面，Windows 验了句柄继承面。[实证: 四面各 12 组 test result: ok，无失败]
 - aidoc 投影随注释同批在宿主机侧重生成（24 artifacts），`cargo.exe aidoc --check --strict` clean。
+
+## 第六十一批：终态对齐盘点
+
+- 对照 references 十七篇逐面自评：11 已落、2 部分本批补齐（env-platform 行尾钉死、tool-project 清单与 PEP 723）、2 部分裁定挂起（flow-release 待首次封版、exp-sedimentation 待首个二犯实例激活）、2 不适用（tool-typescript；tool-python 工程面，单件维护脚本由 tool-project 覆盖）。裁定细目见本批回执。
+- env-platform 补：新增 .gitattributes 钉行尾 lf；renormalize 仅 methods.txt 行尾归一，内容零变化 [实证: ignore-cr-at-eol 空 diff]。CI 三系统矩阵裁定待远端（仓无 remote，无处落）。
+- tool-project 补：tools/ 增 README 清单；gen-cdp-methods.py 加 PEP 723 头（零依赖声明）。
+- agent CLI 面裁定（tool-cli-agents 第十一节对照）：--llms 发现通道是真差距，立项 REQ-002（draft）；MCP 通道、脚本 workspace、cl100k 计量分页、类型化错误码信封裁定不适用或等价形态已落：方言值优先输出加大值落盘指针行（`{__dropped}`）即 token 经济学形态，分页由读文件侧承担，错误带可照抄下一步 CTA 比错误码更强；skill 已按命令组拆分（全局函数面），命令面单一真相源三面派生已落（surface_contract 锁漂移）。
+- 排查退役三篇（env-environment / flow-events / tool-selection）引用：全仓零命中，无需清理 [实证: rg 全仓扫描空]。
+- 用户确认四端全平台测试验收成局（lan-win 总台、lan-ubuntu、lan-linux、lan-mac）；本批改动全为非代码面，无平台方差，不另加跑。

@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.12"
+# dependencies = []
+# ///
 """从 browser_protocol.json + js_protocol.json 生成 CDP 命令清单。
 
 对齐 browser-harness-js sdk/gen.ts 的口径：跳过 events，收录

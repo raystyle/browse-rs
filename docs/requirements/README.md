@@ -5,3 +5,4 @@
 | id | 状态 | 优先级 | 标题 | trace |
 |---|---|---|---|---|
 | REQ-001 | implemented | must | 建立文档体系 | dev-evo check.py 退出码 0 |
+| REQ-002 | draft | should | browse --llms 发现通道 | null |
