@@ -1,8 +1,11 @@
-# ADR-0001：常驻 daemon，CLI 首次使用自动拉起
+---
+id: ADR-0001
+status: accepted
+date: 2026-09-14
+deciders: 用户裁定（CLI 形态问询）+ 维护者
+---
 
-- Status: accepted
-- Date: 2026-09-14
-- Deciders: 用户裁定（CLI 形态问询）+ 维护者
+# ADR-0001：常驻 daemon，CLI 首次使用自动拉起
 
 ## Context
 

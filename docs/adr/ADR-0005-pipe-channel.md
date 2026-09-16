@@ -1,8 +1,12 @@
-# ADR-0005：spawn 管道通道（clean-chrome S005）
+---
+id: ADR-0005
+status: accepted
+note: 2026-09-15 补：POSIX fd 3/4 布线落地
+date: 2026-09-14（POSIX 补记 2026-09-15）
+deciders: 用户指示（"spawn 可用改进 支持管道模式"）+ 维护者
+---
 
-- Status: accepted（2026-09-15 补：POSIX fd 3/4 布线落地）
-- Date: 2026-09-14（POSIX 补记 2026-09-15）
-- Deciders: 用户指示（"spawn 可用改进 支持管道模式"）+ 维护者
+# ADR-0005：spawn 管道通道（clean-chrome S005）
 
 ## Context
 

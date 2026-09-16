@@ -76,7 +76,7 @@ pub async fn ensure_daemon() -> Result<()> {
         const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
         // 先摘掉本进程 stdio 句柄的可继承位：daemon spawn 走
         // bInheritHandles=TRUE（stdio 指到日志文件），而 bash 管道默认
-        // 可继承——不摘的话常驻 daemon 会握着调用方 `browse '…' | jq`
+        // 可继承；不摘的话常驻 daemon 会握着调用方 `browse '…' | jq`
         // 的管道写端，管道永不 EOF。显式配置的日志句柄不受影响
         for slot in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
             let h = unsafe { GetStdHandle(slot) };

@@ -3,7 +3,7 @@
 //!
 //! 与 bh 的 `BH_NAME` 同型：默认实例一切照旧（`~/.browse-rs`、9880）；
 //! 命名实例的状态（daemon 日志、drops、screenshots、录制、engine-profile）
-//! 全进 `~/.browse-rs/<name>/`，端口由名字稳定派生（9900-9999）——
+//! 全进 `~/.browse-rs/<name>/`，端口由名字稳定派生（9900-9999）：
 //! 引擎 profile 独占，命名实例可各自 spawn chrome 互不锁。
 
 use std::path::PathBuf;
@@ -51,7 +51,7 @@ pub fn state_dir() -> PathBuf {
     state_dir_for(&instance_name())
 }
 
-/// FNV-1a（64 位）——名字到端口的稳定散列。
+/// FNV-1a（64 位）：名字到端口的稳定散列。
 fn fnv1a(s: &str) -> u64 {
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
     for b in s.bytes() {

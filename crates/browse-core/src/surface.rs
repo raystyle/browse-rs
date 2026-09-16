@@ -667,7 +667,12 @@ pub fn render_skill() -> String {
          clean-chrome；变量跨调用持久；错误带可照抄的下一步。\n",
     );
     for c in COMMANDS.iter().filter(|c| c.kind == CmdKind::Global) {
-        out.push_str(&format!("\n# {}\n\n{}\n", c.signature, c.description));
+        // 标题只留函数名（标题禁括号）；完整签名以行内码保留在正文首行。
+        let name = c.signature.split('(').next().unwrap_or(c.signature);
+        out.push_str(&format!(
+            "\n# {name}\n\n`{}`\n\n{}\n",
+            c.signature, c.description
+        ));
         if !c.args.is_empty() {
             out.push_str("\n## Inputs\n\n```json\n");
             out.push_str(&serde_json::to_string_pretty(&input_schema(c)).unwrap_or_default());

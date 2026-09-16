@@ -2,7 +2,7 @@
 //!
 //! 移植自 browser-harness-rs `src/js_host.rs` 的解析半边，独立成模块便于单测。
 //! 方言支持：字面量、对象、数组、成员、下标、`await`、`const/let/var`、
-//! `return`、`//` 注释。不支持：函数字面量、`if/for/while`、模板字符串——
+//! `return`、`//` 注释。不支持：函数字面量、`if/for/while`、模板字符串；
 //! 这些在解析期就报错并提示「页面逻辑放 `Runtime.evaluate` 的 expression」。
 
 use anyhow::{Result, anyhow, bail};

@@ -58,7 +58,7 @@ pub(crate) enum RouteAction {
 
 /// 引用表：短 ref -> backendNodeId，加 snapshot 时刻的页窗口代标记。
 /// 代标记不匹配（文档被导航重开）即整表作废；SPA 同文档跳转（pushState）
-/// 不重开窗口、代不变，ref 继续有效——比 URL 对比零假阳性。
+/// 不重开窗口、代不变，ref 继续有效；比 URL 对比零假阳性。
 #[derive(Clone)]
 struct RefTable {
     generation: i64,
@@ -413,7 +413,7 @@ impl JsHost {
                     })
                     .collect();
                 // D35-lite：给带 backendNodeId 的节点依次盖短 ref（e1、e2…），
-                // 并整表替换引用表——只有最近一次 snapshot 的 ref 有效
+                // 并整表替换引用表：只有最近一次 snapshot 的 ref 有效
                 let mut refmap = HashMap::new();
                 let mut counter = 0usize;
                 let nodes: Vec<Value> = nodes
@@ -628,7 +628,7 @@ impl JsHost {
 
     /// 查短 ref 对应的 backendNodeId（只认最近一次 snapshot 的表），
     /// 并做主动代际校验：snapshot 时在页窗口盖过 `__browse_ref_gen` 代标记，
-    /// 引用前核对——不匹配即文档已被导航重开，整表作废，给重取 CTA。
+    /// 引用前核对：不匹配即文档已被导航重开，整表作废，给重取 CTA。
     /// 标记取不到（evaluate 失败）不拦，退给被动失效（resolveNode/零尺寸）。
     async fn lookup_ref(&self, r: &str) -> Result<i64> {
         let table = self.refs.lock().await.clone();
@@ -864,7 +864,7 @@ fn spawn_dialog_watcher(session: Arc<Session>) {
 }
 
 /// 网络拦截 watcher（游离常驻任务）：`Fetch.requestPaused` 是必须应答的
-/// 事件（不应答页面就挂着），由 watcher 按 [`RouteRule`] 应答——命中的
+/// 事件（不应答页面就挂着），由 watcher 按 [`RouteRule`] 应答；命中的
 /// failRequest/fulfillRequest，未命中的 continueRequest 放行。只在我们
 /// 自己 `Fetch.enable` 时才接管（手动开 Fetch 域的 requestPaused 不动，
 /// 留给 agent 自己 peekEvents 处理）。

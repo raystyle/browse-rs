@@ -15,7 +15,7 @@
 
 - `click_at` — 真点击：`Input.dispatchMouseEvent` pressed+released 于视口坐标 (x,y)。
 - `click_ref` — 按短 ref 点击：滚动可见 -> 量视口中心 -> **遮挡命中测试** -> 复用
-- `close_tab` — 关 tab；缺省关当前活动 tab。守卫层只放行本会话自建 tab——用户 tab 一律拒绝。
+- `close_tab` — 关 tab；缺省关当前活动 tab。守卫层只放行本会话自建 tab：用户 tab 一律拒绝。
 - `current_tab` — 当前活动 tab 简表 `{targetId,title,url}`；无活动 tab 返回 `null`。
 - `fill_input` — 按 CSS 选择器填输入框：focus -> 全选（commands，不发 Ctrl+A）-> 可选
 - `fill_ref` — 按短 ref 填输入框：objectId 上 focus -> 探测控件（SELECT/readOnly 拒收

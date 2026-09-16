@@ -59,7 +59,7 @@ browse 'await recordStop()'                  # -> {frames,bytes,dir}（PNG 已�
 ```
 
 导航后旧 ref 失效（代标记主动拦 + resolveNode 被动兜底），错误自带
-「重新 snapshot」CTA——重新 `snapshot()` 拿新 ref 即可。
+「重新 snapshot」CTA：重新 `snapshot()` 拿新 ref 即可。
 
 ## 7. 多实例（BROWSE_NAME）
 

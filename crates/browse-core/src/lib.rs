@@ -4,7 +4,7 @@
 //!
 //! - [`parser`]：browser-harness-js 片段方言的手写语法分析器（纯函数，可单测）。
 //!   支持：字面量、对象、数组、成员、下标、`await`、`const/let/var`、`return`、
-//!   `//` 注释。不支持：函数字面量、`if/for`、模板字符串——页面逻辑放进
+//!   `//` 注释。不支持：函数字面量、`if/for`、模板字符串；页面逻辑放进
 //!   `Runtime.evaluate` 的 `expression` 字符串里。
 //! - [`js_host`]：方言求值器。`session.<Domain>.<method>(params)` 转发为 CDP
 //!   字符串调用，宿主全局 `listPageTargets` / `resolveWsUrl` /
@@ -12,7 +12,7 @@
 //!   `peekEvents`（非破坏事件窥视）。
 //! - [`engine`]：引擎策略（附着优先，缺则自起 clean-chrome 专属实例，只杀
 //!   自己 spawn 的）与引擎状态。
-//! - [`record`]：录制——`Page.startScreencast` 帧流由泵任务落盘
+//! - [`record`]：录制，`Page.startScreencast` 帧流由泵任务落盘
 //!   （`recordStart` / `recordStop`）。
 //! - [`paths`]：实例命名空间（`BROWSE_NAME` -> 状态目录与 daemon 端口，
 //!   多实例的落点，ADR-0006）。

@@ -347,7 +347,7 @@ async fn run_stdin(new_tab: bool) -> Result<()> {
 fn print_help() {
     eprintln!(
         "\
-browse — 给 agent 用的 browse CLI（clean-chrome 专属）
+browse：给 agent 用的 browse CLI（clean-chrome 专属）
 
 用法：
   browse '<方言片段>'                       求值（自动拉 daemon 与引擎）
@@ -366,7 +366,7 @@ browse — 给 agent 用的 browse CLI（clean-chrome 专属）
   await session.Page.navigate({{url:\"https://example.com\"}})
   await session.waitFor(\"Page.loadEventFired\", undefined, 15000)
 支持：字面量/对象/数组/成员/下标/await/const-let-var/return。
-不支持：函数字面量、if/for、模板字符串——页面逻辑放 Runtime.evaluate 的 expression。
+不支持：函数字面量、if/for、模板字符串；页面逻辑放 Runtime.evaluate 的 expression。
 
 环境：BROWSE_PORT（daemon 端口，默认 9880）、BROWSE_NAME（命名实例：状态目录与
       派生端口 9900-9999 隔离，多实例并行）、BROWSE_CHROME（chrome.exe 路径）、

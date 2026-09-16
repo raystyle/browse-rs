@@ -59,7 +59,7 @@ browse CLI 的核心库：方言宿主、引擎策略、daemon HTTP API。
 
 - [`parser`]：browser-harness-js 片段方言的手写语法分析器（纯函数，可单测）。
   支持：字面量、对象、数组、成员、下标、`await`、`const/let/var`、`return`、
-  `//` 注释。不支持：函数字面量、`if/for`、模板字符串——页面逻辑放进
+  `//` 注释。不支持：函数字面量、`if/for`、模板字符串；页面逻辑放进
   `Runtime.evaluate` 的 `expression` 字符串里。
 - [`js_host`]：方言求值器。`session.<Domain>.<method>(params)` 转发为 CDP
   字符串调用，宿主全局 `listPageTargets` / `resolveWsUrl` /
@@ -67,7 +67,7 @@ browse CLI 的核心库：方言宿主、引擎策略、daemon HTTP API。
   `peekEvents`（非破坏事件窥视）。
 - [`engine`]：引擎策略（附着优先，缺则自起 clean-chrome 专属实例，只杀
   自己 spawn 的）与引擎状态。
-- [`record`]：录制——`Page.startScreencast` 帧流由泵任务落盘
+- [`record`]：录制，`Page.startScreencast` 帧流由泵任务落盘
   （`recordStart` / `recordStop`）。
 - [`paths`]：实例命名空间（`BROWSE_NAME` -> 状态目录与 daemon 端口，
   多实例的落点，ADR-0006）。
@@ -107,7 +107,7 @@ clean-chrome 专为自动化而生（`--auto-allow-devtools-connections` 免确�
 
 1. 显式 `ws` / `port`（CLI 旗标或 `BROWSE_CDP_WS`）优先直连。
 2. 否则探测本机已开的调试口（`/json/version`@9222 -> 默认 profile 的
-   `DevToolsActivePort`），命中即附着——人机共存，绝不关用户的浏览器。
+   `DevToolsActivePort`），命中即附着；人机共存，绝不关用户的浏览器。
 3. 都没有就 spawn 专属实例：独立 profile、`--remote-debugging-port=0`、
    可 `--headless`。[`Engine::shutdown`] 只终结自己 spawn 的（优雅
    `Browser.close` -> 兜底杀进程树）。
@@ -152,7 +152,7 @@ browser-harness-js 片段方言的语法分析器（纯函数）。
 
 移植自 browser-harness-rs `src/js_host.rs` 的解析半边，独立成模块便于单测。
 方言支持：字面量、对象、数组、成员、下标、`await`、`const/let/var`、
-`return`、`//` 注释。不支持：函数字面量、`if/for/while`、模板字符串——
+`return`、`//` 注释。不支持：函数字面量、`if/for/while`、模板字符串；
 这些在解析期就报错并提示「页面逻辑放 `Runtime.evaluate` 的 expression」。
 
 ## Functions
@@ -177,7 +177,7 @@ browser-harness-js 片段方言的语法分析器（纯函数）。
 
 与 bh 的 `BH_NAME` 同型：默认实例一切照旧（`~/.browse-rs`、9880）；
 命名实例的状态（daemon 日志、drops、screenshots、录制、engine-profile）
-全进 `~/.browse-rs/<name>/`，端口由名字稳定派生（9900-9999）——
+全进 `~/.browse-rs/<name>/`，端口由名字稳定派生（9900-9999）：
 引擎 profile 独占，命名实例可各自 spawn chrome 互不锁。
 
 ## Functions
@@ -204,7 +204,7 @@ browser-harness-js 片段方言的语法分析器（纯函数）。
 （不 ack 的话 chrome 只发头几帧就等住）。`recordStop` 停泵、末冲一次、
 `Page.stopScreencast`，回 `{frames,bytes,dir}`。
 
-注意：帧也走事件缓冲（上限 1000），长录制会挤掉旧事件——录短段，
+注意：帧也走事件缓冲（上限 1000），长录制会挤掉旧事件；录短段，
 要完整事件流先 peek 再录。
 
 ## Functions
@@ -235,7 +235,7 @@ browser-harness-js 片段方言的语法分析器（纯函数）。
 
 - `click_at` — 真点击：`Input.dispatchMouseEvent` pressed+released 于视口坐标 (x,y)。
 - `click_ref` — 按短 ref 点击：滚动可见 -> 量视口中心 -> **遮挡命中测试** -> 复用
-- `close_tab` — 关 tab；缺省关当前活动 tab。守卫层只放行本会话自建 tab——用户 tab 一律拒绝。
+- `close_tab` — 关 tab；缺省关当前活动 tab。守卫层只放行本会话自建 tab：用户 tab 一律拒绝。
 - `current_tab` — 当前活动 tab 简表 `{targetId,title,url}`；无活动 tab 返回 `null`。
 - `fill_input` — 按 CSS 选择器填输入框：focus -> 全选（commands，不发 Ctrl+A）-> 可选
 - `fill_ref` — 按短 ref 填输入框：objectId 上 focus -> 探测控件（SELECT/readOnly 拒收

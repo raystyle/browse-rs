@@ -2,3 +2,4 @@
 /chromium-*/
 *.log
 /refs/
+/.claude/

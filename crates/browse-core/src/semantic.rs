@@ -56,7 +56,7 @@ pub async fn current_tab(s: &Session) -> Result<Value> {
         .unwrap_or(Value::Null))
 }
 
-/// 关 tab；缺省关当前活动 tab。守卫层只放行本会话自建 tab——用户 tab 一律拒绝。
+/// 关 tab；缺省关当前活动 tab。守卫层只放行本会话自建 tab：用户 tab 一律拒绝。
 ///
 /// # Errors
 ///
@@ -286,7 +286,7 @@ pub async fn wait_idle(s: &Session, ms: u64) -> Result<Value> {
 }
 
 /// 派发一串 Input 域调用；撞 `cdp timeout`（从未激活的后台 tab 收 Input
-/// 的典型症状）时 `Target.activateTarget` 后整串重试一次——bh 内置激活
+/// 的典型症状）时 `Target.activateTarget` 后整串重试一次；bh 内置激活
 /// 重试同款：只在挂起时自愈，不主动抢用户前台。
 /// 元素引用（D35-lite）：backendNodeId 锚定的真交互。ref 的短名映射在
 /// [`crate::js_host`]（每次 `snapshot()` 整表替换）；本层只管把
@@ -317,7 +317,7 @@ async fn resolve_node_object(s: &Session, backend_node_id: i64) -> Result<String
 /// [`click_at`] 的 trusted 鼠标事件。命中测试（吸收 agent-browser 的
 /// blocker 思路）：`elementFromPoint` 看点击点实际落谁头上，落点与目标
 /// 无祖孙/label 关联即判被遮挡（consent banner、modal 场景），报遮挡
-/// 元素描述并拒绝点击——绝不静默点错位置。`clickAt` 是显式「点可见物」，
+/// 元素描述并拒绝点击：绝不静默点错位置。`clickAt` 是显式「点可见物」，
 /// 不做此检查。
 ///
 /// # Errors
@@ -475,7 +475,7 @@ pub async fn fill_ref(s: &Session, backend_node_id: i64, text: &str) -> Result<V
 
 /// 当前页存 PDF（`Page.printToPDF`，`printBackground`+`preferCSSPageSize`）。
 /// 仅无头 chrome 支持（Chromium 限制）。路径缺省落 `<state>/pdf-<ts>.pdf`，
-/// 回 `{path,bytes}`——screenshot 的姊妹件，agent 存档页面用。
+/// 回 `{path,bytes}`：screenshot 的姊妹件，agent 存档页面用。
 ///
 /// # Errors
 ///
@@ -571,10 +571,10 @@ pub async fn select_option(s: &Session, backend_node_id: i64, value: &str) -> Re
 }
 
 /// 派发一串 Input 域调用。两个挂起自愈路径：
-/// - 页面 JS 对话框开着：Input 被它挂起——立即报「先处理对话框」CTA，
+/// - 页面 JS 对话框开着：Input 被它挂起，立即报「先处理对话框」CTA，
 ///   不烧超时（状态来自 [`cdp::Session::pending_dialog`]，route 层截获）。
 /// - `cdp timeout`（从未激活的后台 tab 收 Input 的典型症状）：
-///   `Target.activateTarget` 后整串重试一次——bh 内置激活重试同款，
+///   `Target.activateTarget` 后整串重试一次；bh 内置激活重试同款，
 ///   只在挂起时自愈，不主动抢用户前台。
 async fn dispatch_input_seq(s: &Session, seq: Vec<(&'static str, Value)>) -> Result<()> {
     if s.pending_dialog().await.is_some() {

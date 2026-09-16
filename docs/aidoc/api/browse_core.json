@@ -5,7 +5,7 @@
     {
       "path": "browse_core::engine",
       "kind": "module",
-      "docs": "引擎策略：附着优先，缺则自起（ADR-0003）。\n\nclean-chrome 专为自动化而生（`--auto-allow-devtools-connections` 免确认、\n无参数启动即开 9222），所以：\n\n1. 显式 `ws` / `port`（CLI 旗标或 `BROWSE_CDP_WS`）优先直连。\n2. 否则探测本机已开的调试口（`/json/version`@9222 -> 默认 profile 的\n   `DevToolsActivePort`），命中即附着——人机共存，绝不关用户的浏览器。\n3. 都没有就 spawn 专属实例：独立 profile、`--remote-debugging-port=0`、\n   可 `--headless`。[`Engine::shutdown`] 只终结自己 spawn 的（优雅\n   `Browser.close` -> 兜底杀进程树）。\n\n连上后自动 attach 首个 page target（没有就开 about:blank），\n让 agent 一条命令即可 `session.Page.navigate(...)`（ADR-0004）；\n片段里的显式 `session.connect` / `session.use` 仍然可覆盖。"
+      "docs": "引擎策略：附着优先，缺则自起（ADR-0003）。\n\nclean-chrome 专为自动化而生（`--auto-allow-devtools-connections` 免确认、\n无参数启动即开 9222），所以：\n\n1. 显式 `ws` / `port`（CLI 旗标或 `BROWSE_CDP_WS`）优先直连。\n2. 否则探测本机已开的调试口（`/json/version`@9222 -> 默认 profile 的\n   `DevToolsActivePort`），命中即附着；人机共存，绝不关用户的浏览器。\n3. 都没有就 spawn 专属实例：独立 profile、`--remote-debugging-port=0`、\n   可 `--headless`。[`Engine::shutdown`] 只终结自己 spawn 的（优雅\n   `Browser.close` -> 兜底杀进程树）。\n\n连上后自动 attach 首个 page target（没有就开 about:blank），\n让 agent 一条命令即可 `session.Page.navigate(...)`（ADR-0004）；\n片段里的显式 `session.connect` / `session.use` 仍然可覆盖。"
     },
     {
       "path": "browse_core::engine::Engine",
@@ -40,7 +40,7 @@
     {
       "path": "browse_core::parser",
       "kind": "module",
-      "docs": "browser-harness-js 片段方言的语法分析器（纯函数）。\n\n移植自 browser-harness-rs `src/js_host.rs` 的解析半边，独立成模块便于单测。\n方言支持：字面量、对象、数组、成员、下标、`await`、`const/let/var`、\n`return`、`//` 注释。不支持：函数字面量、`if/for/while`、模板字符串——\n这些在解析期就报错并提示「页面逻辑放 `Runtime.evaluate` 的 expression」。"
+      "docs": "browser-harness-js 片段方言的语法分析器（纯函数）。\n\n移植自 browser-harness-rs `src/js_host.rs` 的解析半边，独立成模块便于单测。\n方言支持：字面量、对象、数组、成员、下标、`await`、`const/let/var`、\n`return`、`//` 注释。不支持：函数字面量、`if/for/while`、模板字符串；\n这些在解析期就报错并提示「页面逻辑放 `Runtime.evaluate` 的 expression」。"
     },
     {
       "path": "browse_core::parser::Expr",
@@ -80,7 +80,7 @@
     {
       "path": "browse_core::paths",
       "kind": "module",
-      "docs": "实例命名空间（多实例，ADR-0006）：`BROWSE_NAME` 一个名字同时决定\n状态目录与 daemon 端口。\n\n与 bh 的 `BH_NAME` 同型：默认实例一切照旧（`~/.browse-rs`、9880）；\n命名实例的状态（daemon 日志、drops、screenshots、录制、engine-profile）\n全进 `~/.browse-rs/<name>/`，端口由名字稳定派生（9900-9999）——\n引擎 profile 独占，命名实例可各自 spawn chrome 互不锁。"
+      "docs": "实例命名空间（多实例，ADR-0006）：`BROWSE_NAME` 一个名字同时决定\n状态目录与 daemon 端口。\n\n与 bh 的 `BH_NAME` 同型：默认实例一切照旧（`~/.browse-rs`、9880）；\n命名实例的状态（daemon 日志、drops、screenshots、录制、engine-profile）\n全进 `~/.browse-rs/<name>/`，端口由名字稳定派生（9900-9999）：\n引擎 profile 独占，命名实例可各自 spawn chrome 互不锁。"
     },
     {
       "path": "browse_core::paths::DERIVED_PORT_MIN",
@@ -120,7 +120,7 @@
     {
       "path": "browse_core::record",
       "kind": "module",
-      "docs": "录制：`Page.startScreencast` 帧流落盘（方言无回调，泵任务代收）。\n\n方言没有事件回调，帧流由常驻泵任务消费：`drain_events` 取帧 ->\n解 base64 写 PNG -> 按帧自带的 sessionId 回 `Page.screencastFrameAck`\n（不 ack 的话 chrome 只发头几帧就等住）。`recordStop` 停泵、末冲一次、\n`Page.stopScreencast`，回 `{frames,bytes,dir}`。\n\n注意：帧也走事件缓冲（上限 1000），长录制会挤掉旧事件——录短段，\n要完整事件流先 peek 再录。"
+      "docs": "录制：`Page.startScreencast` 帧流落盘（方言无回调，泵任务代收）。\n\n方言没有事件回调，帧流由常驻泵任务消费：`drain_events` 取帧 ->\n解 base64 写 PNG -> 按帧自带的 sessionId 回 `Page.screencastFrameAck`\n（不 ack 的话 chrome 只发头几帧就等住）。`recordStop` 停泵、末冲一次、\n`Page.stopScreencast`，回 `{frames,bytes,dir}`。\n\n注意：帧也走事件缓冲（上限 1000），长录制会挤掉旧事件；录短段，\n要完整事件流先 peek 再录。"
     },
     {
       "path": "browse_core::record::Recorder",
@@ -150,12 +150,12 @@
     {
       "path": "browse_core::semantic::click_ref",
       "kind": "function",
-      "docs": "按短 ref 点击：滚动可见 -> 量视口中心 -> **遮挡命中测试** -> 复用\n[`click_at`] 的 trusted 鼠标事件。命中测试（吸收 agent-browser 的\nblocker 思路）：`elementFromPoint` 看点击点实际落谁头上，落点与目标\n无祖孙/label 关联即判被遮挡（consent banner、modal 场景），报遮挡\n元素描述并拒绝点击——绝不静默点错位置。`clickAt` 是显式「点可见物」，\n不做此检查。\n\n# Errors\n\nref 失效（节点没了）、取不到中心（不可见）、被遮挡（错误附遮挡元素）、\n派发失败。"
+      "docs": "按短 ref 点击：滚动可见 -> 量视口中心 -> **遮挡命中测试** -> 复用\n[`click_at`] 的 trusted 鼠标事件。命中测试（吸收 agent-browser 的\nblocker 思路）：`elementFromPoint` 看点击点实际落谁头上，落点与目标\n无祖孙/label 关联即判被遮挡（consent banner、modal 场景），报遮挡\n元素描述并拒绝点击：绝不静默点错位置。`clickAt` 是显式「点可见物」，\n不做此检查。\n\n# Errors\n\nref 失效（节点没了）、取不到中心（不可见）、被遮挡（错误附遮挡元素）、\n派发失败。"
     },
     {
       "path": "browse_core::semantic::close_tab",
       "kind": "function",
-      "docs": "关 tab；缺省关当前活动 tab。守卫层只放行本会话自建 tab——用户 tab 一律拒绝。\n\n# Errors\n\n目标不是自建 tab（守卫拦截），或 closeTarget 失败。"
+      "docs": "关 tab；缺省关当前活动 tab。守卫层只放行本会话自建 tab：用户 tab 一律拒绝。\n\n# Errors\n\n目标不是自建 tab（守卫拦截），或 closeTarget 失败。"
     },
     {
       "path": "browse_core::semantic::current_tab",
@@ -180,7 +180,7 @@
     {
       "path": "browse_core::semantic::pdf",
       "kind": "function",
-      "docs": "当前页存 PDF（`Page.printToPDF`，`printBackground`+`preferCSSPageSize`）。\n仅无头 chrome 支持（Chromium 限制）。路径缺省落 `<state>/pdf-<ts>.pdf`，\n回 `{path,bytes}`——screenshot 的姊妹件，agent 存档页面用。\n\n# Errors\n\n有头 chrome（CTP 拒绝）、PDF 生成或写盘失败。"
+      "docs": "当前页存 PDF（`Page.printToPDF`，`printBackground`+`preferCSSPageSize`）。\n仅无头 chrome 支持（Chromium 限制）。路径缺省落 `<state>/pdf-<ts>.pdf`，\n回 `{path,bytes}`：screenshot 的姊妹件，agent 存档页面用。\n\n# Errors\n\n有头 chrome（CTP 拒绝）、PDF 生成或写盘失败。"
     },
     {
       "path": "browse_core::semantic::press_key",

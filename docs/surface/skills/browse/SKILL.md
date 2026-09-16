@@ -7,7 +7,9 @@ command: browse
 
 给 agent 的 browse CLI 驾驶术：方言片段（多语句、`;` 可选）驱动 clean-chrome；变量跨调用持久；错误带可照抄的下一步。
 
-# listPageTargets()
+# listPageTargets
+
+`listPageTargets()`
 
 列可附着 page targets（带 own 标：只有 own=true 可 closeTab）。
 
@@ -15,7 +17,9 @@ command: browse
 const tabs = await listPageTargets()
 ```
 
-# resolveWsUrl(opts?)
+# resolveWsUrl
+
+`resolveWsUrl(opts?)`
 
 把 wsUrl/port/profileDir 线索解析成 WS URL（不连接）。
 
@@ -38,7 +42,9 @@ const tabs = await listPageTargets()
 return await resolveWsUrl({port: 9222})
 ```
 
-# detectBrowsers()
+# detectBrowsers
+
+`detectBrowsers()`
 
 探测本机已开的调试浏览器（profile/端口/wsUrl）。
 
@@ -46,7 +52,9 @@ return await resolveWsUrl({port: 9222})
 return await detectBrowsers()
 ```
 
-# cdpMethods(domain?)
+# cdpMethods
+
+`cdpMethods(domain?)`
 
 652 个 CDP 命令的运行时探针（按域过滤）。
 
@@ -69,7 +77,9 @@ return await detectBrowsers()
 return await cdpMethods("Network")
 ```
 
-# snapshot()
+# snapshot
+
+`snapshot()`
 
 AX 树快照：nodes 带 role/name/value/短 ref（e1、e2…），引用表的唯一来源。
 
@@ -77,7 +87,9 @@ AX 树快照：nodes 带 role/name/value/短 ref（e1、e2…），引用表的�
 const s = await snapshot()
 ```
 
-# screenshot(path?, full?)
+# screenshot
+
+`screenshot(path?, full?)`
 
 页内截图存 PNG，回 {path,bytes}。
 
@@ -104,7 +116,9 @@ const s = await snapshot()
 return await screenshot()
 ```
 
-# pdf(path?)
+# pdf
+
+`pdf(path?)`
 
 当前页存 PDF（仅无头 chrome），回 {path,bytes}。
 
@@ -127,7 +141,9 @@ return await screenshot()
 return await pdf()
 ```
 
-# newTab(url?)
+# newTab
+
+`newTab(url?)`
 
 开新 tab 并设为活动路由（先 about:blank 再 goto，防竞速假完成）。
 
@@ -150,7 +166,9 @@ return await pdf()
 await newTab("https://example.com")
 ```
 
-# switchTab(targetId)
+# switchTab
+
+`switchTab(targetId)`
 
 切活动路由（不改 Chrome 可见前景，人机共存）。
 
@@ -175,7 +193,9 @@ await newTab("https://example.com")
 await switchTab(tabs[0].targetId)
 ```
 
-# currentTab()
+# currentTab
+
+`currentTab()`
 
 当前活动 tab 简表（无活动返回 null）。
 
@@ -183,7 +203,9 @@ await switchTab(tabs[0].targetId)
 return await currentTab()
 ```
 
-# closeTab(targetId?)
+# closeTab
+
+`closeTab(targetId?)`
 
 关 tab；守卫只放行自建 tab（chrome 初始页与用户 tab 拒绝）。
 
@@ -206,7 +228,9 @@ return await currentTab()
 await closeTab((await currentTab()).targetId)
 ```
 
-# clickAt(x, y)
+# clickAt
+
+`clickAt(x, y)`
 
 视口坐标 trusted 点击（点当前可见物，不做遮挡检查）。
 
@@ -236,7 +260,9 @@ await closeTab((await currentTab()).targetId)
 await clickAt(120, 40)
 ```
 
-# fillInput(selector, text)
+# fillInput
+
+`fillInput(selector, text)`
 
 按 CSS 选择器填输入框（SelectAll 不发 Ctrl+A，回读严格验证；select 走 selectOption）。
 
@@ -266,7 +292,9 @@ await clickAt(120, 40)
 await fillInput("#q", "hello")
 ```
 
-# clickRef(ref)
+# clickRef
+
+`clickRef(ref)`
 
 按 snapshot 短 ref 点击：滚动可见、量中心、遮挡命中测试（被盖即拒绝并报遮挡物）、trusted 派发。
 
@@ -291,7 +319,9 @@ await fillInput("#q", "hello")
 await clickRef("e3")
 ```
 
-# fillRef(ref, text)
+# fillRef
+
+`fillRef(ref, text)`
 
 按 ref 填输入框：objectId focus、SelectAll+insertText、同节点回读严格验证。
 
@@ -321,7 +351,9 @@ await clickRef("e3")
 await fillRef("e2", "hello")
 ```
 
-# selectOption(ref, value)
+# selectOption
+
+`selectOption(ref, value)`
 
 下拉框选择（value 或可见 label；设值+派发 input/change；未命中报全部可选值）。
 
@@ -351,7 +383,9 @@ await fillRef("e2", "hello")
 return await selectOption("e4", "Beta")
 ```
 
-# pressKey(key)
+# pressKey
+
+`pressKey(key)`
 
 按一个键（Enter/Tab/单字符；Enter 的 text 是 \r，CDP 契约）。
 
@@ -376,7 +410,9 @@ return await selectOption("e4", "Beta")
 await pressKey("Enter")
 ```
 
-# dialogStatus()
+# dialogStatus
+
+`dialogStatus()`
 
 当前 JS 对话框状态（open/type/message/defaultPrompt）。
 
@@ -384,7 +420,9 @@ await pressKey("Enter")
 return await dialogStatus()
 ```
 
-# dialogAccept(text?)
+# dialogAccept
+
+`dialogAccept(text?)`
 
 接受当前对话框（prompt 可带应答文本）。
 
@@ -407,7 +445,9 @@ return await dialogStatus()
 await dialogAccept("yes")
 ```
 
-# dialogDismiss()
+# dialogDismiss
+
+`dialogDismiss()`
 
 拒绝当前对话框。alert/beforeunload 会被自动接受，无需手动。
 
@@ -415,7 +455,9 @@ await dialogAccept("yes")
 await dialogDismiss()
 ```
 
-# routeBlock(pattern)
+# routeBlock
+
+`routeBlock(pattern)`
 
 网络拦截：glob 命中的请求直接失败（BlockedByClient）。作用于当前活动 tab。
 
@@ -440,7 +482,9 @@ await dialogDismiss()
 await routeBlock("*://ads.example.com/*")
 ```
 
-# routeMock(pattern, body, opts?)
+# routeMock
+
+`routeMock(pattern, body, opts?)`
 
 网络拦截：命中的请求本地应答（默认带 ACAO *）。
 
@@ -474,7 +518,9 @@ await routeBlock("*://ads.example.com/*")
 await routeMock("http://mock.test/api*", "{\"ok\":1}", {contentType: "application/json"})
 ```
 
-# routeClear()
+# routeClear
+
+`routeClear()`
 
 清空全部拦截规则并 Fetch.disable。
 
@@ -482,7 +528,9 @@ await routeMock("http://mock.test/api*", "{\"ok\":1}", {contentType: "applicatio
 await routeClear()
 ```
 
-# waitLoad(ms?)
+# waitLoad
+
+`waitLoad(ms?)`
 
 等 document.readyState 到 complete（已加载立即返回）。
 
@@ -505,7 +553,9 @@ await routeClear()
 await waitLoad(8000)
 ```
 
-# waitIdle(ms?)
+# waitIdle
+
+`waitIdle(ms?)`
 
 等 network 静默（窗口语义：起点前挂着的请求不计）。
 
@@ -528,7 +578,9 @@ await waitLoad(8000)
 await waitIdle(5000)
 ```
 
-# recordStart(opts?)
+# recordStart
+
+`recordStart(opts?)`
 
 开始录屏（Screencast 帧流落盘；everyNthFrame 源端抽帧、maxWidth/maxHeight 限宽高）。
 
@@ -551,7 +603,9 @@ await waitIdle(5000)
 return await recordStart({everyNthFrame: 2})
 ```
 
-# recordStop()
+# recordStop
+
+`recordStop()`
 
 停止录制，回 {frames,bytes,dir}（PNG 已在盘上）。
 
@@ -559,7 +613,9 @@ return await recordStart({everyNthFrame: 2})
 return await recordStop()
 ```
 
-# hostFunctions()
+# hostFunctions
+
+`hostFunctions()`
 
 本目录的运行时探针（agent 自描述，schema/清单同源）。
 
@@ -567,7 +623,9 @@ return await recordStop()
 return await hostFunctions()
 ```
 
-# print(x)
+# print
+
+`print(x)`
 
 把值打到 daemon stderr（调试用）。
 

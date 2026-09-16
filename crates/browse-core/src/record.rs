@@ -5,7 +5,7 @@
 //! （不 ack 的话 chrome 只发头几帧就等住）。`recordStop` 停泵、末冲一次、
 //! `Page.stopScreencast`，回 `{frames,bytes,dir}`。
 //!
-//! 注意：帧也走事件缓冲（上限 1000），长录制会挤掉旧事件——录短段，
+//! 注意：帧也走事件缓冲（上限 1000），长录制会挤掉旧事件；录短段，
 //! 要完整事件流先 peek 再录。
 
 use anyhow::Result;

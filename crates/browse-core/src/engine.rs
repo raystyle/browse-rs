@@ -5,7 +5,7 @@
 //!
 //! 1. 显式 `ws` / `port`（CLI 旗标或 `BROWSE_CDP_WS`）优先直连。
 //! 2. 否则探测本机已开的调试口（`/json/version`@9222 -> 默认 profile 的
-//!    `DevToolsActivePort`），命中即附着——人机共存，绝不关用户的浏览器。
+//!    `DevToolsActivePort`），命中即附着；人机共存，绝不关用户的浏览器。
 //! 3. 都没有就 spawn 专属实例：独立 profile、`--remote-debugging-port=0`、
 //!    可 `--headless`。[`Engine::shutdown`] 只终结自己 spawn 的（优雅
 //!    `Browser.close` -> 兜底杀进程树）。
@@ -351,7 +351,7 @@ impl Engine {
         Ok(id)
     }
 
-    /// 终结引擎：只对 [`EngineSource::Spawned`] 生效——先 `Browser.close`
+    /// 终结引擎：只对 [`EngineSource::Spawned`] 生效；先 `Browser.close`
     /// 优雅退（走守卫旁路），5 秒内 `try_wait` 轮询等退，不退兜底杀进程树；
     /// 附着来源原样保留（铁律：绝不关用户的浏览器）。
     ///

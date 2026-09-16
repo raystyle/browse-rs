@@ -342,7 +342,7 @@ async fn exercise(engine: &Engine, host: &JsHost, expect_channel: &str) {
     .expect("alert 被自动接受后 evaluate 应立刻可用");
     mark("evaluate-after-alert");
     assert!(t0.elapsed().as_secs() < 10, "alert 不应阻塞 evaluate");
-    // confirm：点开（Ok 或 8s 短超时后「对话框 CTA」都算达阵——pressed
+    // confirm：点开（Ok 或 8s 短超时后「对话框 CTA」都算达阵；pressed
     // 已送达、对话框已开）-> dialogStatus 可见 -> 再点被快失败拦 -> 收掉
     let opened = host
         .eval_snippet(&format!(r#"await clickRef("{}")"#, refs[1]))
@@ -585,7 +585,7 @@ async fn exercise(engine: &Engine, host: &JsHost, expect_channel: &str) {
         .expect("closeTab 自建");
     assert_eq!(closed, json!(true));
     // chrome 启动自开的初始 tab 不是本会话自建：关它必须被守卫拦
-    // （挑 own=false 的，别用 [0]——刚关掉的 t2 可能还在列表缓存里）
+    // （挑 own=false 的，别用 [0]；刚关掉的 t2 可能还在列表缓存里）
     let foreign = host
         .eval_snippet("return await listPageTargets()")
         .await

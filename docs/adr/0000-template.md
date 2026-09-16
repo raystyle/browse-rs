@@ -1,8 +1,12 @@
-# ADR-0000：标题（祈使句一句话）
+---
+id: ADR-0000
+status: proposed
+date: YYYY-MM-DD
+deciders: 谁
+superseded_by: null
+---
 
-- Status: proposed | accepted | superseded by ADR-00xx
-- Date: YYYY-MM-DD
-- Deciders: 谁
+# ADR-0000：标题（祈使句一句话）
 
 ## Context
 

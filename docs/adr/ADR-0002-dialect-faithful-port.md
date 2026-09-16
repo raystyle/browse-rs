@@ -1,8 +1,11 @@
-# ADR-0002：方言忠实移植，不做子命令操作面
+---
+id: ADR-0002
+status: accepted
+date: 2026-09-14
+deciders: 用户裁定（AskUserQuestion 三选一：子命令+逃生舱 / 忠实移植方言 / 两者都要）
+---
 
-- Status: accepted
-- Date: 2026-09-14
-- Deciders: 用户裁定（AskUserQuestion 三选一：子命令+逃生舱 / 忠实移植方言 / 两者都要）
+# ADR-0002：方言忠实移植，不做子命令操作面
 
 ## Context
 

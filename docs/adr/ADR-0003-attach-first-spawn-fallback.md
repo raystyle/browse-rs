@@ -1,8 +1,11 @@
-# ADR-0003：附着优先缺则自起；spawn 带 --no-sandbox
+---
+id: ADR-0003
+status: accepted
+date: 2026-09-14
+deciders: 用户裁定（引擎策略问询）+ 维护者
+---
 
-- Status: accepted
-- Date: 2026-09-14
-- Deciders: 用户裁定（引擎策略问询）+ 维护者
+# ADR-0003：附着优先缺则自起；spawn 带 --no-sandbox
 
 ## Context
 

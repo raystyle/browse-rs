@@ -90,7 +90,7 @@ fn fallback_paths() -> Vec<PathBuf> {
 }
 
 /// 引擎 chrome 的 stdio 三路全显式：stderr 落 profile 旁的 `engine.log`，
-/// stdin/stdout 置空。绝不继承父进程句柄——引擎常比单次调用方（CLI/测试）
+/// stdin/stdout 置空。绝不继承父进程句柄；引擎常比单次调用方（CLI/测试）
 /// 活得久，继承的 stderr 管道会让调用方管道永不 EOF（实测挂死过整条流水）。
 fn engine_stdio(profile_dir: &Path) -> std::process::Stdio {
     let log = profile_dir

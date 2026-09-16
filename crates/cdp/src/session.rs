@@ -393,7 +393,7 @@ impl Session {
     }
 
     /// 显式路由目标的调用：`sessionId` 用给定值（不走活动路由）。
-    /// 给「回执必须回到事件来源 session」的场合——典型是录制的
+    /// 给「回执必须回到事件来源 session」的场合：典型是录制的
     /// `Page.screencastFrameAck`，它要应答帧自带的 sessionId。
     ///
     /// # Errors

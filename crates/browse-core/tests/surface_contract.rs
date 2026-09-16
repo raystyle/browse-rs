@@ -1,9 +1,9 @@
 //! 命令面目录契约（incur-rs 原则）：`surface::COMMANDS` 是唯一真相，
-//! `docs/surface/` 的 schema/llms/skill 是派生物——本测试锁两层漂移：
+//! `docs/surface/` 的 schema/llms/skill 是派生物，本测试锁两层漂移：
 //!
 //! 1. 盘上产物与渲染器输出逐字节一致（改目录必须 `browse --gen-surface`）。
 //! 2. 目录里的每个全局函数/session 方法都有真实派发臂（eval 裸名，
-//!    错误不许是「未知函数」——不需要浏览器，走 Not-connected 报错即可证）。
+//!    错误不许是「未知函数」；不需要浏览器，走 Not-connected 报错即可证）。
 
 use browse_core::{CmdKind, JsHost, surface};
 

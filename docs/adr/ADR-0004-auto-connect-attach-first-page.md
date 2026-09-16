@@ -1,8 +1,11 @@
-# ADR-0004：自动连接并 attach 首个 page target
+---
+id: ADR-0004
+status: accepted
+date: 2026-09-14
+deciders: 维护者
+---
 
-- Status: accepted
-- Date: 2026-09-14
-- Deciders: 维护者
+# ADR-0004：自动连接并 attach 首个 page target
 
 ## Context
 
