@@ -29,8 +29,11 @@ enum Mode {
     Down,
     /// `browse status`：看 daemon/引擎状态。
     Status,
-    /// `browse chrome install <版本> <部署目录>`：导入安装 Chromium 版本。
-    ChromeInstall { version: String, from_dir: String },
+    /// `browse chrome install <版本> [部署目录]`：镜像下载或本地导入安装 Chromium 版本。
+    ChromeInstall {
+        version: String,
+        from_dir: Option<String>,
+    },
     /// `browse chrome list`：列已装版本与 pin。
     ChromeList,
     /// `browse chrome use <版本>`：pin 切换。
@@ -88,6 +91,10 @@ async fn main() -> Result<()> {
                 print_help();
                 return Ok(());
             }
+            "-V" | "--version" => {
+                println!("browse {}", env!("CARGO_PKG_VERSION"));
+                return Ok(());
+            }
             "up" if snippets.is_empty() && mode_is_eval(&mode) => mode = Mode::Up,
             "down" if snippets.is_empty() && mode_is_eval(&mode) => mode = Mode::Down,
             "status" if snippets.is_empty() && mode_is_eval(&mode) => mode = Mode::Status,
@@ -98,7 +105,7 @@ async fn main() -> Result<()> {
                     "use" => mode = Mode::ChromeUse(next("chrome use")?),
                     "install" => {
                         let version = next("chrome install <版本>")?;
-                        let from_dir = next("chrome install <版本> <部署目录>")?;
+                        let from_dir = args.next().filter(|s| !s.starts_with('-'));
                         mode = Mode::ChromeInstall { version, from_dir };
                     }
                     other => {
@@ -184,13 +191,22 @@ async fn main() -> Result<()> {
             }
             Ok(())
         }
-        // Chromium 版本管理器：纯本地操作，不经 daemon（ADR-0007）
+        // Chromium 版本管理器：纯本地操作，不经 daemon（ADR-0007）。
+        // 镜像腿的 blocking http client 必须在阻塞线程里生灭（async 上下文
+        // drop 它会 panic），与方言侧同式收 spawn_blocking。
         Mode::ChromeInstall { version, from_dir } => {
-            let brief = browse_core::chrome_mgr::install_from_dir(
-                &browse_core::chrome_mgr::chromium_root(),
-                &version,
-                std::path::Path::new(&from_dir),
-            )?;
+            let root = browse_core::chrome_mgr::chromium_root();
+            let brief = tokio::task::spawn_blocking(move || match from_dir.as_deref() {
+                Some(dir) => browse_core::chrome_mgr::install_from_dir(
+                    &root,
+                    &version,
+                    std::path::Path::new(dir),
+                ),
+                // 部署目录缺省走 R2 镜像下载腿（chrome.ohmygh.com，REQ-003）
+                None => browse_core::chrome_mgr::install_from_mirror(&root, &version),
+            })
+            .await
+            .map_err(|e| anyhow!("安装任务崩了：{e}"))??;
             println!("{}", serde_json::to_string_pretty(&brief)?);
             Ok(())
         }
@@ -442,6 +458,9 @@ browse：给 agent 用的 browse CLI（clean-chrome 专属）
   browse --llms [--full|--json]              命令面清单直出 stdout（与 docs/surface 同源；
                                              --full 完整版，--json 出 Schema 包；不拉 daemon）
   browse --serve [--bind host:port]          前台跑 daemon
+  browse --version                           打印版本号（资产解包冒烟用）
+  browse chrome install <版本> [部署目录]    镜像下载（缺省）或本地导入安装引擎
+                                              镜像：chrome.ohmygh.com/<ver>/<asset> 加 .sha256 锚
 
 片段方言（与 browser-harness-js 对齐）：
   await session.connect({{port:9222}})

@@ -310,31 +310,48 @@ impl JsHost {
             // 本 CLI 的命令面目录探针（与 schema/llms 同源，
             // incur --llms 的运行时等价物）
             "hostFunctions" => Ok(crate::surface::catalog_json()),
-            // ---- Chromium 版本管理器（ADR-0007，本地导入面；R2 下载腿待 omc 端点）----
+            // ---- Chromium 版本管理器（ADR-0007；两源：本地导入 + R2 镜像下载）----
             "chromeInstall" => {
                 let opts = argv.first().cloned().unwrap_or(json!({}));
                 let from_dir = opts
                     .get("fromDir")
                     .and_then(Value::as_str)
                     .map(str::to_string);
-                let Some(from) = from_dir else {
-                    bail!(
-                        "chromeInstall 本地面要 fromDir（R2 镜像下载腿待 omc 端点定标）；\
-                         下一步：chromeInstall({{fromDir: \"chromium-152.0.7977.84\"}})"
-                    );
-                };
-                let from = std::path::PathBuf::from(from);
-                let version = opts
-                    .get("version")
-                    .and_then(Value::as_str)
-                    .map(str::to_string)
-                    .unwrap_or_else(|| crate::chrome_mgr::version_from_dir_name(&from));
                 let root = crate::chrome_mgr::chromium_root();
-                let brief = tokio::task::spawn_blocking(move || {
-                    crate::chrome_mgr::install_from_dir(&root, &version, &from)
-                })
-                .await
-                .map_err(|e| anyhow::anyhow!("安装任务崩了：{e}"))??;
+                let brief = match from_dir {
+                    Some(from) => {
+                        let from = std::path::PathBuf::from(from);
+                        let version = opts
+                            .get("version")
+                            .and_then(Value::as_str)
+                            .map(str::to_string)
+                            .unwrap_or_else(|| crate::chrome_mgr::version_from_dir_name(&from));
+                        tokio::task::spawn_blocking(move || {
+                            crate::chrome_mgr::install_from_dir(&root, &version, &from)
+                        })
+                        .await
+                        .map_err(|e| anyhow::anyhow!("安装任务崩了：{e}"))??
+                    }
+                    // fromDir 缺省走 R2 镜像下载腿（版本发现来源未定标，version 必须显式）
+                    None => {
+                        let Some(version) = opts
+                            .get("version")
+                            .and_then(Value::as_str)
+                            .map(str::to_string)
+                        else {
+                            bail!(
+                                "镜像下载要显式 version（子域无 manifest 面，版本发现来源\
+                                 未定标）；下一步：chromeInstall({{version: \"152.0.7977.84\"}}) \
+                                 或带 fromDir 走本地导入"
+                            );
+                        };
+                        tokio::task::spawn_blocking(move || {
+                            crate::chrome_mgr::install_from_mirror(&root, &version)
+                        })
+                        .await
+                        .map_err(|e| anyhow::anyhow!("下载任务崩了：{e}"))??
+                    }
+                };
                 Ok(brief)
             }
             "chromeList" => Ok(crate::chrome_mgr::list_json(

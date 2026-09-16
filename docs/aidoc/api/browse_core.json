@@ -1,11 +1,11 @@
 {
   "crate": "browse-core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "items": [
     {
       "path": "browse_core::chrome_mgr",
       "kind": "module",
-      "docs": "内嵌 Chromium 版本管理器（ADR-0007）：各版本 clean-chrome 在本仓应用\n数据目录下版本化管理（安装、pin、升级、体检）。\n\n布局：`<state>/chromium/<version>/`（每版本一目录，旧版保留可回退），\n登记 `<state>/chromium/manifest.json`（已装版本 + pin 指向）。\n引擎 user-data 不在版本目录（engine-profile 跨版本持久，升级零迁移）。\n\n安装源两形（ADR-0007）：本地目录导入（SxS 部署形态，`chromium-<ver>/`\n整目录复制；本实现面）；R2 镜像版本段下载（omc 分发面，端点未定标，\n接口在册待 omc 协调后补）。"
+      "docs": "内嵌 Chromium 版本管理器（ADR-0007）：各版本 clean-chrome 在本仓应用\n数据目录下版本化管理（安装、pin、升级、体检）。\n\n布局：`<state>/chromium/<version>/`（每版本一目录，旧版保留可回退），\n登记 `<state>/chromium/manifest.json`（已装版本 + pin 指向）。\n引擎 user-data 不在版本目录（engine-profile 跨版本持久，升级零迁移）。\n\n安装源两形（ADR-0007）：本地目录导入（SxS 部署形态，`chromium-<ver>/`\n整目录复制）；R2 镜像版本段下载（chrome.ohmygh.com，`<ver>/<asset>` 加\n同名 `.sha256` 边车锚，总台热验 2026-09-17 回执；资产名是暂定约定，\n候 clean-chrome 首版资产定标，`BROWSE_CHROME_ASSET` 可覆写）。"
     },
     {
       "path": "browse_core::chrome_mgr::ChromeInstall",
@@ -16,6 +16,16 @@
       "path": "browse_core::chrome_mgr::ChromeManifest",
       "kind": "struct",
       "docs": "版本登记册：已装版本 + 当前 pin。"
+    },
+    {
+      "path": "browse_core::chrome_mgr::DEFAULT_MIRROR",
+      "kind": "constant",
+      "docs": "R2 镜像默认基址（chrome.ohmygh.com 版本段路由，ADR-0007 决策二；\n`BROWSE_CHROME_MIRROR` 覆写走测试或自建镜像）。"
+    },
+    {
+      "path": "browse_core::chrome_mgr::asset_name",
+      "kind": "function",
+      "docs": "资产名暂定约定：`chromium-<version>.zip`（候 clean-chrome 首版资产定标；\n`BROWSE_CHROME_ASSET` 全名覆写）。"
     },
     {
       "path": "browse_core::chrome_mgr::check_deployed",
@@ -36,6 +46,16 @@
       "path": "browse_core::chrome_mgr::install_from_dir",
       "kind": "function",
       "docs": "从本地部署目录导入安装一个版本（整目录复制到 `<root>/<version>/`），\n登记进 manifest 并 pin 为当前版本。\n\n# Errors\n\n版本号非法、源目录不是可用部署、目标已存在（不覆盖，先显式删）、\n复制或写盘失败。"
+    },
+    {
+      "path": "browse_core::chrome_mgr::install_from_mirror",
+      "kind": "function",
+      "docs": "从 R2 镜像下载安装一个版本（环境覆写形态；见 [`install_from_mirror_with`]）。\n\n# Errors\n\n同 [`install_from_mirror_with`]。"
+    },
+    {
+      "path": "browse_core::chrome_mgr::install_from_mirror_with",
+      "kind": "function",
+      "docs": "带显式镜像基址与资产名的下载安装（env 包装的内核，测试与程序化面）：\n`<mirror>/<version>/<asset>` 下载加同名 `.sha256` 边车锚校验，\nzip 解包后原子落位 `<root>/<version>/`，manifest 登记并自动 pin。\n\n# Errors\n\n版本号非法或目标已存在（同本地导入）；边车或资产 404（错误带端点与\n覆写指引）；sha256 不匹配（错包即弃，不留残目录）；边车内容非法；\n解包后无 chrome 二进制；下载或写盘失败。"
     },
     {
       "path": "browse_core::chrome_mgr::list_json",

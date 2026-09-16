@@ -15,7 +15,8 @@
 | `browse down` | 退 daemon；只终结自己 spawn 的引擎，附着来源不动。 |
 | `browse status [--json]` | daemon/引擎/实例名/活动 tab 概览。 |
 | `browse --llms [--full|--json]` | 命令面发现通道：stdout 直出与 docs/surface 同源的清单（--full 完整版，--json Schema 包），不拉 daemon。 |
-| `browse chrome install <版本> <部署目录>` | 导入安装一个 Chromium 版本到应用数据目录并 pin（ADR-0007 本地面）。 |
+| `browse --version` | 打印版本号（资产解包冒烟与安装核对用）。 |
+| `browse chrome install <版本> [部署目录]` | 安装 Chromium 版本并 pin：缺省从镜像下载（版本段路由加 .sha256 锚校验原子落位），给部署目录则本地导入。 |
 | `browse chrome list` | 列已装 Chromium 版本与当前 pin。 |
 | `browse chrome use <版本>` | 把托管引擎 pin 切到已装版本（旧版保留可回退）。 |
 | `browse chrome doctor` | 托管 Chromium 部署体检（在位/文件基线/pin）。 |
@@ -28,7 +29,7 @@
 | `listPageTargets()` | 列可附着 page targets（带 own 标：只有 own=true 可 closeTab）。 |
 | `resolveWsUrl(opts?)` | 把 wsUrl/port/profileDir 线索解析成 WS URL（不连接）。 |
 | `detectBrowsers()` | 探测本机已开的调试浏览器（profile/端口/wsUrl）。 |
-| `chromeInstall(opts?)` | 导入安装 Chromium 版本（version 缺省取目录名；R2 下载腿待 omc 端点）。 |
+| `chromeInstall(opts?)` | 安装 Chromium 版本并 pin：fromDir 本地导入（version 缺省取目录名），version 单给走 R2 镜像下载（sha256 锚校验后原子落位）。 |
 | `chromeList()` | 列已装 Chromium 版本与当前 pin。 |
 | `chromeUse(version)` | pin 切到已装版本（引擎发现序的托管位）。 |
 | `chromeDoctor()` | 托管 Chromium 部署体检（在位/文件基线/pin 健康）。 |

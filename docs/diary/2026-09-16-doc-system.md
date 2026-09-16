@@ -88,3 +88,12 @@
 - 封版件一次提交：CHANGELOG 立卷（版本级里程碑制）、REQ-004 立 semver 判据（首封 0.1.0：零前置版不取 1.0.0；R2 腿后续取 0.2.0）；生成物零版本号嵌入（surface 与 aidoc manifest 扫描空），无重生件。
 - tag v0.1.0 推远端触发 CI；分发腿不预建（用户裁定在册，CLI 资产归 omc/seed 通道），仓内无 release 流水线属预期非缺口。
 - 收尾义务：CHANGELOG 定版、本日记钩子、总台版本对齐表 browse-rs 行回执（tag 落地后 herdr 转发）。
+
+## REQ-003 R2 下载腿实现批（总台热验回执后开工，2026-09-17）
+
+- 总台正式热验回执到：chrome.ohmygh.com 验讫（HTTP/HTTPS/H2 通、HKG 边缘在位、TLS 链净、桶在役无对象态），分发基建就绪。本仓即开工 0.2.0 批。
+- 实现面：chrome_mgr 增 `install_from_mirror`（env 覆写包装 `BROWSE_CHROME_MIRROR`/`BROWSE_CHROME_ASSET`）与内核 `install_from_mirror_with`（显式镜像与资产名，测试与程序化面）；边车锚先行（锚不在不拉大包）、流式下载同窗 sha256、zip 解包单顶层目录下钻、同盘 rename 原子落位、staging 用后即清；CLI `browse chrome install <版本>` 部署目录缺省走镜像，方言 `chromeInstall({version})` 两形分流；资产名暂定约定 `chromium-<version>.zip` 候首版资产定标。
+- 坑与修：2024 版 env::set_var 属 unsafe，测试改直调内核参数束零 env 动作（并行安全顺带解决）；真冒烟抓到单测盖不住的坑：reqwest blocking client 在 async 上下文 drop 会 panic，CLI 直调面收 spawn_blocking 与方言侧同式（门禁全绿下的漏网实证，flow-release 门禁与实跑互补纪律的注脚）。
+- 实测：mock 镜像三态全绿（happy 落位登记 pin 零残件、锚不匹配错包即弃、404 CTA）；真端点负测 `chrome install 9.9.9.9` 得 404 错误带端点与覆写指引 exit 1；happy-path 真资产实测随 clean-chrome 首版资产落桶（REQ-003 trace 届时回填）。
+- --version 旗标并入本批（原报总台的 0.1.1 patch 并入 0.2.0，少一次 tag）；workspace 版本 0.1.0 升 0.2.0，repository 元数据正本 clean-chrome 改 browse-rs；surface 与 aidoc（25 artifacts）重生成；新依赖 zip/sha2 入册，reqwest blocking 特性挂 browse-core。
+- 门禁：clippy -D warnings 绿、12 组 test、10 doc test、surface_contract、aidoc check clean。

@@ -29,12 +29,12 @@
       "type": "object"
     },
     "chromeInstall": {
-      "description": "chromeInstall(opts?) 导入安装 Chromium 版本（version 缺省取目录名；R2 下载腿待 omc 端点）。",
-      "example": "await chromeInstall({fromDir: \"chromium-152.0.7977.84\"})",
+      "description": "chromeInstall(opts?) 安装 Chromium 版本并 pin：fromDir 本地导入（version 缺省取目录名），version 单给走 R2 镜像下载（sha256 锚校验后原子落位）。",
+      "example": "await chromeInstall({version: \"152.0.7977.84\"})",
       "input": {
         "properties": {
           "opts": {
-            "description": "缺省 {fromDir}",
+            "description": "缺省 {fromDir}|{version}",
             "type": "object"
           }
         },
@@ -85,12 +85,12 @@
       "type": "object"
     },
     "cli.chrome-install": {
-      "description": "browse chrome install <版本> <部署目录> 导入安装一个 Chromium 版本到应用数据目录并 pin（ADR-0007 本地面）。",
-      "example": "browse chrome install 152.0.7977.84 chromium-152.0.7977.84",
+      "description": "browse chrome install <版本> [部署目录] 安装 Chromium 版本并 pin：缺省从镜像下载（版本段路由加 .sha256 锚校验原子落位），给部署目录则本地导入。",
+      "example": "browse chrome install 152.0.7977.84",
       "input": {
         "properties": {
           "fromDir": {
-            "description": "",
+            "description": "缺省 缺省走 R2 镜像下载",
             "type": "string"
           },
           "version": {
@@ -99,8 +99,7 @@
           }
         },
         "required": [
-          "version",
-          "fromDir"
+          "version"
         ],
         "type": "object"
       },
@@ -312,6 +311,17 @@
             "type": "string"
           }
         },
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "cli.version-flag": {
+      "description": "browse --version 打印版本号（资产解包冒烟与安装核对用）。",
+      "example": "browse --version",
+      "input": {
+        "properties": {},
         "required": [],
         "type": "object"
       },

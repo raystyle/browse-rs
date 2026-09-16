@@ -16,10 +16,10 @@ missing_errors_doc = "deny"
 missing_panics_doc = "deny"
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/raystyle/clean-chrome"
+repository = "https://github.com/raystyle/browse-rs"
 
 [workspace.dependencies]
 anyhow = "1"
@@ -29,8 +29,10 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 rustyline = "14"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sha2 = "0.10"
 tokio = { version = "1", features = ["full"] }
 tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [profile.release]
 lto = "thin"

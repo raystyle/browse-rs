@@ -6,12 +6,15 @@
 //! 引擎 user-data 不在版本目录（engine-profile 跨版本持久，升级零迁移）。
 //!
 //! 安装源两形（ADR-0007）：本地目录导入（SxS 部署形态，`chromium-<ver>/`
-//! 整目录复制；本实现面）；R2 镜像版本段下载（omc 分发面，端点未定标，
-//! 接口在册待 omc 协调后补）。
+//! 整目录复制）；R2 镜像版本段下载（chrome.ohmygh.com，`<ver>/<asset>` 加
+//! 同名 `.sha256` 边车锚，总台热验 2026-09-17 回执；资产名是暂定约定，
+//! 候 clean-chrome 首版资产定标，`BROWSE_CHROME_ASSET` 可覆写）。
 
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 /// 一条已安装版本的登记项。
@@ -182,6 +185,239 @@ pub fn install_from_dir(root: &Path, version: &str, from_dir: &Path) -> Result<V
     m.pinned = Some(version.to_string());
     write_manifest(root, &m)?;
     Ok(install_json(&rec))
+}
+
+/// R2 镜像默认基址（chrome.ohmygh.com 版本段路由，ADR-0007 决策二；
+/// `BROWSE_CHROME_MIRROR` 覆写走测试或自建镜像）。
+pub const DEFAULT_MIRROR: &str = "https://chrome.ohmygh.com";
+
+/// 资产名暂定约定：`chromium-<version>.zip`（候 clean-chrome 首版资产定标；
+/// `BROWSE_CHROME_ASSET` 全名覆写）。
+pub fn asset_name(version: &str) -> String {
+    format!("chromium-{version}.zip")
+}
+
+/// 镜像基址与资产名解析（`BROWSE_CHROME_MIRROR` / `BROWSE_CHROME_ASSET`
+/// 环境覆写，空值忽略；测试与程序化调用走 [`install_from_mirror_with`]）。
+fn mirror_and_asset(version: &str) -> (String, String) {
+    let mirror = std::env::var("BROWSE_CHROME_MIRROR")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| DEFAULT_MIRROR.to_string())
+        .trim_end_matches('/')
+        .to_string();
+    let asset = std::env::var("BROWSE_CHROME_ASSET")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| asset_name(version));
+    (mirror, asset)
+}
+
+/// 从 R2 镜像下载安装一个版本（环境覆写形态；见 [`install_from_mirror_with`]）。
+///
+/// # Errors
+///
+/// 同 [`install_from_mirror_with`]。
+pub fn install_from_mirror(root: &Path, version: &str) -> Result<Value> {
+    let (mirror, asset) = mirror_and_asset(version);
+    install_from_mirror_with(root, version, &mirror, &asset)
+}
+
+/// 带显式镜像基址与资产名的下载安装（env 包装的内核，测试与程序化面）：
+/// `<mirror>/<version>/<asset>` 下载加同名 `.sha256` 边车锚校验，
+/// zip 解包后原子落位 `<root>/<version>/`，manifest 登记并自动 pin。
+///
+/// # Errors
+///
+/// 版本号非法或目标已存在（同本地导入）；边车或资产 404（错误带端点与
+/// 覆写指引）；sha256 不匹配（错包即弃，不留残目录）；边车内容非法；
+/// 解包后无 chrome 二进制；下载或写盘失败。
+pub fn install_from_mirror_with(
+    root: &Path,
+    version: &str,
+    mirror: &str,
+    asset: &str,
+) -> Result<Value> {
+    valid_version(version)?;
+    let dst = version_dir(root, version);
+    if dst.exists() {
+        bail!(
+            "版本 {version} 已安装（{}）；下一步：换版本号，或手动删该目录后重装",
+            dst.display()
+        );
+    }
+    let mirror = mirror.trim_end_matches('/');
+    let base = format!("{mirror}/{version}/{asset}");
+    let client = reqwest::blocking::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| anyhow::anyhow!("构建 http client 失败：{e}"))?;
+
+    // 边车锚先行：锚不在即端点无此资产，不必拉大包
+    let sidecar = client
+        .get(format!("{base}.sha256"))
+        .send()
+        .and_then(|r| r.error_for_status())
+        .map_err(|e| mirror_cta(&base, e))?
+        .text()
+        .map_err(|e| anyhow::anyhow!("读 {base}.sha256 失败：{e}"))?;
+    let want = sidecar.trim();
+    if want.len() != 64 || !want.chars().all(|c| c.is_ascii_hexdigit()) {
+        bail!(
+            "{base}.sha256 边车内容非法（要 64 位十六进制，得 {:?}）；\
+             下一步：检查镜像资产是否完整",
+            want.chars().take(20).collect::<String>()
+        );
+    }
+
+    // 下载到 staging（同文件系统，rename 才原子）
+    let staging = root.join(format!(".staging-{version}"));
+    let _ = std::fs::remove_dir_all(&staging);
+    std::fs::create_dir_all(&staging)?;
+    let job = MirrorJob {
+        client: &client,
+        base: &base,
+        want,
+        staging: &staging,
+        asset,
+        version,
+        mirror,
+    };
+    let result = install_from_mirror_inner(root, job);
+    let _ = std::fs::remove_dir_all(&staging);
+    result
+}
+
+/// 下载腿内核入参束（调用方拼好 URL 与 staging；内核只管下载到落位全链）。
+struct MirrorJob<'a> {
+    /// http 客户端（带连接超时）。
+    client: &'a reqwest::blocking::Client,
+    /// 资产全 URL（`<mirror>/<version>/<asset>`）。
+    base: &'a str,
+    /// 边车锚期望值（64 位十六进制）。
+    want: &'a str,
+    /// staging 目录（同文件系统，原子 rename 的前提）。
+    staging: &'a Path,
+    /// 资产文件名（staging 内落盘名）。
+    asset: &'a str,
+    /// 版本号。
+    version: &'a str,
+    /// 镜像基址（错误提示用）。
+    mirror: &'a str,
+}
+
+/// 下载腿主体（staging 已就位；错误统一向上带 CTA）。
+fn install_from_mirror_inner(root: &Path, job: MirrorJob) -> Result<Value> {
+    let MirrorJob {
+        client,
+        base,
+        want,
+        staging,
+        asset,
+        version,
+        mirror,
+    } = job;
+    let zip_path = staging.join(asset);
+    let dst = version_dir(root, version);
+    let mut resp = client
+        .get(base)
+        .send()
+        .and_then(|r| r.error_for_status())
+        .map_err(|e| mirror_cta(base, e))?;
+    let mut file = std::fs::File::create(&zip_path)?;
+    let mut hasher = Sha256::new();
+    let mut buf = [0u8; 64 * 1024];
+    loop {
+        let n = resp
+            .read(&mut buf)
+            .map_err(|e| anyhow::anyhow!("下载 {base} 中断：{e}"))?;
+        if n == 0 {
+            break;
+        }
+        std::io::Write::write_all(&mut file, &buf[..n])?;
+        hasher.update(&buf[..n]);
+    }
+    drop(file);
+    let got = format!("{:02x}", hasher.finalize());
+    if got != want {
+        bail!(
+            "{base} 的 sha256 不匹配（边车锚 {want}，实得 {got}）；\
+             下一步：重试；仍不匹配即镜像资产损坏，勿装",
+        );
+    }
+
+    // 解包（zip 内单顶层目录则下钻一层，兼容 chromium-<ver>/ 打包形）
+    let extract_dir = staging.join("x");
+    std::fs::create_dir_all(&extract_dir)?;
+    let archive = std::fs::File::open(zip_path)?;
+    let mut zip =
+        zip::ZipArchive::new(archive).map_err(|e| anyhow::anyhow!("{base} 不是可用 zip：{e}"))?;
+    zip.extract(&extract_dir)
+        .map_err(|e| anyhow::anyhow!("解包 {base} 失败：{e}"))?;
+    let effective = single_top_dir(&extract_dir).unwrap_or_else(|| extract_dir.clone());
+    check_deployed(&effective).map_err(|e| {
+        anyhow::anyhow!(
+            "{e}；镜像包内容形不对（暂定约定 {}/{version}/ 内是部署目录）",
+            mirror
+        )
+    })?;
+    let (files, bytes) = count_tree(&effective);
+    std::fs::rename(&effective, &dst).map_err(|e| {
+        anyhow::anyhow!("落位 {} 失败：{e}（同盘 rename，不应跨盘）", dst.display())
+    })?;
+
+    let mut m = read_manifest(root);
+    let rec = ChromeInstall {
+        version: version.to_string(),
+        source: format!("mirror:{mirror}"),
+        files,
+        bytes,
+        installed_at: now_ms(),
+    };
+    m.installed.retain(|i| i.version != version);
+    m.installed.push(rec.clone());
+    m.pinned = Some(version.to_string());
+    write_manifest(root, &m)?;
+    Ok(install_json(&rec))
+}
+
+/// 镜像腿错误统一加 CTA：端点、资产名覆写、首版资产窗口。
+fn mirror_cta(base: &str, e: reqwest::Error) -> anyhow::Error {
+    anyhow::anyhow!(
+        "镜像取 {base} 失败：{e}；下一步：核对版本号；资产名非暂定约定时设 \
+         BROWSE_CHROME_ASSET 全名覆写；clean-chrome 首版资产未落桶前 404 属预期"
+    )
+}
+
+/// 若目录恰含一个子目录且无散文件，返回该子目录（zip 单顶层目录形）。
+fn single_top_dir(dir: &Path) -> Option<PathBuf> {
+    let mut entries = std::fs::read_dir(dir).ok()?.collect::<Vec<_>>();
+    entries.retain(|e| e.is_ok());
+    if entries.len() != 1 {
+        return None;
+    }
+    let p = entries[0].as_ref().ok()?.path();
+    p.is_dir().then_some(p)
+}
+
+/// 数目录树 `(文件数, 字节数)`（体检基线用）。
+fn count_tree(dir: &Path) -> (u64, u64) {
+    let mut files = 0u64;
+    let mut bytes = 0u64;
+    if let Ok(rd) = std::fs::read_dir(dir) {
+        for entry in rd.flatten() {
+            let Ok(ft) = entry.file_type() else { continue };
+            if ft.is_dir() {
+                let (f, b) = count_tree(&entry.path());
+                files += f;
+                bytes += b;
+            } else if ft.is_file() {
+                files += 1;
+                bytes += entry.metadata().map(|m| m.len()).unwrap_or(0);
+            }
+        }
+    }
+    (files, bytes)
 }
 
 /// pin 切换到已装版本（引擎发现序的托管位生效点）。
@@ -434,5 +670,100 @@ mod tests {
 
         std::fs::remove_dir_all(&root).ok();
         std::fs::remove_dir_all(&base).ok();
+    }
+
+    /// 极简 HTTP 镜像 mock：路径精确匹配即 200，否则 404；逐请求一线程服务。
+    fn mock_mirror(routes: Vec<(String, Vec<u8>)>) -> String {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            use std::io::{Read, Write};
+            for stream in listener.incoming() {
+                let Ok(mut s) = stream else { continue };
+                let mut buf = [0u8; 4096];
+                let Ok(n) = s.read(&mut buf) else { continue };
+                let req = String::from_utf8_lossy(&buf[..n]).to_string();
+                let path = req.split_whitespace().nth(1).unwrap_or("").to_string();
+                let (code, body) = match routes.iter().find(|(p, _)| *p == path) {
+                    Some((_, b)) => ("200 OK", b.clone()),
+                    None => ("404 Not Found", b"gone".to_vec()),
+                };
+                let head = format!(
+                    "HTTP/1.1 {code}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                let _ = s.write_all(head.as_bytes());
+                let _ = s.write_all(&body);
+            }
+        });
+        format!("http://{addr}")
+    }
+
+    /// 造一个部署形 zip（单顶层目录 chromium-<ver>/ 内含 chrome 二进制）加其 sha256。
+    fn fake_zip_asset(version: &str) -> (Vec<u8>, String) {
+        use std::io::Write;
+        let bin = if cfg!(windows) {
+            "chrome.exe"
+        } else {
+            "chrome"
+        };
+        let mut w = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        let opt = zip::write::SimpleFileOptions::default();
+        for (name, data) in [
+            (format!("chromium-{version}/{bin}"), b"bin".to_vec()),
+            (format!("chromium-{version}/sub/data.pak"), b"x".to_vec()),
+        ] {
+            w.start_file(name, opt).unwrap();
+            w.write_all(&data).unwrap();
+        }
+        let bytes = w.finish().unwrap().into_inner();
+        let digest = format!("{:02x}", Sha256::digest(&bytes));
+        (bytes, digest)
+    }
+
+    /// 镜像下载腿三态：happy（校验过、原子落位、登记 pin、零残目录）、
+    /// 锚不匹配（错包即弃）、边车 404（CTA 带覆写指引）。
+    /// 显式镜像参数直调内核（[`install_from_mirror_with`]），零 env 动作，并行安全。
+    #[test]
+    fn mirror_install_three_states() {
+        let root = tmp_root("mirror");
+
+        // happy：路由对上暂定约定 asset_name（显式镜像与资产名，零 env 动作）
+        let (zip, digest) = fake_zip_asset("1.2.3.4");
+        let asset = asset_name("1.2.3.4");
+        let mirror = mock_mirror(vec![
+            (format!("/1.2.3.4/{asset}.sha256"), digest.into_bytes()),
+            (format!("/1.2.3.4/{asset}"), zip),
+        ]);
+        let brief = install_from_mirror_with(&root, "1.2.3.4", &mirror, &asset).unwrap();
+        assert_eq!(brief["version"], json!("1.2.3.4"));
+        assert_eq!(brief["files"], json!(2));
+        assert_eq!(read_manifest(&root).pinned.as_deref(), Some("1.2.3.4"));
+        assert!(pinned_chrome(&root).is_some(), "装完即 pin 生效");
+        assert!(!root.join(".staging-1.2.3.4").exists(), "staging 用后即清");
+
+        // 锚不匹配：错包即弃，无版本目录无残件
+        let (zip2, _) = fake_zip_asset("2.0.0.0");
+        let wrong = format!("{:064x}", 0u128); // 32 字节全零，长度对但值错
+        let asset2 = asset_name("2.0.0.0");
+        let mirror2 = mock_mirror(vec![
+            (format!("/2.0.0.0/{asset2}.sha256"), wrong.into_bytes()),
+            (format!("/2.0.0.0/{asset2}"), zip2),
+        ]);
+        let err = install_from_mirror_with(&root, "2.0.0.0", &mirror2, &asset2).unwrap_err();
+        assert!(format!("{err:#}").contains("sha256 不匹配"));
+        assert!(!version_dir(&root, "2.0.0.0").exists());
+        assert!(!root.join(".staging-2.0.0.0").exists());
+
+        // 边车 404：CTA 带端点与 BROWSE_CHROME_ASSET 覆写指引
+        let empty = mock_mirror(vec![]);
+        let err =
+            install_from_mirror_with(&root, "3.0.0.0", &empty, &asset_name("3.0.0.0")).unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(msg.contains("404"), "404 应在错误里：{msg}");
+        assert!(msg.contains("BROWSE_CHROME_ASSET"));
+        assert!(!root.join(".staging-3.0.0.0").exists());
+
+        std::fs::remove_dir_all(&root).ok();
     }
 }
