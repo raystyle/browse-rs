@@ -47,3 +47,10 @@
 - 子域名定标回执（omc 总台，clean-chrome 工位转话）：chrome.ohmygh.com（与 env/pkgs/registry 平级），R2 桶 chrome 已建，版本段路由 <version>/<asset> 加 .sha256 边车（与 env 域同构，无 manifest 边车即锚）；DNS CNAME 至 public.r2.dev 传播中，总台热验回报后本仓再接 R2 下载腿实测。端点已入册 REQ-003 与 ADR-0007 决策二；定标余量收敛为版本发现来源与资产命名（随总台首版资产确认）。
 - 远端同步（用户令）：github.com/raystyle/browse-rs 建仓（public、空仓），origin 接入并推 main（e3bd2d0）；按既挂裁定（远端建立后挂 Rust 三岗 CI）补 .github/workflows/ci.yml（linux 本职 + win-gnu 交叉 + mac 本职，工具链钉版驱动），AGENTS 环境节同步改「已挂」。CI 待首跑回报。
 - 架构定调周知（用户裁 2026-09-16）：立 ADR-0007（accepted）：browse 内嵌 Chromium 版本管理器不依赖外部安装，各版本落 `<state>/chromium/<version>/` 版本化管理，机制复制 clean-chrome 既有形态；omc 管发布包资源分发（R2 镜像 + 版本段 + 边车锚，同 ark/hst 链）；ark 明确排除。REQ-003 同步对齐（manifest 版本登记、原子落位、pin 切换入 Criteria），定标项收敛为四个（镜像 tool 段与版本清单端点、缺版本自动装或 CTA、跨平台资产、GitHub 回退腿）。
+
+## 开发仓位迁移（总台周知）
+
+- 本机 WSL 十仓迁入独立 VHDX（D:\wsl_workspace\repos.vhdx，50GB ext4，挂载 /mnt/wsl/repos，快捷 ~/repos），browse-rs 在列；登录自动挂载已注册（WSL-RepoDisk schtask）。
+- 后续新开发会话与日记以 ~/repos/browse-rs 为工作根（今日会话起于旧位 /mnt/c/browse-rs，收尾后新 clone 拉平到 tip）；旧位保留过渡一至两天后裁。
+- 本仓跨仓路径切形：AGENTS Commands 与 docs/README.md 门禁节的 dev-evo check.py 路径由 /mnt/d/ProjectEvo 切 ~/repos/ProjectEvo（新位实证同版可用）；矩阵 rsync 源同步切 ~/repos 形。
+- Windows 侧注意：aidoc 投影与 cargo.exe 同树面在过渡期仍走旧位 /mnt/c 树，新根的 Windows 岗衔接随旧位裁撤批再定。
