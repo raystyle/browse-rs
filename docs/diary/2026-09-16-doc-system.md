@@ -97,3 +97,10 @@
 - 实测：mock 镜像三态全绿（happy 落位登记 pin 零残件、锚不匹配错包即弃、404 CTA）；真端点负测 `chrome install 9.9.9.9` 得 404 错误带端点与覆写指引 exit 1；happy-path 真资产实测随 clean-chrome 首版资产落桶（REQ-003 trace 届时回填）。
 - --version 旗标并入本批（原报总台的 0.1.1 patch 并入 0.2.0，少一次 tag）；workspace 版本 0.1.0 升 0.2.0，repository 元数据正本 clean-chrome 改 browse-rs；surface 与 aidoc（25 artifacts）重生成；新依赖 zip/sha2 入册，reqwest blocking 特性挂 browse-core。
 - 门禁：clippy -D warnings 绿、12 组 test、10 doc test、surface_contract、aidoc check clean。
+
+## clean-chrome 编译窗回执吸收与验收分工（2026-09-17）
+
+- 编译窗提前令回执（clean-chrome 工位，cd632e3 已推）五件全过：152.0.7977.84 三机全清重编（win/mac/ubuntu 的 out\Dev 加 out\Release 齐绿，lan-linux 不适用在册口径）；R001 与根 args.gn 唯一权威，偏差一笔 M028（junction 乘 siso 不兼容，Windows 走物理路径出产物，ADR-0008 修订已上浮用户）；补丁双形态 34 文件 byte-identical；pipe-smoke 过；check.py exit 0。
+- 自证（对方陈述不作数）：cd632e3 在册且提交语含验收分工句；diary 2026-09-17 八处实证；本机探 Windows 恒定逻辑路径下 Release 与 Dev chrome.exe 双双在位（/mnt/c/dev-chrome/chromium/src/out/，Release 含部署面件）。[实证: ls 直读]
+- 用户令落账：chrome 产物验收测试自下窗起归本工位，clean-chrome 构建自证止于产物在位与自检冒烟；已入 AGENTS 环境节。155 编译窗的 browse 侧验收面（导入安装、驱动冒烟、跨端实测）届时随窗执行；R2 首版资产（zip 加边车）落桶后 REQ-003 happy-path 实测与 trace 回填同窗衔接。
+- 导入源衔接在册：Windows C:\dev-chrome\chromium\src\out\Release（恒定逻辑路径经 junction 可达）。
