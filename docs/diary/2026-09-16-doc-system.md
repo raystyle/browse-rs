@@ -45,4 +45,5 @@
 - clean-chrome 工位转话（c002325）三句裁定与本仓 ADR-0007/REQ-003 同向，已确认入 REQ-003 上下文；R2 下载腿保持待 omc 端点定标，REQ-003 维持 draft（判据未全过不回填 trace）。
 - 分发承载定令（用户令 2026-09-16，clean-chrome 工位转达）：clean-chrome 发布包资源分发在 ohmygh.COM 域下专门子域名承载，omc 承建；本仓勿自建分发腿（GitHub 直连腿候选资格同废），子域名与路由候 omc 总台定标回执后接入。已折进 REQ-003 角色裁定段与 ADR-0007 决策二（Alternatives 同步钉死）。
 - 子域名定标回执（omc 总台，clean-chrome 工位转话）：chrome.ohmygh.com（与 env/pkgs/registry 平级），R2 桶 chrome 已建，版本段路由 <version>/<asset> 加 .sha256 边车（与 env 域同构，无 manifest 边车即锚）；DNS CNAME 至 public.r2.dev 传播中，总台热验回报后本仓再接 R2 下载腿实测。端点已入册 REQ-003 与 ADR-0007 决策二；定标余量收敛为版本发现来源与资产命名（随总台首版资产确认）。
+- 远端同步（用户令）：github.com/raystyle/browse-rs 建仓（public、空仓），origin 接入并推 main（e3bd2d0）；按既挂裁定（远端建立后挂 Rust 三岗 CI）补 .github/workflows/ci.yml（linux 本职 + win-gnu 交叉 + mac 本职，工具链钉版驱动），AGENTS 环境节同步改「已挂」。CI 待首跑回报。
 - 架构定调周知（用户裁 2026-09-16）：立 ADR-0007（accepted）：browse 内嵌 Chromium 版本管理器不依赖外部安装，各版本落 `<state>/chromium/<version>/` 版本化管理，机制复制 clean-chrome 既有形态；omc 管发布包资源分发（R2 镜像 + 版本段 + 边车锚，同 ark/hst 链）；ark 明确排除。REQ-003 同步对齐（manifest 版本登记、原子落位、pin 切换入 Criteria），定标项收敛为四个（镜像 tool 段与版本清单端点、缺版本自动装或 CTA、跨平台资产、GitHub 回退腿）。

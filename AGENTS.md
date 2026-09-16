@@ -49,6 +49,6 @@ Rust workspace（crates/cdp、browse-core、browse-cli）。公开契约以 `///
 - 652 命令清单 crates/cdp/src/methods.txt 是生成物（tools/gen-cdp-methods.py，源头 refs/ 不入库）；改协议版本重跑生成再提交
 - daemon 日志：`%USERPROFILE%\.browse-rs\daemon.log`；引擎 chrome 诊断：同目录 `engine.log`（不继承调用方句柄）
 - 本机引擎 profile：`%USERPROFILE%\.browse-rs\engine-profile`（down 不删，复用登录态）
-- 四平台测试矩阵（用户宣言 2026-09-16，ohmycloud 总台周知）：lan-win（Windows 宿主 + WSL 总台）、lan-ubuntu（Linux NUC，全运行时）、lan-linux（Linux server）、lan-mac（macOS arm64），真实环境测试验收；验收按需向 ohmycloud 总台要端点测试支撑。本仓实操：WSL 直跑门禁 + 宿主机 `cargo.exe` 同树（aidoc 投影必须在宿主机侧重生成，manifest 钉 msvc）；`ssh lan-ubuntu` / `ssh lan-mac` 的 `~/browse-rs` 是 rsync 副本非 git 仓，先 rsync 源树再跑门禁；lan-linux 备用端点。远端建立后挂 Rust 三岗 CI（linux + win-gnu 交叉 + mac）
+- 四平台测试矩阵（用户宣言 2026-09-16，ohmycloud 总台周知）：lan-win（Windows 宿主 + WSL 总台）、lan-ubuntu（Linux NUC，全运行时）、lan-linux（Linux server）、lan-mac（macOS arm64），真实环境测试验收；验收按需向 ohmycloud 总台要端点测试支撑。本仓实操：WSL 直跑门禁 + 宿主机 `cargo.exe` 同树（aidoc 投影必须在宿主机侧重生成，manifest 钉 msvc）；`ssh lan-ubuntu` / `ssh lan-mac` 的 `~/browse-rs` 是 rsync 副本非 git 仓，先 rsync 源树再跑门禁；lan-linux 备用端点。远端 origin = github.com/raystyle/browse-rs，Rust 三岗 CI 已挂（linux + win-gnu 交叉 + mac，.github/workflows/ci.yml）
 - 连接姿势（口径全文见 dev-evo skill env-platform 第十节）：WSL 到宿主恒走 127.0.0.1 回环 ssh 与 interop 直调（`cargo.exe`、`/mnt/c` 互访），不走宿主 mesh IP（mirrored 网络下自连被 RST 属结构性，非配置可修）；lan 三端（lan-ubuntu / lan-linux / lan-mac）mesh 地址互访随时可用；连接问题先查姿势再查配置
 - 运维与验收脚本载体（口径见 env-platform 第十一节）：统一走 pwsh 一份（五端 pwsh 7.6.6 在位）；本仓既有跨平台脚本载体是 PEP 723 Python 经 uv（`tools/`），不强制迁移，验收与运维面新增脚本一律 pwsh
