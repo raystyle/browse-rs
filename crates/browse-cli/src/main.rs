@@ -53,6 +53,8 @@ async fn main() -> Result<()> {
     let mut headless = false;
     let mut pipe = false;
     let mut json = false;
+    let mut llms = false;
+    let mut full = false;
 
     let mut args = std::env::args().skip(1);
     let mut gen_surface: Option<String> = None;
@@ -80,6 +82,8 @@ async fn main() -> Result<()> {
             "--headless" => headless = true,
             "--pipe" => pipe = true,
             "--json" => json = true,
+            "--llms" => llms = true,
+            "--full" => full = true,
             "-h" | "--help" => {
                 print_help();
                 return Ok(());
@@ -111,6 +115,22 @@ async fn main() -> Result<()> {
             }
             snippet => snippets.push(snippet.to_string()),
         }
+    }
+
+    // --llms 发现通道（REQ-002）：命令面投影直出 stdout，可管道，不拉 daemon；
+    // 优先级 json > full（--json 是机器面，--full 是人读完整面）
+    if llms {
+        if json {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&browse_core::surface::render_schema())?
+            );
+        } else if full {
+            print!("{}", browse_core::surface::render_llms_full());
+        } else {
+            print!("{}", browse_core::surface::render_llms());
+        }
+        return Ok(());
     }
 
     if serve {
@@ -419,6 +439,8 @@ browse：给 agent 用的 browse CLI（clean-chrome 专属）
   browse up [--headless] [--pipe] [--chrome <path>] [--ws <url>|--port <p>]   显式起引擎
   browse down                                退 daemon（只杀自起引擎）
   browse status [--json]                     状态
+  browse --llms [--full|--json]              命令面清单直出 stdout（与 docs/surface 同源；
+                                             --full 完整版，--json 出 Schema 包；不拉 daemon）
   browse --serve [--bind host:port]          前台跑 daemon
 
 片段方言（与 browser-harness-js 对齐）：

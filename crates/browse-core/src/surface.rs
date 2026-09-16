@@ -154,6 +154,17 @@ pub const COMMANDS: &[CmdSpec] = &[
         example: "browse status --json",
     },
     CmdSpec {
+        name: "llms-flag",
+        kind: CmdKind::Cli,
+        signature: "browse --llms [--full|--json]",
+        args: &[
+            arg!("full", "boolean", false, "false"),
+            arg!("json", "boolean", false, "false"),
+        ],
+        description: "命令面发现通道：stdout 直出与 docs/surface 同源的清单（--full 完整版，--json Schema 包），不拉 daemon。",
+        example: "browse --llms > llms.txt",
+    },
+    CmdSpec {
         name: "chrome-install",
         kind: CmdKind::Cli,
         signature: "browse chrome install <版本> <部署目录>",

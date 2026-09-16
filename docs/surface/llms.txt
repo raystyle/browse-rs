@@ -14,6 +14,7 @@
 | `browse up [--headless] [--pipe] [--chrome <path>] [--ws <url>] [--port <p>]` | 显式起引擎（附着优先，缺则 spawn clean-chrome 隔离实例）。 |
 | `browse down` | 退 daemon；只终结自己 spawn 的引擎，附着来源不动。 |
 | `browse status [--json]` | daemon/引擎/实例名/活动 tab 概览。 |
+| `browse --llms [--full|--json]` | 命令面发现通道：stdout 直出与 docs/surface 同源的清单（--full 完整版，--json Schema 包），不拉 daemon。 |
 | `browse chrome install <版本> <部署目录>` | 导入安装一个 Chromium 版本到应用数据目录并 pin（ADR-0007 本地面）。 |
 | `browse chrome list` | 列已装 Chromium 版本与当前 pin。 |
 | `browse chrome use <版本>` | 把托管引擎 pin 切到已装版本（旧版保留可回退）。 |

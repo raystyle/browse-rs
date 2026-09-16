@@ -5,5 +5,5 @@
 | id | 状态 | 优先级 | 标题 | trace |
 |---|---|---|---|---|
 | REQ-001 | implemented | must | 建立文档体系 | code-kit check.py 退出码 0 |
-| REQ-002 | draft | should | browse --llms 发现通道 | null |
+| REQ-002 | implemented | should | browse --llms 发现通道 | browse --llms [--full\|--json] 三形态冒烟 + surface_contract |
 | REQ-003 | draft | must | browse 托管 clean-chrome（部署升级维护与自有用户数据） | null |

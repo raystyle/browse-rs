@@ -216,6 +216,26 @@
       "output": "runtime JSON（回值随页面与 CDP 而定）",
       "type": "object"
     },
+    "cli.llms-flag": {
+      "description": "browse --llms [--full|--json] 命令面发现通道：stdout 直出与 docs/surface 同源的清单（--full 完整版，--json Schema 包），不拉 daemon。",
+      "example": "browse --llms > llms.txt",
+      "input": {
+        "properties": {
+          "full": {
+            "description": "缺省 false",
+            "type": "boolean"
+          },
+          "json": {
+            "description": "缺省 false",
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
     "cli.new-tab-flag": {
       "description": "browse --new-tab '<片段>' 求值前先开 about:blank 新 tab。",
       "example": "browse --new-tab 'return await snapshot()'",

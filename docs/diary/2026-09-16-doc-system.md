@@ -65,3 +65,12 @@
 
 - 总台回执三件全过：A 活跃面正名（AGENTS:39 linux2 改 lan-linux 并注五端四机）、B REQ-049 与索引追记端位承接、C docs/README 切四插件形态；豁免裁定九文件全对号（历史档按当时事实保留），门禁双绿，sha 已自取核对。
 - 本仓收口五处切 evo-adr:code-kit 新位：AGENTS Commands 门禁路径、AGENTS 连接姿势口径引用（env-platform 第十节，节号随迁未变）、docs/README 门禁节路径、requirements 索引 REQ-001 trace 锚、REQ-002 出处；REQ-001 文内 trace 与 diary 旧路径叙述按当时事实保留（同总台豁免口径）。[实证: AGENTS 所载新命令逐字直跑 exit 0（PASS 10 / SKIP 2）]
+
+## REQ-002 实现批：--llms 发现通道
+
+- CLI 接线三形态：`--llms`（紧凑清单）/ `--llms --full`（完整版）/ `--llms --json`（Schema 包，复用既有全局 `--json` 旗标），解析后先于 serve 与求值直出 stdout 后返回，不触 ensure_daemon；优先级 json > full；`--help` 补用法两行。
+- 目录登记 `llms-flag` 进 `COMMANDS`（CLI 节，status 之后），docs/surface 四件随之重生成（schema +20 / llms-full +13 / llms +1 行，SKILL.md 不动因其只渲染全局函数）。
+- 冒烟三形态：输出与 docs/surface/llms.txt、llms-full.txt 逐字节同源（diff 空），--json 合法 JSON 且 definitions 59 含 cli.llms-flag；全程 9880 零监听（BROWSE_PORT=9979 隔离跑），daemon 未拉起。[实证: diff 空输出、ss 复核前后计数 0]
+- 门禁：clippy -D warnings 绿、cargo test --workspace 12 组 ok、doc test 10 ok、surface_contract 3 ok（先红后绿：目录改动后投影重生成即过，锁漂移机制实证）。
+- aidoc 不重生成：本批零 pub 项与 /// 改动（COMMANDS 是常量数据，main.rs 全私有项），投影构造上无漂移；WSL 侧 cargo aidoc --check 平台门控 NOT CHECKED（msvc 钉死属工具明示行为非失败）。
+- 版本判定：REQ-002 属 0.1.0 主体增量（封版前落地），semver 裁量随封版 REQ 统一，Cargo.toml 不动。
