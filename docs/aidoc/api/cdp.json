@@ -1,6 +1,6 @@
 {
   "crate": "cdp",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "items": [
     {
       "path": "cdp::discovery",
@@ -143,9 +143,14 @@
       "docs": "管道通道的开关取值，即 `CLEAN_CHROME_DEBUG` 环境变量的值域。"
     },
     {
+      "path": "cdp::spawn::chrome_binary_in_dir",
+      "kind": "function",
+      "docs": "在部署目录里解析 chrome 可执行文件（布局感知）：Windows `chrome.exe`、\nLinux 裸 `chrome`、macOS `.app` 束内 `Chromium.app/Contents/MacOS/Chromium`\n（mac 也接受裸 unix 形）。托管部署校验、pin 解析与祖先发现共用此口径。\n\n# Examples\n\n```\n# use std::path::Path;\n// 目录里没有二进制时返回 None\nassert!(cdp::spawn::chrome_binary_in_dir(Path::new(\"/nonexistent-dir\")).is_none());\n```"
+    },
+    {
       "path": "cdp::spawn::chrome_binary_name",
       "kind": "function",
-      "docs": "返回本平台的 chrome 二进制名（Windows `chrome.exe`，其余 `chrome`）；\n托管部署校验与版本管理器共用的口径。"
+      "docs": "返回本平台的 chrome 二进制名（Windows `chrome.exe`，其余 `chrome`）。"
     },
     {
       "path": "cdp::spawn::find_chrome",

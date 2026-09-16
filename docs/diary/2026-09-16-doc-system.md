@@ -150,3 +150,10 @@
 - 附着面全链绿（教义铁律实测）：手动起 chrome（9222、独立 profile）后 browse 求值，attach-first 自动探测附着（status 见 attached ws://127.0.0.1:9222），驱动 navigate 加 evaluate 得 attach-ok；browse down 后附着浏览器仍活（只杀自起铁律成立），手动清场。
 - 踩坑两笔：一，Ubuntu 24.04 AppArmor 限 unprivileged userns，手动启动的 chrome 不带 --no-sandbox 即 FATAL（spawn 路径本就带，ADR-0003 教义再证）；首测的「误杀」假警报实为手动浏览器从未活过，判杀律前先证源活着。二，ssh 会话无桌面授权，显示环境须从图形进程 environ 捞而非假设 DISPLAY。
 - 平台分工矩阵现况：无头双端（wsl、lan-linux）全绿；有头端 lan-ubuntu 双面绿；lan-win 有头面经 x.com cookie 转移首验；lan-mac 候（mac 产物是 .app 形，待 155 窗或按需）。
+
+## lan-mac 适配激活批（0.4.0，2026-09-17）
+
+- 病灶：mac 产物是 .app 束（Chromium.app/Contents/MacOS/Chromium），原 chrome_binary_name 只认裸 chrome；首版解析器只加包装形候选，直指 .app 导入仍败（dir/Chromium.app/... 路径拼错层）。
+- 修两件：chrome_binary_in_dir 布局感知解析（mac 三候选：裸 chrome、版本目录内 Chromium.app 包装形、目录本身即束的 Contents/MacOS 直达形），check_deployed 与 pinned_chrome 与祖先发现全切此口径；install_from_dir 对 .app 源保留束形（版本目录内存 Chromium.app），错误信息随 target 实际路径。
+- mac 真机全链 [实证: 导入 331 文件/711MB 束形保留自动 pin；BROWSE_NO_ATTACH=1 up --headless 得 spawned headless=true，evaluate 得 mac-ok；去 --headless 得 spawned headless=false（ssh 直启 GUI 会话窗口上屏），evaluate 通；down 干净退]。
+- 平台矩阵收官：五端全活（wsl/lan-linux 无头绿；lan-ubuntu/lan-win/lan-mac 有头加附着绿）。封 0.4.0（minor 判据：平台能力新增）；封版件第三步逐字过：版本先升，aidoc 后生（25 artifacts 含新 pub fn chrome_binary_in_dir），check clean 一次过。

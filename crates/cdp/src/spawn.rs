@@ -49,7 +49,7 @@ pub fn find_chrome(explicit: Option<&Path>) -> Option<PathBuf> {
     for root in roots {
         for dir in root.ancestors().take(6) {
             if let Some(p) = newest_chromium_under(dir) {
-                return Some(p.join(chrome_binary_name()));
+                return chrome_binary_in_dir(&p);
             }
         }
     }
@@ -66,20 +66,45 @@ fn newest_chromium_under(root: &Path) -> Option<PathBuf> {
                 .and_then(|n| n.to_str())
                 .is_some_and(|n| n.starts_with("chromium-"))
         })
-        .filter(|p| p.join(chrome_binary_name()).is_file())
+        .filter(|p| chrome_binary_in_dir(p).is_some())
         .collect();
     hits.sort();
     hits.pop()
 }
 
-/// 返回本平台的 chrome 二进制名（Windows `chrome.exe`，其余 `chrome`）；
-/// 托管部署校验与版本管理器共用的口径。
+/// 返回本平台的 chrome 二进制名（Windows `chrome.exe`，其余 `chrome`）。
 pub fn chrome_binary_name() -> &'static str {
     if cfg!(windows) {
         "chrome.exe"
     } else {
         "chrome"
     }
+}
+
+/// 在部署目录里解析 chrome 可执行文件（布局感知）：Windows `chrome.exe`、
+/// Linux 裸 `chrome`、macOS `.app` 束内 `Chromium.app/Contents/MacOS/Chromium`
+/// （mac 也接受裸 unix 形）。托管部署校验、pin 解析与祖先发现共用此口径。
+///
+/// # Examples
+///
+/// ```
+/// # use std::path::Path;
+/// // 目录里没有二进制时返回 None
+/// assert!(cdp::spawn::chrome_binary_in_dir(Path::new("/nonexistent-dir")).is_none());
+/// ```
+pub fn chrome_binary_in_dir(dir: &Path) -> Option<PathBuf> {
+    let mut candidates = vec![dir.join(chrome_binary_name())];
+    if cfg!(target_os = "macos") {
+        // 束在目录里（版本目录形）与目录本身是束（.app 直指形）都认
+        candidates.push(
+            dir.join("Chromium.app")
+                .join("Contents")
+                .join("MacOS")
+                .join("Chromium"),
+        );
+        candidates.push(dir.join("Contents").join("MacOS").join("Chromium"));
+    }
+    candidates.into_iter().find(|p| p.is_file())
 }
 
 fn fallback_paths() -> Vec<PathBuf> {

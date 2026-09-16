@@ -111,16 +111,14 @@ pub fn write_manifest(root: &Path, m: &ChromeManifest) -> Result<()> {
 ///
 /// 目录不存在或没有 chrome 二进制（错误带 chromeInstall CTA）。
 pub fn check_deployed(dir: &Path) -> Result<()> {
-    let bin = dir.join(cdp::spawn::chrome_binary_name());
-    if bin.is_file() {
-        Ok(())
-    } else {
-        bail!(
-            "{} 不是可用的 Chromium 部署（{} 不在）；\
+    match cdp::spawn::chrome_binary_in_dir(dir) {
+        Some(_) => Ok(()),
+        None => bail!(
+            "{} 不是可用的 Chromium 部署（{} 内无 chrome 二进制；mac 是 Chromium.app 束）；\
              下一步：chromeInstall({{fromDir: \"<部署目录>\"}}) 指向含 chrome 二进制的目录",
             dir.display(),
-            bin.display()
-        )
+            dir.display()
+        ),
     }
 }
 
@@ -164,11 +162,17 @@ pub fn install_from_dir(root: &Path, version: &str, from_dir: &Path) -> Result<V
             dst.display()
         );
     }
-    let (files, bytes) = copy_tree(from_dir, &dst).map_err(|e| {
+    // mac `.app` 束导入保留束形（版本目录内存 Chromium.app）；其他平台整树平铺
+    let target = if from_dir.extension().is_some_and(|e| e == "app") {
+        dst.join(from_dir.file_name().unwrap_or_default())
+    } else {
+        dst.clone()
+    };
+    let (files, bytes) = copy_tree(from_dir, &target).map_err(|e| {
         anyhow::anyhow!(
             "复制部署失败（{} -> {}）：{e}",
             from_dir.display(),
-            dst.display()
+            target.display()
         )
     })?;
     check_deployed(&dst)?;
@@ -486,8 +490,7 @@ pub fn doctor_json(root: &Path) -> Value {
 pub fn pinned_chrome(root: &Path) -> Option<PathBuf> {
     let m = read_manifest(root);
     let v = m.pinned?;
-    let bin = version_dir(root, &v).join(cdp::spawn::chrome_binary_name());
-    bin.is_file().then_some(bin)
+    cdp::spawn::chrome_binary_in_dir(&version_dir(root, &v))
 }
 
 fn count_files(dir: &Path) -> Option<u64> {
