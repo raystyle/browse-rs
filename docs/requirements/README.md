@@ -6,3 +6,4 @@
 |---|---|---|---|---|
 | REQ-001 | implemented | must | 建立文档体系 | dev-evo check.py 退出码 0 |
 | REQ-002 | draft | should | browse --llms 发现通道 | null |
+| REQ-003 | draft | must | browse 托管 clean-chrome（部署升级维护与自有用户数据） | null |
