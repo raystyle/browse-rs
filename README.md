@@ -16,7 +16,8 @@ clean-chrome（自编 Chromium），常驻 daemon 让会话、变量、活动 ta
 
 三条通道：
 
-1. ark install（舰队安装管理，单通道契约：无自升级子命令，升级走管理方或重下）
+1. ark install（舰队安装管理，单通道契约：无自升级子命令，升级走管理方或重下；
+   catalog 入册随总台 catalog pin 滚动，未入册前走下两通道）
 2. 镜像直下：`https://browse.ohmygh.com/browse/<版本>/<资产>`，三平台包
    加同名 `.sha256` 边车（sha256sum 原生格式，下载后 `sha256sum -c` 核验）：
 

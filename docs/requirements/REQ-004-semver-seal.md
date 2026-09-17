@@ -20,4 +20,5 @@ trace: tag v0.1.0（git 自取）+ 三路门禁回执见 diary 2026-09-16 封版
 - [x] 三路门禁首封全绿（wsl 全件含 release 构建；lan-ubuntu/lan-mac 实机 rsync 同树 clippy 加 12 组 test；CI main 双岗；lan-win=win-gnu 交叉岗、lan-linux=备用端点，均在册口径）
 - [x] CHANGELOG 立卷定版 0.1.0（版本级里程碑制）
 - [x] tag v0.1.0 推远端
-- 分发腿不预建（用户裁定在册）：CLI 资产分发归 omc/seed 通道，仓内不建 release 流水线，首发资产窗口随总台调度
+- 分发腿不预建（用户裁定在册，2026-09-16 时点）：CLI 资产分发归 omc/seed 通道，首发资产窗口随总台调度
+- 追正（总台核准 2026-09-17 批一/批二）：发布流水已在仓内落地（seed-only workflow 加 tools/release.pwsh 本地发布面，build-release 标准三段式），上句「仓内不建 release 流水线」按新核准形态废止；总台只剩 catalog pin 滚

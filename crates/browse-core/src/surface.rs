@@ -730,7 +730,7 @@ pub fn render_schema() -> Value {
     })
 }
 
-/// 渲染 `--llm` agent 手册（REQ-060 一面）：名加版本加一句定位加子命令表
+/// 渲染 `--llms` agent 手册（REQ-060 一面，族标准名）：名加版本加一句定位加子命令表
 /// 加通用旗标加常用例。全量由 [`COMMANDS`] 活树派生，禁手维护双份；
 /// 行数帽 120 由 `manual_under_120_lines` 测试锁（目录膨胀时逼收敛）。
 pub fn render_manual() -> String {

@@ -215,3 +215,8 @@
 - 镜像域实证：browse.ohmygh.com/browse/0.4.1/ 资产真身在（application/gzip 3337228 字节对本地 dist 逐字节同长，边车 112 字节同）；直下 URL 形入 README。
 - 二面 issue 前单在途（#4 实弹已提）；细标（JSON 协议与自省）候 evo SKILL 定稿广播后精对齐。
 - 门禁：clippy 绿、12 组 test、11 doc test、surface 契约（含手册帽）过、aidoc 26 artifacts check clean。
+
+## 发布流水对齐批一二钩子（评审 G2 补笔，2026-09-17）
+
+- 前段「release 流水自播接线」节记的是重写前旧形（v* tag 触发 CI 三岗编译），形态已被批一废止，本笔补正：现行形 = CI 零编译，播种 seed-only（3aaaffa：release published 触发加 dispatch tag 补推口加双段播种加双段零上传红灯；d9daac7 补 --immutable）加本地发布面 tools/release.pwsh（3091fca：版本闸加测试闸加三目标加打包边车加跨宿主断言加三端解包冒烟加 gh --latest 直发，载体 pwsh 总台裁）。REQ-004「仓内不建 release 流水线」句已加追正行（2026-09-16 时点裁定，按总台核准批一二废止）。
+- 评审回执处置（w11:p3 codex）：F1 修（surface.rs 注释 --llm 残名清源加 aidoc 重生 26 件）；G1 修（README ark install 通道加 catalog 未入册标注）；G2 本笔；G3 修（seed 岗加 prerelease 过滤防 dev 流误灌 stable，ark 同形）；G4 三件挂后续批（资产齐备闸、rclone 钉版、红灯逐名核对）。

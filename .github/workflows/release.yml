@@ -23,6 +23,8 @@ env:
 
 jobs:
   seed:
+    # prerelease 不灌 stable 双段（防将来起 dev 预发布流时误滚；ark 同形）
+    if: github.event_name == 'workflow_dispatch' || github.event.release.prerelease == false
     runs-on: ubuntu-latest
     env:
       RCLONE_CONFIG_R2_TYPE: s3
