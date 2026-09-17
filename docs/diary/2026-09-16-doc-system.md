@@ -186,3 +186,10 @@
 - REQ-003 trace 回填（三端 R2 happy-path），余量收敛至版本发现来源正式定标（候 155 正式窗）；封 0.4.1（patch：定标对齐加实测回填）。测试实例清场：wsl r2test 与 win r2test（端口碰撞件）删，win r2win 与 mac r2test 留作各端 R2 装在证。
 
 - 待办一补强（用户令 2026-09-17）：155 stable（ETA 09-23 前后）触发的正式窗全形状在册：资产定稿（155 三平台包定版）加 catalog 入册（双工具分条目，总台裁二）加 seed 加舰队部署；本工位面：155 产物验收（分工在册）加三端 R2 复测加版本发现来源正式定标裁量。用户裁定：现状不做，候 stable 触发再排。
+
+## CLI 资产窗 v0.4.1 三平台产包（总台令 2026-09-17，与 155 解耦提前开）
+
+- 追正入册：browse 部署安装自管（命令集成资源加内嵌版本管理器），总台只走资源分发链（GitHub release 挂资产加 catalog 入册加镜像 seed）；原单 ark 五端安装管理句作废。
+- 产线：wsl 产 linux（x86_64-unknown-linux-gnu tar.gz）加 win-gnu（x86_64-pc-windows-gnu zip，mingw 交叉在册），mac 走 lan-mac 构建；三件皆 browse 0.4.1；每包含 browse 二进制加 README 加 LICENSE 双件（MIT/Apache 正本入仓 9b5c944，版权行本仓化），SKILL 不入包；逐包 .sha256 边车（sha256sum 原生格式）。
+- 解包冒烟三验必过 [实证: 三端解包直跑 browse --version 皆 0.4.1（win 经 interop，mac 经 ssh）]。
+- 六件归集 ~/repos/browse-rs/dist/（gitignored）；回执总台 wR:p1 含绝对路径加逐件 digest；总台接手分发链。
