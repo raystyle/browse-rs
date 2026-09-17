@@ -175,3 +175,5 @@
 - 自证（回执纪律）：本机直读 dist 三包加三边车在位，独立 sha256 逐件复核与台账一致（d48763…、5f6f4e…、72cd14…）。[实证: sha256sum 直跑]
 - 命名升形：asset_name 从暂定单名升定标三元组形 chromium-<版本>-<三元组>.zip（chromium_triple 按平台：win 对 msvc 资产、linux gnu、mac arm64；三元组是 clean-chrome 构建面，与本仓自身 win-gnu 编译面无关）；三元组断言测试入册；错误与注释措辞随清（暂定约定改定标形）。桶一落即可裸跑 browse chrome install <版本> 零覆写。
 - 本批不另封版：并入先验窗 happy-path 批（届时 0.4.1 一并定版）。门禁：clippy 绿、12 组 test、aidoc 25 artifacts 重生 check clean。
+
+- 更正（wZ 口径校时，2026-09-17）：上批「上桶放行候用户点头」记误，实际放行已批（总台放行令，用户裁「1」在册），总台已发取件令并持有六件绝对路径，非待批态；本工位实测触发条件不变：总台落桶回执路由地址即起三端 happy-path。
