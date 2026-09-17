@@ -230,3 +230,5 @@
 - 目录登记 repl-flag；lib 模块文档随形；无 pub 签名变化。
 - 实测改后 [实证: TTY 裸跑 script 伪终端出帮助体 exit 0；非 TTY 空.stdin 出帮助体 exit 0；管道批处理 41；默认实例求值 7；--repl 伪终端进 REPL]
 - 门禁：clippy 绿、12 组 test 0 败、surface 重生、aidoc check clean、PE exit 0。
+
+- 终态收讫（总台，2026-09-17）：909b1e0 与双 run success 自证通过，九笔链全量收讫，G 遗留挂后续批与首发播种红一次预期在档照准；browse 全备，封版 wave 尾单只剩 officecli，本仓候 wave 令（REVIEW 面）。
