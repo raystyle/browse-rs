@@ -234,7 +234,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Cli,
         signature: "browse issue list [--status <s>] [--limit <n>] [--tool <t>]",
         args: &[
-            arg!("status", "string", false, "open"),
+            arg!("status", "string", false),
             arg!("limit", "number", false, "20"),
             arg!("tool", "string", false, "browse"),
         ],

@@ -91,15 +91,17 @@ try {
     $dist = Join-Path $root 'dist'
     if (Test-Path $dist) { Remove-Item -Recurse -Force $dist }
     New-Item -ItemType Directory -Path $dist | Out-Null
+    # Inner = 包内二进制名（终审 F1 修：mac 取回的临时名不得原名入包，
+    # 管理方消费的是 browse；三目标显式内层名杜绝来源名漂移）
     $targets = @(
-        @{ Triple = 'x86_64-unknown-linux-gnu'; Archive = 'tar.gz'; Bin = "target/x86_64-unknown-linux-gnu/release/browse" },
-        @{ Triple = 'x86_64-pc-windows-gnu'; Archive = 'zip'; Bin = "target/x86_64-pc-windows-gnu/release/browse.exe" },
-        @{ Triple = 'aarch64-apple-darwin'; Archive = 'tar.gz'; Bin = $macTmp }
+        @{ Triple = 'x86_64-unknown-linux-gnu'; Archive = 'tar.gz'; Bin = "target/x86_64-unknown-linux-gnu/release/browse"; Inner = 'browse' },
+        @{ Triple = 'x86_64-pc-windows-gnu'; Archive = 'zip'; Bin = "target/x86_64-pc-windows-gnu/release/browse.exe"; Inner = 'browse.exe' },
+        @{ Triple = 'aarch64-apple-darwin'; Archive = 'tar.gz'; Bin = $macTmp; Inner = 'browse' }
     )
     foreach ($t in $targets) {
         $d = "browse-${Tag}-$($t.Triple)"
         New-Item -ItemType Directory -Path (Join-Path $dist $d) | Out-Null
-        Copy-Item $t.Bin (Join-Path $dist $d)
+        Copy-Item $t.Bin (Join-Path (Join-Path $dist $d) $t.Inner)
         Copy-Item README.md, LICENSE-MIT, LICENSE-APACHE (Join-Path $dist $d)
         Push-Location $dist
         try {

@@ -263,7 +263,7 @@ browse issue new <标题> --body <复现步骤>
 列 issue（新到旧；默认本工具，--tool 换过滤）。读面 GET /api/issues。
 
 参数：
-- `status`（string，缺省 open）
+- `status`（string）
 - `limit`（number，缺省 20）
 - `tool`（string，缺省 browse）
 

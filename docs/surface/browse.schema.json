@@ -225,7 +225,7 @@
             "type": "number"
           },
           "status": {
-            "description": "缺省 open",
+            "description": "",
             "type": "string"
           },
           "tool": {
