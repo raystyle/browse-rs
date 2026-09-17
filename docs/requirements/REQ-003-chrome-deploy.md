@@ -24,6 +24,6 @@ agent 或用户在任意系统只装 browse 一个软件包：browse 自带独�
 - [x] 发现序衔接：`--chrome` 显式 -> `BROWSE_CHROME` -> 托管 pin -> cwd/exe 祖先 `chromium-*` -> 常规路径（engine `resolve_chrome` 落地）
 - [x] 版本登记：`<state>/chromium/manifest.json`（已装版本 + 来源 + 文件/字节基线 + pin）
 - [x] 命令面：8 条登记 `COMMANDS` 单一真相源（Cli 4 + 全局 4；安装面扩两源后签名同册），schema/llms 两面派生（skill 物种 2026-09-16 退役，--llms 即说明书），surface_contract 锁漂移
-- [ ] 定标项（余量）：可用版本发现来源（子域无 manifest 面；候选：显式传版本号、clean-chrome 仓 release 元数据；v1 已落显式传版本号，镜像下载腿无 version 即 CTA）、资产命名形态（暂定约定 `chromium-<version>.zip`，`BROWSE_CHROME_ASSET` 全名覆写；随总台首版资产确认改正式）、跨平台资产清单（Windows 部署形态实证；Linux 运行时集实证可跑：lan-linux 与 wsl 无头全链 2026-09-17，资产打包形候 155 窗；mac 待）；`BROWSE_CHROME_MIRROR` 载体已落（默认 `https://chrome.ohmygh.com`，覆写走测试与自建镜像）；缺版本 CTA 已裁（不自动装）；分发腿不自建（用户令裁定，GitHub 直连腿同废）
+- [ ] 定标项（余量）：可用版本发现来源（子域无 manifest 面；候选：显式传版本号、clean-chrome 仓 release 元数据；v1 已落显式传版本号，镜像下载腿无 version 即 CTA）、资产命名形态（总台裁二定稿：`chromium-<版本>-<三元组>.zip` 平台三元组形，155 正式窗随 catalog 入册；152 先验窗不入 catalog，代码面暂定约定候 wZ 出包形回执后升形，`BROWSE_CHROME_ASSET` 全名覆写兜底）、跨平台资产清单（Windows 部署形态实证；Linux 运行时集实证可跑：lan-linux 与 wsl 无头全链 2026-09-17，资产打包形候 155 窗；mac 待）；`BROWSE_CHROME_MIRROR` 载体已落（默认 `https://chrome.ohmygh.com`，覆写走测试与自建镜像）；缺版本 CTA 已裁（不自动装）；分发腿不自建（用户令裁定，GitHub 直连腿同废）
 
 进度注：本地导入面与 R2 下载腿均已实现（下载腿真资产 happy-path 随首版资产补测）；定标余量三项未闭（版本发现来源正式定标、资产命名正式化、跨平台资产清单）前保持 draft（trace 不回填）。按 semver 判据属能力新增，落 0.2.0 批。

@@ -162,3 +162,9 @@
 
 - 待办一（155 编译窗，ETA 2026-09-23 前后）：clean-chrome REQ-012 stable 触发、REQ-013 四台并轨全清重编 155；本工位随窗执行产物验收（用户令分工在册：导入安装、驱动冒烟、跨端实测）；lan-linux 树同步候窗；M028 junction 乘 siso 的 ADR-0008 修订议题随窗清。
 - 待办二（R2 首版资产落桶）：触发链 = clean-chrome 出包形定标（zip 加 .sha256 边车，命名候平台三元组形 chromium-<版本>-<三元组>.zip，跨三平台；本仓暂定单名约定将随定标升形）到 omc 桶上传（chrome.ohmygh.com 版本段路由）到本仓 happy-path 实测（browse chrome install 拉取装通）加 REQ-003 trace 回填；排期对话已发飞轮（clean-chrome 与总台两工位）。
+
+## 总台排期两裁吸收（2026-09-17，接外部窗待办批）
+
+- 裁一（窗口）：152 先验窗即刻备跑——现货早通全链（R2 上传通道、版本段路由、下载腿、锚校验、happy-path），前置清零 155 正式窗风险；152 系过渡位不入 catalog，桶段验后可清或留回退；155 = 正式窗（资产定稿、catalog、seed、舰队部署）。家规同构：D44 通道演练先于真用。
+- 裁二（catalog）：155 正式窗同窗同批双工具分条目——chromium 资产按平台三元组形 chromium-<版本>-<三元组>.zip（clean-chrome 分发例外条款面），browse CLI 资产 browse-v<版本>-<三元组> 同批；一次 seed 一次对账，digest 双源核后同落。REQ-003 定标余量行已随裁更新。
+- 执行序在册：候 wZ 出包形定标回执（152/155 与命名）到，总台开先验窗调度，本仓 happy-path 实测随叫（下载腿已实现，BROWSE_CHROME_ASSET 覆写兜底命名差）。v0.4.0 收讫（5fa3d9f 核证，对齐表总台已滚）。
