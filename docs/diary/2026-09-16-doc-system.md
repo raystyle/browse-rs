@@ -220,3 +220,5 @@
 
 - 前段「release 流水自播接线」节记的是重写前旧形（v* tag 触发 CI 三岗编译），形态已被批一废止，本笔补正：现行形 = CI 零编译，播种 seed-only（3aaaffa：release published 触发加 dispatch tag 补推口加双段播种加双段零上传红灯；d9daac7 补 --immutable）加本地发布面 tools/release.pwsh（3091fca：版本闸加测试闸加三目标加打包边车加跨宿主断言加三端解包冒烟加 gh --latest 直发，载体 pwsh 总台裁）。REQ-004「仓内不建 release 流水线」句已加追正行（2026-09-16 时点裁定，按总台核准批一二废止）。
 - 评审回执处置（w11:p3 codex）：F1 修（surface.rs 注释 --llm 残名清源加 aidoc 重生 26 件）；G1 修（README ark install 通道加 catalog 未入册标注）；G2 本笔；G3 修（seed 岗加 prerelease 过滤防 dev 流误灌 stable，ark 同形）；G4 三件挂后续批（资产齐备闸、rclone 钉版、红灯逐名核对）。
+
+- 评审二轮处置：F 复报（release.pwsh 锚链预检缺）已修：1b 预检五件入脚本（洁净闸、git rev-parse、远端 tag 在位且指向本 sha、gh 登录、无既有 release），照 hst release.ps1 1b 加 ark release.ps1 0a/0b 同形；CI 退场后本脚本是唯一正式发布口，锚链机器保障补齐。在途提醒（issue --status schema 缺省与实现差异）候 evo cli-docs 广播后随细标批闭环。

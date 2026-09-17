@@ -56,6 +56,26 @@ try {
         throw "版本闸红：Cargo.toml=$manifest != tag=$Ver"
     }
 
+    # 1b 发布锚链预检（评审二轮 F 修，照 hst/ark 同形）：洁净闸 + 预检三件。
+    # CI 退场后本脚本是唯一正式发布口，tag 与提交与产物的锚链要机器保障：
+    # 远端无 tag 时 gh release create 会默认在分支 HEAD 补建 tag，锚链即断。
+    $dirty = & git status --porcelain
+    if ($LASTEXITCODE -ne 0 -or "$dirty".Trim()) { throw "红：工作树不洁净（发布要求洁净树）" }
+    $head = (& git rev-parse HEAD).Trim()
+    if ($LASTEXITCODE -ne 0 -or -not $head) { throw "红：git rev-parse 失败" }
+    $remote = & git ls-remote origin "refs/tags/$Tag" 2>$null
+    if ($LASTEXITCODE -ne 0) { throw "红：git ls-remote 失败" }
+    if ("$remote" -notmatch "refs/tags/$Tag") {
+        throw "锚链红：远端无 $Tag；下一步：git tag $Tag && git push origin $Tag 后重跑"
+    }
+    if ("$remote" -notmatch "^$head") {
+        throw "锚链红：远端 $Tag 不指向本提交（$head）；下一步：核 tag 来源后重推 tag"
+    }
+    & gh auth status *> $null
+    if ($LASTEXITCODE -ne 0) { throw "红：gh 未登录（gh auth login）" }
+    & gh release view $Tag *> $null
+    if ($LASTEXITCODE -eq 0) { throw "红：release $Tag 已存在；补挂资产走 gh release upload，勿重建" }
+
     # 2 测试闸
     Run cargo @('test', '--locked') '测试闸'
 
