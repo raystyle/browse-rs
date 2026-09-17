@@ -168,6 +168,14 @@ pub const COMMANDS: &[CmdSpec] = &[
         example: "browse --llms",
     },
     CmdSpec {
+        name: "repl-flag",
+        kind: CmdKind::Cli,
+        signature: "browse --repl",
+        args: &[],
+        description: "显式进入交互 REPL（裸调用只出本仓帮助体，不弹交互）。",
+        example: "browse --repl",
+    },
+    CmdSpec {
         name: "version-flag",
         kind: CmdKind::Cli,
         signature: "browse --version",

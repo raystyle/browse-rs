@@ -317,6 +317,17 @@
       "output": "runtime JSON（回值随页面与 CDP 而定）",
       "type": "object"
     },
+    "cli.repl-flag": {
+      "description": "browse --repl 显式进入交互 REPL（裸调用只出本仓帮助体，不弹交互）。",
+      "example": "browse --repl",
+      "input": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
     "cli.serve": {
       "description": "browse --serve [--bind host:port] 前台跑 daemon（样例忠实形态）。",
       "example": "browse --serve --bind 127.0.0.1:9880",

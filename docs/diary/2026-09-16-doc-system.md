@@ -222,3 +222,11 @@
 - 评审回执处置（w11:p3 codex）：F1 修（surface.rs 注释 --llm 残名清源加 aidoc 重生 26 件）；G1 修（README ark install 通道加 catalog 未入册标注）；G2 本笔；G3 修（seed 岗加 prerelease 过滤防 dev 流误灌 stable，ark 同形）；G4 三件挂后续批（资产齐备闸、rclone 钉版、红灯逐名核对）。
 
 - 评审二轮处置：F 复报（release.pwsh 锚链预检缺）已修：1b 预检五件入脚本（洁净闸、git rev-parse、远端 tag 在位且指向本 sha、gh 登录、无既有 release），照 hst release.ps1 1b 加 ark release.ps1 0a/0b 同形；CI 退场后本脚本是唯一正式发布口，锚链机器保障补齐。在途提醒（issue --status schema 缺省与实现差异）候 evo cli-docs 广播后随细标批闭环。
+
+## 裸调用面对齐批（总台对齐单，用户收敛令修形，2026-09-17）
+
+- 改前实测：TTY 裸跑直落 js> REPL 挂交互；非 TTY 空 stdin 零字节退 0（总台实测同）。
+- 修形（用户收敛令：以本仓与命令帮助为主，不带项目外引用）：裸调用（TTY 与空管道两形）出本仓帮助体 exit 0（print_help 转 stdout，-h 同体）；REPL 收 --repl 显式入口（能力保留）；stdin 管道批处理不回归（run_stdin 回执求值段数，零段即空管道视同裸调用出帮助）；帮助文本传输三形态句随改。途中两刀：初版紧凑导航文案按收敛令撤换为帮助体；补丁误伤 run_tty 尾同文匹配复位。
+- 目录登记 repl-flag；lib 模块文档随形；无 pub 签名变化。
+- 实测改后 [实证: TTY 裸跑 script 伪终端出帮助体 exit 0；非 TTY 空.stdin 出帮助体 exit 0；管道批处理 41；默认实例求值 7；--repl 伪终端进 REPL]
+- 门禁：clippy 绿、12 组 test 0 败、surface 重生、aidoc check clean、PE exit 0。

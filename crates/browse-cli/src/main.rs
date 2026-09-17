@@ -69,6 +69,7 @@ async fn main() -> Result<()> {
     let mut json = false;
     let mut llms = false;
     let mut full = false;
+    let mut repl = false;
 
     let mut args = std::env::args().skip(1);
     let mut gen_surface: Option<String> = None;
@@ -98,6 +99,7 @@ async fn main() -> Result<()> {
             "--pipe" => pipe = true,
             "--json" => json = true,
             "--llms" => llms = true,
+            "--repl" => repl = true,
             "--full" => full = true,
             "-h" | "--help" => {
                 print_help();
@@ -327,7 +329,26 @@ async fn main() -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&r)?);
             Ok(())
         }
-        Mode::Eval => run_eval(snippets, new_tab, ws, port, chrome, headless, pipe, profile).await,
+        Mode::Eval => {
+            // 裸调用 = 导航事件：无参不弹交互，TTY 裸跑出本仓帮助体 exit 0；
+            // REPL 须 --repl 显式进；stdin 管道批处理形态不回归。
+            if snippets.is_empty() {
+                if repl {
+                    return run_tty(new_tab).await;
+                }
+                if std::io::stdin().is_terminal() {
+                    print_help();
+                    return Ok(());
+                }
+                // 管道批处理不回归；空管道（EOF 无内容）视同裸调用出帮助体
+                let n = run_stdin(new_tab).await?;
+                if n == 0 {
+                    print_help();
+                }
+                return Ok(());
+            }
+            run_eval(snippets, new_tab, ws, port, chrome, headless, pipe, profile).await
+        }
     }
 }
 
@@ -358,17 +379,12 @@ async fn run_eval(
     if ws.is_some() || port.is_some() || chrome.is_some() || headless || pipe || profile.is_some() {
         client::engine_up(headless, chrome, ws, port, pipe, profile).await?;
     }
-    if !snippets.is_empty() {
-        for snip in &snippets {
-            run_snip(snip, new_tab).await;
-        }
-        return Ok(());
+    // 空片段的裸调用分支已在 Mode::Eval 臂前置处理（帮助体 / 管道 / --repl），
+    // 进到这里必带片段
+    for snip in &snippets {
+        run_snip(snip, new_tab).await;
     }
-    if std::io::stdin().is_terminal() {
-        run_tty(new_tab).await
-    } else {
-        run_stdin(new_tab).await
-    }
+    Ok(())
 }
 
 async fn run_snip(snip: &str, new_tab: bool) {
@@ -516,10 +532,12 @@ async fn run_tty(new_tab: bool) -> Result<()> {
     Ok(())
 }
 
-async fn run_stdin(new_tab: bool) -> Result<()> {
+/// 管道批处理；返回实际求值的段数（零段 = 空管道，裸调用面据此出帮助体）。
+async fn run_stdin(new_tab: bool) -> Result<usize> {
     let mut stdin = BufReader::new(tokio::io::stdin());
     let mut line = String::new();
     let mut buf = String::new();
+    let mut ran = 0usize;
     loop {
         line.clear();
         let n = stdin.read_line(&mut line).await?;
@@ -530,6 +548,7 @@ async fn run_stdin(new_tab: bool) -> Result<()> {
         if trimmed.trim() == "." {
             if !buf.trim().is_empty() {
                 run_snip(&buf, new_tab).await;
+                ran += 1;
             }
             buf.clear();
             continue;
@@ -540,23 +559,26 @@ async fn run_stdin(new_tab: bool) -> Result<()> {
         buf.push_str(trimmed);
         if snippet_complete(&buf) {
             run_snip(&buf, new_tab).await;
+            ran += 1;
             buf.clear();
         }
     }
     if !buf.trim().is_empty() {
         run_snip(&buf, new_tab).await;
+        ran += 1;
     }
-    Ok(())
+    Ok(ran)
 }
 
 fn print_help() {
-    eprintln!(
+    println!(
         "\
 browse：给 agent 用的 browse CLI（clean-chrome 专属）
 
 用法：
   browse '<方言片段>'                       求值（自动拉 daemon 与引擎）
-  browse -e '<片段>' | stdin | TTY REPL      其余两形态
+  browse -e '<片段>' | browse < stdin         显式求值 / 管道批处理
+  browse --repl                              交互 REPL（显式进入；裸跑出本仓帮助）
   browse --new-tab '<片段>'                  先开 about:blank 再求值
   browse --connect <ws|端口> '<片段>'        显式附着
   browse up [--headless] [--pipe] [--chrome <path>] [--profile <dir>] [--ws <url>|--port <p>]   显式起引擎

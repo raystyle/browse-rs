@@ -15,6 +15,7 @@
 | `browse down` | 退 daemon；只终结自己 spawn 的引擎，附着来源不动。 |
 | `browse status [--json]` | daemon/引擎/实例名/活动 tab 概览。 |
 | `browse --llms [--full|--json]` | agent 手册直出（REQ-060 一面，族标准名）：裸形 markdown 紧凑手册（名加版本加定位加子命令表加旗标加常用例，活树派生）；--full 完整目录；--json 机器形 Schema。不拉 daemon。 |
+| `browse --repl` | 显式进入交互 REPL（裸调用只出本仓帮助体，不弹交互）。 |
 | `browse --version` | 打印版本号（资产解包冒烟与安装核对用）。 |
 | `browse chrome install <版本> [部署目录]` | 安装 Chromium 版本并 pin：缺省从镜像下载（版本段路由加 .sha256 锚校验原子落位），给部署目录则本地导入。 |
 | `browse chrome list` | 列已装 Chromium 版本与当前 pin。 |
@@ -184,6 +185,15 @@ agent 手册直出（REQ-060 一面，族标准名）：裸形 markdown 紧凑�
 
 ```js
 browse --llms
+```
+
+## `browse --repl`
+
+显式进入交互 REPL（裸调用只出本仓帮助体，不弹交互）。
+
+
+```js
+browse --repl
 ```
 
 ## `browse --version`
