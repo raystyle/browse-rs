@@ -47,6 +47,16 @@ fn generated_files_match_renderer() {
     );
 }
 
+/// REQ-060 一面手册帽（族标准名 --llms）：手册至多 120 行，膨胀逼收敛。
+#[test]
+fn manual_under_120_lines() {
+    let lines = surface::render_manual().lines().count();
+    assert!(
+        lines <= 120,
+        "--llms 手册 {lines} 行超 120 帽；收敛目录说明或精选常用例"
+    );
+}
+
 #[test]
 fn catalog_names_unique() {
     let mut seen = std::collections::HashSet::new();

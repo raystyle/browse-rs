@@ -164,8 +164,8 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("full", "boolean", false, "false"),
             arg!("json", "boolean", false, "false"),
         ],
-        description: "命令面发现通道：stdout 直出与 docs/surface 同源的清单（--full 完整版，--json Schema 包），不拉 daemon。",
-        example: "browse --llms > llms.txt",
+        description: "agent 手册直出（REQ-060 一面，族标准名）：裸形 markdown 紧凑手册（名加版本加定位加子命令表加旗标加常用例，活树派生）；--full 完整目录；--json 机器形 Schema。不拉 daemon。",
+        example: "browse --llms",
     },
     CmdSpec {
         name: "version-flag",
@@ -728,6 +728,38 @@ pub fn render_schema() -> Value {
         "description": "由 crates/browse-core/src/surface.rs 目录派生；browse --gen-surface 重生成，tests/surface_contract.rs 锁漂移",
         "definitions": defs,
     })
+}
+
+/// 渲染 `--llm` agent 手册（REQ-060 一面）：名加版本加一句定位加子命令表
+/// 加通用旗标加常用例。全量由 [`COMMANDS`] 活树派生，禁手维护双份；
+/// 行数帽 120 由 `manual_under_120_lines` 测试锁（目录膨胀时逼收敛）。
+pub fn render_manual() -> String {
+    let mut out = String::from("# browse\n\n");
+    out.push_str(&format!("版本 {}。\n", env!("CARGO_PKG_VERSION")));
+    out.push_str(
+        "定位：给 agent（也给人）的浏览器驾驶 CLI；JS 方言片段驱动 clean-chrome，\
+         常驻 daemon 会话跨命令存活。\n\n",
+    );
+    out.push_str("## 子命令\n\n| 形态 | 说明 |\n| --- | --- |\n");
+    for c in COMMANDS
+        .iter()
+        .filter(|c| c.kind == CmdKind::Cli && !c.signature.starts_with("browse --"))
+    {
+        out.push_str(&format!("| `{}` | {} |\n", c.signature, c.description));
+    }
+    out.push_str("\n## 通用旗标\n\n| 旗标 | 说明 |\n| --- | --- |\n");
+    for c in COMMANDS
+        .iter()
+        .filter(|c| c.kind == CmdKind::Cli && c.signature.starts_with("browse --"))
+    {
+        out.push_str(&format!("| `{}` | {} |\n", c.signature, c.description));
+    }
+    out.push_str("\n## 常用例\n\n```bash\n");
+    for c in COMMANDS.iter().filter(|c| c.kind == CmdKind::Cli) {
+        out.push_str(&format!("{}\n", c.example));
+    }
+    out.push_str("```\n");
+    out
 }
 
 /// 渲染紧凑 LLM 清单 `llms.txt`（索引层，一行一命令）。

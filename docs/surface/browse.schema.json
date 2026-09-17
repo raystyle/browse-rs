@@ -280,8 +280,8 @@
       "type": "object"
     },
     "cli.llms-flag": {
-      "description": "browse --llms [--full|--json] 命令面发现通道：stdout 直出与 docs/surface 同源的清单（--full 完整版，--json Schema 包），不拉 daemon。",
-      "example": "browse --llms > llms.txt",
+      "description": "browse --llms [--full|--json] agent 手册直出（REQ-060 一面，族标准名）：裸形 markdown 紧凑手册（名加版本加定位加子命令表加旗标加常用例，活树派生）；--full 完整目录；--json 机器形 Schema。不拉 daemon。",
+      "example": "browse --llms",
       "input": {
         "properties": {
           "full": {

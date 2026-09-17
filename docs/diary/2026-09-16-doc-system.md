@@ -207,3 +207,11 @@
 - agent 纪律入合同：AGENTS Must 加「遇缺陷当场 browse issue new 一键反馈（自动署名 tool=browse 加版本/平台/host）」。
 - 实弹证据 [实证: issue new 得 {ok:true, id:4, url:https://issues.ohmygh.com/i/4}，自动署名 version=0.4.1、platform=linux-x86_64、host=AI-LAB；list --limit 3 可见；show 4 全量回读含 body]
 - 门禁：clippy 绿、11 组 test、surface 契约过、aidoc check clean。
+
+## REQ-060 三面统一对齐批（总台二号单加更正单，2026-09-17）
+
+- 一面 --llms（更正单正名：前单 --llm 系总台笔误，族标准名 --llms，omc D31 形）：裸形升册为 markdown 紧凑手册（render_manual：名加版本加一句定位加子命令表加通用旗标加常用例，COMMANDS 活树派生禁手维护双份；行数帽 120 由 surface_contract 测试锁，实测 55 行）；--llms --json 机器形 Schema（63 defs）；--full 完整目录保留；REQ-002 判据一随升注（llms.txt 目录清单投影不动，仍随 gen-surface 派生）。笔误名 --llm 半途撤净（旗标、目录条、帮助行）。
+- 三面 README 四节重排（166 行压 89 行）：项目介绍（是什么加为谁加与 ark/omc 分工一句加边界）/部署（ark install 加镜像直下 browse.ohmygh.com/browse/<版本>/ 三平台表加边车核验加源码；五端注意；单通道自升级说明）/配置（11 环境变量全表加状态目录位加密钥纪律）/使用方法（可复制即跑例加 issue 一行加 --llms 一行加方言边界）；中文紧凑禁营销。
+- 镜像域实证：browse.ohmygh.com/browse/0.4.1/ 资产真身在（application/gzip 3337228 字节对本地 dist 逐字节同长，边车 112 字节同）；直下 URL 形入 README。
+- 二面 issue 前单在途（#4 实弹已提）；细标（JSON 协议与自省）候 evo SKILL 定稿广播后精对齐。
+- 门禁：clippy 绿、12 组 test、11 doc test、surface 契约（含手册帽）过、aidoc 26 artifacts check clean。

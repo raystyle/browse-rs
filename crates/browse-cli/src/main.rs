@@ -181,8 +181,9 @@ async fn main() -> Result<()> {
         }
     }
 
-    // --llms 发现通道（REQ-002）：命令面投影直出 stdout，可管道，不拉 daemon；
-    // 优先级 json > full（--json 是机器面，--full 是人读完整面）
+    // --llms（REQ-060 一面，族标准名）：裸形 markdown 紧凑手册（REQ-002 的
+    // 目录清单形升册）；--full 人读完整目录；--json 机器形 Schema；不拉 daemon；
+    // 优先级 json > full
     if llms {
         if json {
             println!(
@@ -192,7 +193,7 @@ async fn main() -> Result<()> {
         } else if full {
             print!("{}", browse_core::surface::render_llms_full());
         } else {
-            print!("{}", browse_core::surface::render_llms());
+            print!("{}", browse_core::surface::render_manual());
         }
         return Ok(());
     }
@@ -561,8 +562,8 @@ browse：给 agent 用的 browse CLI（clean-chrome 专属）
   browse up [--headless] [--pipe] [--chrome <path>] [--profile <dir>] [--ws <url>|--port <p>]   显式起引擎
   browse down                                退 daemon（只杀自起引擎）
   browse status [--json]                     状态
-  browse --llms [--full|--json]              命令面清单直出 stdout（与 docs/surface 同源；
-                                             --full 完整版，--json 出 Schema 包；不拉 daemon）
+  browse --llms [--full|--json]              agent 手册直出（REQ-060：裸形 markdown 手册；
+                                             --full 完整目录，--json 机器形 Schema；不拉 daemon）
   browse --serve [--bind host:port]          前台跑 daemon
   browse --version                           打印版本号（资产解包冒烟用）
   browse chrome install <版本> [部署目录]    镜像下载（缺省）或本地导入安装引擎
