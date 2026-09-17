@@ -177,3 +177,10 @@
 - 本批不另封版：并入先验窗 happy-path 批（届时 0.4.1 一并定版）。门禁：clippy 绿、12 组 test、aidoc 25 artifacts 重生 check clean。
 
 - 更正（wZ 口径校时，2026-09-17）：上批「上桶放行候用户点头」记误，实际放行已批（总台放行令，用户裁「1」在册），总台已发取件令并持有六件绝对路径，非待批态；本工位实测触发条件不变：总台落桶回执路由地址即起三端 happy-path。
+
+## R2 先验窗三端 happy-path 闭环（0.4.1，2026-09-17）
+
+- 总台落桶回执到（六件全活，digest 逐字等），本端探针同证；随即三端起跑全绿：wsl 拉 linux-gnu 包（567 文件/1.9GB）、lan-win 拉 msvc 包（499 文件/683MB，二次下载复证）、lan-mac 拉 arm64 包（331 文件/711MB 束形）：三端皆 mirror 源、锚校验过、自动 pin；spawn 驱动 evaluate 分别得 r2-happy-ok、win-r2-ok、mac-r2-ok；doctor healthy 加 pinnedOk；干净退场。lan-win 用交叉建 win-gnu browse.exe（C:\Users\ray\bin\，0.4.0 起可复建）。[实证: 三端 install JSON 的 mirror 源与 evaluate 回值直读]
+- 真资产抓出两缺口即修：一，边车是 sha256sum -c 兼容格式（hex 双空格文件名），原解析要求整串 64 hex 必败（mock 只写了裸 hex 所以单测全绿）：改取首 token 为锚，mock 同步锁真格式；门禁与实跑互补纪律再添一实证。二，win 上 BROWSE_NAME=r2test 派生端口落 Hyper-V 保留段（10048，无监听者也绑不上），换实例名即过；实例名派生端口与宿主保留段的碰撞面记档。
+- cmd 引号嵌套切坏方言片段，走 stdin 重送即过（win 驢动面姿势记档）。
+- REQ-003 trace 回填（三端 R2 happy-path），余量收敛至版本发现来源正式定标（候 155 正式窗）；封 0.4.1（patch：定标对齐加实测回填）。测试实例清场：wsl r2test 与 win r2test（端口碰撞件）删，win r2win 与 mac r2test 留作各端 R2 装在证。

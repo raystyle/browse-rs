@@ -277,7 +277,8 @@ pub fn install_from_mirror_with(
         .map_err(|e| mirror_cta(&base, e))?
         .text()
         .map_err(|e| anyhow::anyhow!("读 {base}.sha256 失败：{e}"))?;
-    let want = sidecar.trim();
+    // 边车是 sha256sum -c 兼容格式（hex 双空格 文件名），取首 token 为锚
+    let want = sidecar.split_whitespace().next().unwrap_or("");
     if want.len() != 64 || !want.chars().all(|c| c.is_ascii_hexdigit()) {
         bail!(
             "{base}.sha256 边车内容非法（要 64 位十六进制，得 {:?}）；\
@@ -747,7 +748,10 @@ mod tests {
         let (zip, digest) = fake_zip_asset("1.2.3.4");
         let asset = asset_name("1.2.3.4");
         let mirror = mock_mirror(vec![
-            (format!("/1.2.3.4/{asset}.sha256"), digest.into_bytes()),
+            (
+                format!("/1.2.3.4/{asset}.sha256"),
+                format!("{digest}  {asset}").into_bytes(),
+            ),
             (format!("/1.2.3.4/{asset}"), zip),
         ]);
         let brief = install_from_mirror_with(&root, "1.2.3.4", &mirror, &asset).unwrap();
@@ -762,7 +766,10 @@ mod tests {
         let wrong = format!("{:064x}", 0u128); // 32 字节全零，长度对但值错
         let asset2 = asset_name("2.0.0.0");
         let mirror2 = mock_mirror(vec![
-            (format!("/2.0.0.0/{asset2}.sha256"), wrong.into_bytes()),
+            (
+                format!("/2.0.0.0/{asset2}.sha256"),
+                format!("{wrong}  {asset2}").into_bytes(),
+            ),
             (format!("/2.0.0.0/{asset2}"), zip2),
         ]);
         let err = install_from_mirror_with(&root, "2.0.0.0", &mirror2, &asset2).unwrap_err();
