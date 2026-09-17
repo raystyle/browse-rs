@@ -63,6 +63,7 @@ jobs:
         run: |
           rclone copy dist/ "r2:${R2_BUCKET}/browse/${VER}/" \
             --include "*.zip" --include "*.tar.gz" --include "*.sha256" \
+            --immutable \
             --header-upload "Cache-Control: public, max-age=31536000, immutable" \
             --checksum -v --stats-one-line
       - name: Seed stable segment (sync 滚代清旧)
