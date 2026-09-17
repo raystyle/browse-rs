@@ -1,10 +1,21 @@
 # browse
 
+[![CI](https://github.com/raystyle/browse-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/raystyle/browse-rs/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/raystyle/browse-rs)](https://github.com/raystyle/browse-rs/releases)
+[![License](https://img.shields.io/badge/license-MIT_OR_Apache--2.0-blue)](LICENSE-MIT)
+
 ## 项目介绍
 
 browse 是给 agent（也给人）的浏览器驾驶 CLI：一条 JS 方言片段驱动
 clean-chrome（自编 Chromium），常驻 daemon 让会话、变量、活动 tab 与元素
 引用跨命令存活。错误自带下一步（可照抄 CTA），绝不关用户自己的浏览器。
+
+- 一条 JS 方言片段直调 CDP 全量 652 方法（`session.<Domain>.<method>`）
+- 常驻 daemon：会话、变量、活动 tab 与元素引用跨命令存活
+- 页面级原语：snapshot/screenshot/pdf、clickRef/fillRef、路由拦截与假应答
+- 附着优先引擎策略：探测本机浏览器，缺则 spawn 隔离实例；绝不关用户浏览器
+- 内嵌 Chromium 版本管理器：install/use/list/doctor，镜像锚校验原子落位
+- agent 面：`--llms` 手册直出、错误带可照抄「下一步」、裸调用不弹交互
 
 与家族分工：omc 管资源分发与总台协调；ark 管舰队执行与安装管理；browse
 自管浏览器引擎与会话（含 Chromium 版本管理器，ADR-0007）。

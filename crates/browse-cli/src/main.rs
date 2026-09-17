@@ -571,47 +571,7 @@ async fn run_stdin(new_tab: bool) -> Result<usize> {
 }
 
 fn print_help() {
-    println!(
-        "\
-browse：给 agent 用的 browse CLI
-
-用法：
-  browse '<方言片段>'                       求值（自动拉 daemon 与引擎）
-  browse -e '<片段>' | browse < stdin         显式求值 / 管道批处理
-  browse --repl                              交互 REPL（显式进入；裸跑出本仓帮助）
-  browse --new-tab '<片段>'                  先开 about:blank 再求值
-  browse --connect <ws|端口> '<片段>'        显式附着
-  browse up [--headless] [--pipe] [--chrome <path>] [--profile <dir>] [--ws <url>|--port <p>]   显式起引擎
-  browse down                                退 daemon（只杀自起引擎）
-  browse status [--json]                     状态
-  browse --llms [--full|--json]              agent 手册直出（REQ-060：裸形 markdown 手册；
-                                             --full 完整目录，--json 机器形 Schema；不拉 daemon）
-  browse --serve [--bind host:port]          前台跑 daemon
-  browse --version                           打印版本号（资产解包冒烟用）
-  browse chrome install <版本> [部署目录]    镜像下载（缺省）或本地导入安装引擎
-  browse issue new <标题> [--body <正文>]    一键缺陷反馈（自动署名工具/版本/平台）
-  browse issue list [--status] [--limit]     列 issue（默认 tool=browse，新到旧）
-  browse issue show <id>                     看 issue 详情
-
-片段方言：
-  await session.connect({{port:9222}})
-  const tabs = await listPageTargets()
-  await session.use(tabs[0].targetId)
-  await session.Page.navigate({{url:\"https://example.com\"}})
-  await session.waitFor(\"Page.loadEventFired\", undefined, 15000)
-  支持：字面量/对象/数组/成员/下标/await/const-let-var/return。
-  不支持：函数字面量、if/for、模板字符串；页面逻辑放 Runtime.evaluate 的 expression。
-
-环境：
-  BROWSE_PORT（daemon 端口，默认 9880）、BROWSE_NAME（命名实例：状态目录与
-  派生端口 9900-9999 隔离，多实例并行）、BROWSE_CHROME（chrome.exe 路径）、
-  BROWSE_CDP_WS（钉死连接）、BROWSE_NO_ATTACH=1（跳过附着探测强制 spawn）、
-  BROWSE_EVAL_TIMEOUT（秒，默认 300）。
-  --pipe：spawn 引擎走 CDP 管道通道（CLEAN_CHROME_DEBUG=pipe，零 TCP 面）。
-  --profile / BROWSE_PROFILE：spawn 引擎自定义 user-data-dir（默认固定
-  <state>/engine-profile，站点状态与会话跨跑持久；down 不删）。
-
-退出码：
-  0 成功 / 1 执行失败 / 2 用法错。"
-    );
+    // 帮助面由命令目录活树派生（surface::render_help，cli-docs 标准节序）；
+    // --help、-h 与裸调用三入口共用本函数，节序与对齐的守卫在 surface_contract。
+    println!("{}", browse_core::surface::render_help());
 }

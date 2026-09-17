@@ -280,7 +280,7 @@
       "type": "object"
     },
     "cli.llms-flag": {
-      "description": "browse --llms [--full|--json] agent 手册直出（REQ-060 一面，族标准名）：裸形 markdown 紧凑手册（名加版本加定位加子命令表加旗标加常用例，活树派生）；--full 完整目录；--json 机器形 Schema。不拉 daemon。",
+      "description": "browse --llms [--full|--json] agent 手册直出（裸形 markdown 紧凑手册；--full 完整目录，--json 机器形 Schema；不拉 daemon）。",
       "example": "browse --llms",
       "input": {
         "properties": {
@@ -329,7 +329,7 @@
       "type": "object"
     },
     "cli.serve": {
-      "description": "browse --serve [--bind host:port] 前台跑 daemon（样例忠实形态）。",
+      "description": "browse --serve [--bind host:port] 前台跑 daemon（--bind 选监听地址）。",
       "example": "browse --serve --bind 127.0.0.1:9880",
       "input": {
         "properties": {

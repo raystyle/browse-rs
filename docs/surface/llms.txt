@@ -14,7 +14,7 @@
 | `browse up [--headless] [--pipe] [--chrome <path>] [--profile <dir>] [--ws <url>] [--port <p>]` | 显式起引擎（附着优先，缺则 spawn clean-chrome 隔离实例；--profile 自定义 user-data-dir，默认固定 profile 持久保存站点会话）。 |
 | `browse down` | 退 daemon；只终结自己 spawn 的引擎，附着来源不动。 |
 | `browse status [--json]` | daemon/引擎/实例名/活动 tab 概览。 |
-| `browse --llms [--full|--json]` | agent 手册直出（REQ-060 一面，族标准名）：裸形 markdown 紧凑手册（名加版本加定位加子命令表加旗标加常用例，活树派生）；--full 完整目录；--json 机器形 Schema。不拉 daemon。 |
+| `browse --llms [--full|--json]` | agent 手册直出（裸形 markdown 紧凑手册；--full 完整目录，--json 机器形 Schema；不拉 daemon）。 |
 | `browse --repl` | 显式进入交互 REPL（裸调用只出本仓帮助体，不弹交互）。 |
 | `browse --version` | 打印版本号（资产解包冒烟与安装核对用）。 |
 | `browse chrome install <版本> [部署目录]` | 安装 Chromium 版本并 pin：缺省从镜像下载（版本段路由加 .sha256 锚校验原子落位），给部署目录则本地导入。 |
@@ -24,7 +24,7 @@
 | `browse issue new <标题> [--body <正文>]` | 一键缺陷反馈：自动署名 tool=browse 加版本加平台加主机。 |
 | `browse issue list [--status <s>] [--limit <n>] [--tool <t>]` | 列 issue（新到旧；默认本工具，--tool 换过滤）。读面 GET /api/issues。 |
 | `browse issue show <id>` | 看 issue 详情（GET /api/issues/<id>）。 |
-| `browse --serve [--bind host:port]` | 前台跑 daemon（样例忠实形态）。 |
+| `browse --serve [--bind host:port]` | 前台跑 daemon（--bind 选监听地址）。 |
 
 ## 全局函数
 

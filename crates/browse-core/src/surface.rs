@@ -164,7 +164,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("full", "boolean", false, "false"),
             arg!("json", "boolean", false, "false"),
         ],
-        description: "agent 手册直出（REQ-060 一面，族标准名）：裸形 markdown 紧凑手册（名加版本加定位加子命令表加旗标加常用例，活树派生）；--full 完整目录；--json 机器形 Schema。不拉 daemon。",
+        description: "agent 手册直出（裸形 markdown 紧凑手册；--full 完整目录，--json 机器形 Schema；不拉 daemon）。",
         example: "browse --llms",
     },
     CmdSpec {
@@ -254,7 +254,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Cli,
         signature: "browse --serve [--bind host:port]",
         args: &[arg!("bind", "string", false, "127.0.0.1:9880")],
-        description: "前台跑 daemon（样例忠实形态）。",
+        description: "前台跑 daemon（--bind 选监听地址）。",
         example: "browse --serve --bind 127.0.0.1:9880",
     },
     // ---- 全局函数 ----
@@ -748,6 +748,11 @@ pub fn render_manual() -> String {
         "定位：给 agent（也给人）的浏览器驾驶 CLI；JS 方言片段驱动 clean-chrome，\
          常驻 daemon 会话跨命令存活。\n\n",
     );
+    out.push_str(
+        "## 读序\n\n先看「子命令」表选形态：页面操作走方言片段（缺省形态），\
+         引擎生命周期走 up/down/status，Chromium 版本走 chrome 子命令，\
+         缺陷反馈走 issue 子命令。错误回执自带可照抄「下一步」。\n\n",
+    );
     out.push_str("## 子命令\n\n| 形态 | 说明 |\n| --- | --- |\n");
     for c in COMMANDS
         .iter()
@@ -762,11 +767,120 @@ pub fn render_manual() -> String {
     {
         out.push_str(&format!("| `{}` | {} |\n", c.signature, c.description));
     }
+    out.push_str(
+        "\n## 退出码\n\n| 码 | 义 |\n| --- | --- |\n| 0 | 成功 |\n\
+         | 1 | 执行失败 |\n| 2 | 用法错 |\n",
+    );
     out.push_str("\n## 常用例\n\n```bash\n");
     for c in COMMANDS.iter().filter(|c| c.kind == CmdKind::Cli) {
         out.push_str(&format!("{}\n", c.example));
     }
     out.push_str("```\n");
+    out
+}
+
+// Options 节的伴生旗标：不单独成目录条目（up 与求值前置共用），与目录旗标
+// 合并按字典序渲染；描述与 [`COMMANDS`] 条目无重复。
+const COMPANION_FLAGS: &[(&str, &str)] = &[
+    (
+        "--chrome <path>",
+        "显式引擎路径（伴 up 与求值前置；缺省走发现序）",
+    ),
+    ("--full", "--llms 变体：完整目录"),
+    ("--headless", "无头引擎（伴 up 与求值前置）"),
+    ("--help, -h", "人读帮助"),
+    (
+        "--json",
+        "JSON 输出（伴 status；--llms --json 出机器形 Schema）",
+    ),
+    ("--pipe", "spawn 引擎走 CDP 管道（零 TCP 面）"),
+    ("--port <p>", "显式调试端口（伴附着与 up）"),
+    (
+        "--profile <dir>",
+        "自定义 user-data-dir（default: 固定 engine-profile）",
+    ),
+    ("--ws <url>", "显式 WS URL（伴附着与 up）"),
+];
+
+// 展示宽度：CJK 与全角区记 2，其余记 1（Commands/Options 列对齐用）。
+fn disp_width(s: &str) -> usize {
+    s.chars()
+        .map(|c| {
+            if ('\u{3000}'..='\u{9fff}').contains(&c) || ('\u{ff00}'..='\u{ffef}').contains(&c) {
+                2
+            } else {
+                1
+            }
+        })
+        .sum()
+}
+
+/// 渲染 `--help` 与裸调用共用的帮助面（cli-docs 标准节序）：头行 name@版本
+/// 加一句定位、Usage synopsis、Commands（[`COMMANDS`] 活树派生，描述单一
+/// 真源）、Options（目录旗标加伴生旗标，字典序列对齐）、片段方言、环境
+/// 变量、退出码。`help_covers_catalog` 守卫测试锁命令树全覆盖与版本注入。
+///
+/// ```
+/// let help = browse_core::surface::render_help();
+/// assert!(help.contains("Usage:"));
+/// assert!(help.contains(&format!("browse@{}", env!("CARGO_PKG_VERSION"))));
+/// assert!(help.contains("Commands:"));
+/// ```
+pub fn render_help() -> String {
+    let mut out = format!(
+        "browse@{} 给 agent（也给人）的浏览器驾驶 CLI\n\n",
+        env!("CARGO_PKG_VERSION")
+    );
+    out.push_str("Usage: browse [options] '<方言片段>'\n       browse <command> [options]\n\n");
+
+    // Commands：目录 CLI 形态条目（子命令与缺省形态），名截去可选尾按最长名对齐
+    let cmds: Vec<(&str, &str)> = COMMANDS
+        .iter()
+        .filter(|c| c.kind == CmdKind::Cli && !c.signature.starts_with("browse --"))
+        .map(|c| {
+            (
+                c.signature.split(" [").next().unwrap_or(c.signature),
+                c.description.trim_end_matches('。'),
+            )
+        })
+        .collect();
+    let cw = cmds.iter().map(|(n, _)| disp_width(n)).max().unwrap_or(0);
+    out.push_str("Commands:\n");
+    for (n, d) in &cmds {
+        out.push_str(&format!("  {n}{}  {d}\n", " ".repeat(cw - disp_width(n))));
+    }
+
+    // Options：目录旗标条目（描述单一真源）加伴生旗标，合并字典序。
+    // 旗标名取签名里旗标 token 连取值占位（遇可选 [ 与片段实参 '< 截止）。
+    let mut flags: Vec<(String, &str)> = COMMANDS
+        .iter()
+        .filter(|c| c.kind == CmdKind::Cli && c.signature.starts_with("browse --"))
+        .map(|c| {
+            let name = c
+                .signature
+                .split(' ')
+                .skip(1)
+                .take_while(|t| !t.starts_with('[') && !t.starts_with('\''))
+                .collect::<Vec<_>>()
+                .join(" ");
+            (name, c.description.trim_end_matches('。'))
+        })
+        .collect();
+    flags.extend(COMPANION_FLAGS.iter().map(|(n, d)| ((*n).to_string(), *d)));
+    flags.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+    let fw = flags.iter().map(|(n, _)| disp_width(n)).max().unwrap_or(0);
+    out.push_str("\nOptions:\n");
+    for (n, d) in &flags {
+        out.push_str(&format!("  {n}{}  {d}\n", " ".repeat(fw - disp_width(n))));
+    }
+
+    out.push_str(
+        "\n片段方言：\n  await session.connect({port:9222})\n  const tabs = await listPageTargets()\n  await session.use(tabs[0].targetId)\n  await session.Page.navigate({url:\"https://example.com\"})\n  await session.waitFor(\"Page.loadEventFired\", undefined, 15000)\n  支持：字面量/对象/数组/成员/下标/await/const-let-var/return。\n  不支持：函数字面量、if/for、模板字符串；页面逻辑放 Runtime.evaluate 的 expression。\n",
+    );
+    out.push_str(
+        "\nEnvironment Variables:\n  BROWSE_PORT          daemon 端口（default: 9880）\n  BROWSE_NAME          命名实例：状态目录加派生端口 9900-9999 隔离，多实例并行\n  BROWSE_CHROME        chrome 路径（default: 走发现序：显式、托管 pin、祖先部署、常规路径）\n  BROWSE_PROFILE       spawn 引擎 user-data-dir（default: 固定 engine-profile，down 不删）\n  BROWSE_CDP_WS        钉死连接的 WS URL\n  BROWSE_NO_ATTACH=1   跳过附着探测，强制 spawn 隔离实例\n  BROWSE_EVAL_TIMEOUT  单次求值超时秒数（default: 300）\n",
+    );
+    out.push_str("\n退出码：\n  0 成功 / 1 执行失败 / 2 用法错\n");
     out
 }
 

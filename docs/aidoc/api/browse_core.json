@@ -1,6 +1,6 @@
 {
   "crate": "browse-core",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "items": [
     {
       "path": "browse_core::chrome_mgr",
@@ -356,6 +356,11 @@
       "path": "browse_core::surface::catalog_json",
       "kind": "function",
       "docs": "返回目录的运行时 JSON，即 hostFunctions 探针的返回体。"
+    },
+    {
+      "path": "browse_core::surface::render_help",
+      "kind": "function",
+      "docs": "渲染 `--help` 与裸调用共用的帮助面（cli-docs 标准节序）：头行 name@版本\n加一句定位、Usage synopsis、Commands（[`COMMANDS`] 活树派生，描述单一\n真源）、Options（目录旗标加伴生旗标，字典序列对齐）、片段方言、环境\n变量、退出码。`help_covers_catalog` 守卫测试锁命令树全覆盖与版本注入。\n\n```\nlet help = browse_core::surface::render_help();\nassert!(help.contains(\"Usage:\"));\nassert!(help.contains(&format!(\"browse@{}\", env!(\"CARGO_PKG_VERSION\"))));\nassert!(help.contains(\"Commands:\"));\n```"
     },
     {
       "path": "browse_core::surface::render_llms",

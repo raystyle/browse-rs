@@ -242,3 +242,12 @@
 - tag v0.5.0 随批推远端；release.ps1 首发自播回执随后批补记（真 tag 首跑，首发播种红一次预期在档照准）。
 - release 首跑排障（v0.5.0 真跑第一红）：`pwsh -File tools/release.pwsh` 秒红「Cannot bind argument to parameter 'Path' (empty string)」，同内容改名 .ps1 即通；根因是 pwsh 7.6.6 Linux 面不把 .pwsh 扩展当脚本（`&` 调用径直走 fork/exec，-File 形态内部同坑），脚本本体无病。处置：正名 tools/release.ps1 归家形（hst/ark 同名），活引用五处随迁（REQ-004 追正行、CHANGELOG 本版条、tools/README、release.yml 注、本批行；本节 09-17 历史批记两处按当时事实保留）；tag v0.5.0 自 47eafb8 移指本提交（未挂 release 无消费者，移指合规）。
 - 首发回执（补记当笔）：release.ps1 全链 exit 0（测试闸、三目标、跨宿主断言冒烟、gh 直发六件）；seed 流水首跑 run 35252547031 success 24s（在档预期的首发红一次未发生）；镜像 browse.ohmygh.com/browse/0.5.0/ 抽查 200 加 content-length 与本地逐字节同、边车 digest 对账同值。[实证: gh run 与 curl 双源直读] 另记：锚链闸只认轻量标签（ls-remote 对附注标签返标签对象 sha），家形轻量下无碍，附注标签会误红、CTA 指向重推无助，候后续批加 ^{} 解引用面。
+
+## cli-docs 全量对照与帮助面重排批（总台补单，2026-09-18）
+
+- 对照基准 evo-adr:cli-docs（agent-face 加 readme-standard 加 templates），乙面五件与甲面四节全量对照；REQ-060 已做件引档计已过，补缺四件落：一，帮助面重排进标准节序（头行 browse@版本 注入、Usage synopsis、Commands/Options 分家列对齐、环境变量逐条 default），print_help 从手写字符串改 surface::render_help 活树派生（Commands 全派生描述单一真源，Options 目录旗标派生加伴生旗标 curated，即标准 curated 加守卫形），--help/-h/裸调用三入口共用，CJK 展宽对齐内建；二，漂移守卫补 help 面（help_covers_catalog 锁目录 CLI 条目全覆盖与版本注入，原守卫只锁 llms 与盘上投影）；三，手册补「读序」与「退出码」节（57 升 69 行帽内）；四，README 补徽章三枚与特性短句列表。
+- 目录描述清内册引用两处（llms-flag 的 REQ-060 与 serve 的「样例忠实形态」），单一真源短形供手册与帮助同享。
+- 输出协议裁定在册（agent-face 第二节对 browse 形态）：--filter-output 等价形态已落（方言成员/下标访问即键过滤）；--format 族不扩（人读/json 已落）；信封族引档 09-16 六十一批裁定（可照抄 CTA 比错误码强）；--schema 等价已落（--llms --json 全局面 Schema 包）。裁剪显式记录即本笔。
+- 实证 [实证: browse --help 三入口同体；help_covers_catalog 绿；--help 与 --llms rg ohmygh 零命中；手册 69 行帽内]
+- 门禁：fmt、clippy -D warnings、test 12 组、doc test、rustdoc、aidoc check strict、PE 全绿。
+- 封 0.5.1（patch：帮助面与文档改进批，无能力新增）。

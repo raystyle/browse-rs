@@ -1,5 +1,5 @@
 <!-- browse_cli/index.md -->
-# browse-cli 0.5.0
+# browse-cli 0.5.1
 
 browse CLI 的可测半边：daemon 客户端（HTTP 调用 + 自动拉起）。
 
@@ -74,7 +74,7 @@ version 40、platform 与 host 64）；读面 list 与 show 走 GET。
 
 
 <!-- browse_core/index.md -->
-# browse-core 0.5.0
+# browse-core 0.5.1
 
 browse CLI 的核心库：方言宿主、引擎策略、daemon HTTP API。
 
@@ -357,6 +357,7 @@ session 方法**只在这一处登记为数据**，JSON Schema 与 LLM 清单
 ## Functions
 
 - `catalog_json` — 返回目录的运行时 JSON，即 hostFunctions 探针的返回体。
+- `render_help` — 渲染 `--help` 与裸调用共用的帮助面（cli-docs 标准节序）：头行 name@版本
 - `render_llms` — 渲染紧凑 LLM 清单 `llms.txt`（索引层，一行一命令）。
 - `render_llms_full` — 渲染完整 LLM 清单 `llms-full.txt`：索引加逐命令参数与示例。
 - `render_manual` — 渲染 `--llms` agent 手册（REQ-060 一面，族标准名）：名加版本加一句定位加子命令表
@@ -375,7 +376,7 @@ session 方法**只在这一处登记为数据**，JSON Schema 与 LLM 清单
 
 
 <!-- cdp/index.md -->
-# cdp 0.5.0
+# cdp 0.5.1
 
 Chrome DevTools Protocol（CDP）连接层：一条常驻 browser-level WebSocket 会话。
 

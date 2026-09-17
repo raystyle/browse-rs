@@ -90,3 +90,26 @@ async fn every_catalog_entry_dispatches() {
         );
     }
 }
+
+/// 帮助面漂移守卫（cli-docs 第四节）：`render_help` 必须覆盖目录全部 CLI
+/// 条目（命令形态取截断名、旗标形态取旗标 token），且头行版本从载体注入。
+#[test]
+fn help_covers_catalog() {
+    let help = surface::render_help();
+    for c in surface::COMMANDS.iter().filter(|c| c.kind == CmdKind::Cli) {
+        let needle = if c.signature.starts_with("browse --") {
+            c.signature.split(' ').nth(1).expect("旗标 token")
+        } else {
+            c.signature.split(" [").next().expect("命令名")
+        };
+        assert!(
+            help.contains(needle),
+            "帮助面缺 CLI 条目 {needle}（{name}）",
+            name = c.name
+        );
+    }
+    assert!(
+        help.contains(&format!("browse@{}", env!("CARGO_PKG_VERSION"))),
+        "帮助面头行版本未注入"
+    );
+}

@@ -2,6 +2,13 @@
 
 版本级里程碑；逐批过程见 docs/diary。semver 判据在册 docs/requirements/REQ-004。
 
+## 0.5.1 - 2026-09-18
+
+- 帮助面重排进 cli-docs 标准节序：头行 `browse@版本` 注入、Usage synopsis、Commands/Options 分家列对齐（CJK 展宽）、环境变量逐条 default 后缀；`print_help` 改 `surface::render_help` 活树派生（curated 加守卫形），`help_covers_catalog` 守卫锁命令树全覆盖与版本注入
+- `--llms` 手册补「读序」与「退出码」节（57 升 69 行，帽 120 内）；目录描述清内册引用两处（`--llms` 与 `--serve` 条目）
+- 帮助与命令面清内部细节：`--help` 删镜像域孤行，issue new 目录描述去 issues 域与 REQ 内册后缀（`rg ohmygh` 三面零命中）
+- README 甲面补徽章三枚（CI/Release/License）与特性短句列表
+
 ## 0.5.0 - 2026-09-18
 
 - issue 命令集成（REQ-057 对齐单）：`browse issue new/list/show` 一键缺陷反馈入统一入口 issues.ohmygh.com，自动署名 tool/version/platform/host，`BROWSE_ISSUES_API` 覆写；agent 一键反馈纪律入 AGENTS 合同
