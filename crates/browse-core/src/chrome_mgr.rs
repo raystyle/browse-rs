@@ -7,8 +7,8 @@
 //!
 //! 安装源两形（ADR-0007）：本地目录导入（SxS 部署形态，`chromium-<ver>/`
 //! 整目录复制）；R2 镜像版本段下载（chrome.ohmygh.com，`<ver>/<asset>` 加
-//! 同名 `.sha256` 边车锚，总台热验 2026-09-17 回执；资产名是暂定约定，
-//! 候 clean-chrome 首版资产定标，`BROWSE_CHROME_ASSET` 可覆写）。
+//! 同名 `.sha256` 边车锚，总台热验 2026-09-17 回执；资产名是定标形
+//! `chromium-<version>-<三元组>.zip`，`BROWSE_CHROME_ASSET` 可覆写）。
 
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
@@ -195,10 +195,22 @@ pub fn install_from_dir(root: &Path, version: &str, from_dir: &Path) -> Result<V
 /// `BROWSE_CHROME_MIRROR` 覆写走测试或自建镜像）。
 pub const DEFAULT_MIRROR: &str = "https://chrome.ohmygh.com";
 
-/// 资产名暂定约定：`chromium-<version>.zip`（候 clean-chrome 首版资产定标；
-/// `BROWSE_CHROME_ASSET` 全名覆写）。
+/// 资产名（定标形，总台裁二）：`chromium-<version>-<三元组>.zip`；三元组是
+/// clean-chrome 构建面（Windows msvc、Linux gnu、mac arm64），与本仓自身
+/// 编译面无关；`BROWSE_CHROME_ASSET` 全名覆写不变。
 pub fn asset_name(version: &str) -> String {
-    format!("chromium-{version}.zip")
+    format!("chromium-{version}-{}.zip", chromium_triple())
+}
+
+/// clean-chrome 资产的构建三元组（按运行平台选包）。
+fn chromium_triple() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "x86_64-pc-windows-msvc"
+    } else if cfg!(target_os = "macos") {
+        "aarch64-apple-darwin"
+    } else {
+        "x86_64-unknown-linux-gnu"
+    }
 }
 
 /// 镜像基址与资产名解析（`BROWSE_CHROME_MIRROR` / `BROWSE_CHROME_ASSET`
@@ -361,7 +373,7 @@ fn install_from_mirror_inner(root: &Path, job: MirrorJob) -> Result<Value> {
     let effective = single_top_dir(&extract_dir).unwrap_or_else(|| extract_dir.clone());
     check_deployed(&effective).map_err(|e| {
         anyhow::anyhow!(
-            "{e}；镜像包内容形不对（暂定约定 {}/{version}/ 内是部署目录）",
+            "{e}；镜像包内容形不对（定标形 {}/{version}/ 内是部署目录）",
             mirror
         )
     })?;
@@ -388,7 +400,7 @@ fn install_from_mirror_inner(root: &Path, job: MirrorJob) -> Result<Value> {
 /// 镜像腿错误统一加 CTA：端点、资产名覆写、首版资产窗口。
 fn mirror_cta(base: &str, e: reqwest::Error) -> anyhow::Error {
     anyhow::anyhow!(
-        "镜像取 {base} 失败：{e}；下一步：核对版本号；资产名非暂定约定时设 \
+        "镜像取 {base} 失败：{e}；下一步：核对版本号；资产名非定标形时设 \
          BROWSE_CHROME_ASSET 全名覆写；clean-chrome 首版资产未落桶前 404 属预期"
     )
 }
@@ -731,7 +743,7 @@ mod tests {
     fn mirror_install_three_states() {
         let root = tmp_root("mirror");
 
-        // happy：路由对上暂定约定 asset_name（显式镜像与资产名，零 env 动作）
+        // happy：路由对上定标形 asset_name（显式镜像与资产名，零 env 动作）
         let (zip, digest) = fake_zip_asset("1.2.3.4");
         let asset = asset_name("1.2.3.4");
         let mirror = mock_mirror(vec![
@@ -768,5 +780,16 @@ mod tests {
         assert!(!root.join(".staging-3.0.0.0").exists());
 
         std::fs::remove_dir_all(&root).ok();
+    }
+
+    /// 资产名是定标三元组形（总台裁二）：chromium-<版本>-<三元组>.zip。
+    #[test]
+    fn asset_name_is_triple_form() {
+        let n = asset_name("152.0.7977.84");
+        assert!(n.starts_with("chromium-152.0.7977.84-"), "前缀形：{n}");
+        assert!(
+            n.ends_with(&format!("{}.zip", chromium_triple())),
+            "本平台三元组收尾：{n}"
+        );
     }
 }

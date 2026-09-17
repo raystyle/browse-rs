@@ -110,12 +110,12 @@ assert_eq!(render(&stmts), "const tabs = await listPageTargets()");
 
 安装源两形（ADR-0007）：本地目录导入（SxS 部署形态，`chromium-<ver>/`
 整目录复制）；R2 镜像版本段下载（chrome.ohmygh.com，`<ver>/<asset>` 加
-同名 `.sha256` 边车锚，总台热验 2026-09-17 回执；资产名是暂定约定，
-候 clean-chrome 首版资产定标，`BROWSE_CHROME_ASSET` 可覆写）。
+同名 `.sha256` 边车锚，总台热验 2026-09-17 回执；资产名是定标形
+`chromium-<version>-<三元组>.zip`，`BROWSE_CHROME_ASSET` 可覆写）。
 
 ## Functions
 
-- `asset_name` — 资产名暂定约定：`chromium-<version>.zip`（候 clean-chrome 首版资产定标；
+- `asset_name` — 资产名（定标形，总台裁二）：`chromium-<version>-<三元组>.zip`；三元组是
 - `check_deployed` — 校验某目录是可用的 Chromium 部署（chrome 二进制在位）。
 - `chromium_root` — 托管根目录（本实例状态目录下的 `chromium/`）。
 - `doctor_json` — 体检：逐版本核对部署在位与登记基线（文件数），回结构化结果。

@@ -168,3 +168,10 @@
 - 裁一（窗口）：152 先验窗即刻备跑：现货早通全链（R2 上传通道、版本段路由、下载腿、锚校验、happy-path），前置清零 155 正式窗风险；152 系过渡位不入 catalog，桶段验后可清或留回退；155 = 正式窗（资产定稿、catalog、seed、舰队部署）。家规同构：D44 通道演练先于真用。
 - 裁二（catalog）：155 正式窗同窗同批双工具分条目：chromium 资产按平台三元组形 chromium-<版本>-<三元组>.zip（clean-chrome 分发例外条款面），browse CLI 资产 browse-v<版本>-<三元组> 同批；一次 seed 一次对账，digest 双源核后同落。REQ-003 定标余量行已随裁更新。
 - 执行序在册：候 wZ 出包形定标回执（152/155 与命名）到，总台开先验窗调度，本仓 happy-path 实测随叫（下载腿已实现，BROWSE_CHROME_ASSET 覆写兜底命名差）。v0.4.0 收讫（5fa3d9f 核证，对齐表总台已滚）。
+
+## 152 首版资产产出回执吸收与命名升形（2026-09-17）
+
+- wZ 通报：三平台资产照定标形产出并归集 Windows 宿主 C:\dev-chrome\dist\（各配 .sha256 边车，台账 ddd0ee3）：win msvc 254.7MB、linux gnu 562.5MB、mac arm64 216.7MB；上桶放行候用户点头（对外动作）。
+- 自证（回执纪律）：本机直读 dist 三包加三边车在位，独立 sha256 逐件复核与台账一致（d48763…、5f6f4e…、72cd14…）。[实证: sha256sum 直跑]
+- 命名升形：asset_name 从暂定单名升定标三元组形 chromium-<版本>-<三元组>.zip（chromium_triple 按平台：win 对 msvc 资产、linux gnu、mac arm64；三元组是 clean-chrome 构建面，与本仓自身 win-gnu 编译面无关）；三元组断言测试入册；错误与注释措辞随清（暂定约定改定标形）。桶一落即可裸跑 browse chrome install <版本> 零覆写。
+- 本批不另封版：并入先验窗 happy-path 批（届时 0.4.1 一并定版）。门禁：clippy 绿、12 组 test、aidoc 25 artifacts 重生 check clean。

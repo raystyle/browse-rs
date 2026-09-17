@@ -5,7 +5,7 @@
     {
       "path": "browse_core::chrome_mgr",
       "kind": "module",
-      "docs": "内嵌 Chromium 版本管理器（ADR-0007）：各版本 clean-chrome 在本仓应用\n数据目录下版本化管理（安装、pin、升级、体检）。\n\n布局：`<state>/chromium/<version>/`（每版本一目录，旧版保留可回退），\n登记 `<state>/chromium/manifest.json`（已装版本 + pin 指向）。\n引擎 user-data 不在版本目录（engine-profile 跨版本持久，升级零迁移）。\n\n安装源两形（ADR-0007）：本地目录导入（SxS 部署形态，`chromium-<ver>/`\n整目录复制）；R2 镜像版本段下载（chrome.ohmygh.com，`<ver>/<asset>` 加\n同名 `.sha256` 边车锚，总台热验 2026-09-17 回执；资产名是暂定约定，\n候 clean-chrome 首版资产定标，`BROWSE_CHROME_ASSET` 可覆写）。"
+      "docs": "内嵌 Chromium 版本管理器（ADR-0007）：各版本 clean-chrome 在本仓应用\n数据目录下版本化管理（安装、pin、升级、体检）。\n\n布局：`<state>/chromium/<version>/`（每版本一目录，旧版保留可回退），\n登记 `<state>/chromium/manifest.json`（已装版本 + pin 指向）。\n引擎 user-data 不在版本目录（engine-profile 跨版本持久，升级零迁移）。\n\n安装源两形（ADR-0007）：本地目录导入（SxS 部署形态，`chromium-<ver>/`\n整目录复制）；R2 镜像版本段下载（chrome.ohmygh.com，`<ver>/<asset>` 加\n同名 `.sha256` 边车锚，总台热验 2026-09-17 回执；资产名是定标形\n`chromium-<version>-<三元组>.zip`，`BROWSE_CHROME_ASSET` 可覆写）。"
     },
     {
       "path": "browse_core::chrome_mgr::ChromeInstall",
@@ -25,7 +25,7 @@
     {
       "path": "browse_core::chrome_mgr::asset_name",
       "kind": "function",
-      "docs": "资产名暂定约定：`chromium-<version>.zip`（候 clean-chrome 首版资产定标；\n`BROWSE_CHROME_ASSET` 全名覆写）。"
+      "docs": "资产名（定标形，总台裁二）：`chromium-<version>-<三元组>.zip`；三元组是\nclean-chrome 构建面（Windows msvc、Linux gnu、mac arm64），与本仓自身\n编译面无关；`BROWSE_CHROME_ASSET` 全名覆写不变。"
     },
     {
       "path": "browse_core::chrome_mgr::check_deployed",
