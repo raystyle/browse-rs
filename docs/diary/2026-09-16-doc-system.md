@@ -199,3 +199,11 @@
 - .github/workflows/release.yml 立卷：v* tag 触发；矩阵三岗照 CLI 资产窗产线（ubuntu 出 linux 本职加 win-gnu 交叉 mingw，macos 出 arm64）；tag 与 Cargo.toml 版本一致性闸（flow-release 第四节）；包形照 v0.4.1（单顶层目录加 README 加 LICENSE 双件，tar.gz/tar.gz/zip 分流按 matrix.archive，sha256sum 原生边车）；linux/mac 岗解包冒烟 --version 断言，win 交叉件另设 windows 岗冒烟（家规 hst 形跳过面，本仓加岗补齐总台令必过面）；gh release 挂六件；rclone copy 推 browse/<版本>/ 段（无 v 前缀对齐代发段）加 immutable 缓存头，env 形四键加 NO_CHECK_BUCKET 同家规（hst D41 实证句照抄），版本段不可变只 copy 不 sync。
 - 验证：YAML 解析过；打包与冒烟脚本逐字烘焙 matrix 值对真 0.4.1 二进制沙盒重放，形对（tar.gz/zip 分流正确、边车格式对）加 smoke 断言 browse 0.4.1 过。真 tag 首跑在下版封版时。[实证: 沙盒重放 SMOKE-PASS]
 - 分工定式（追正后）：发布流水仓内自播，总台只剩 catalog pin 滚（治理面）；v0.4.1 系总台代发存量不动，自播自下版起。
+
+## issue 命令集成批（REQ-057 对齐单，2026-09-17）
+
+- 总台对齐单：统一 issue 入口 issues.ohmygh.com（Worker 加 D1 真源）上线，各仓自集成 issue 子命令；本仓动作三件全落。
+- 实现：browse-cli 新 pub 模块 issue（客户端先做契约同形校验与截断：title 1 至 200、body 至 20000、version 40、platform 与 host 64；BROWSE_ISSUES_API 覆写基址同 omc 惯例）；CLI 三态 issue new（--body 旗标或管道 stdin 兜底）/list（--tool --status --limit，默认本工具新到旧）/show；目录三条登记重生成；aidoc 26 artifacts（加 issue 页）。取参全走 next 闭包保借用序（直接 args.next() 与闭包双可变借用红）。
+- agent 纪律入合同：AGENTS Must 加「遇缺陷当场 browse issue new 一键反馈（自动署名 tool=browse 加版本/平台/host）」。
+- 实弹证据 [实证: issue new 得 {ok:true, id:4, url:https://issues.ohmygh.com/i/4}，自动署名 version=0.4.1、platform=linux-x86_64、host=AI-LAB；list --limit 3 可见；show 4 全量回读含 body]
+- 门禁：clippy 绿、11 组 test、surface 契约过、aidoc check clean。

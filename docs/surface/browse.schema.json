@@ -215,6 +215,70 @@
       "output": "runtime JSON（回值随页面与 CDP 而定）",
       "type": "object"
     },
+    "cli.issue-list": {
+      "description": "browse issue list [--status <s>] [--limit <n>] [--tool <t>] 列 issue（新到旧；默认本工具，--tool 换过滤）。读面 GET /api/issues。",
+      "example": "browse issue list --limit 10",
+      "input": {
+        "properties": {
+          "limit": {
+            "description": "缺省 20",
+            "type": "number"
+          },
+          "status": {
+            "description": "缺省 open",
+            "type": "string"
+          },
+          "tool": {
+            "description": "缺省 browse",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "cli.issue-new": {
+      "description": "browse issue new <标题> [--body <正文>] 一键缺陷反馈：自动署名 tool=browse 加版本加平台加主机（issues.ohmygh.com，REQ-057 契约）。",
+      "example": "browse issue new <标题> --body <复现步骤>",
+      "input": {
+        "properties": {
+          "body": {
+            "description": "缺省 旗标缺省吃管道 stdin",
+            "type": "string"
+          },
+          "title": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "cli.issue-show": {
+      "description": "browse issue show <id> 看 issue 详情（GET /api/issues/<id>）。",
+      "example": "browse issue show 42",
+      "input": {
+        "properties": {
+          "id": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
     "cli.llms-flag": {
       "description": "browse --llms [--full|--json] 命令面发现通道：stdout 直出与 docs/surface 同源的清单（--full 完整版，--json Schema 包），不拉 daemon。",
       "example": "browse --llms > llms.txt",

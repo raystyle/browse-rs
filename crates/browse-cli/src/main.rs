@@ -40,6 +40,16 @@ enum Mode {
     ChromeUse(String),
     /// `browse chrome doctor`：托管部署体检。
     ChromeDoctor,
+    /// `browse issue new <标题> [--body <正文>]`：一键提交缺陷反馈（REQ-057）。
+    IssueNew { title: String, body: String },
+    /// `browse issue list [--status <s>] [--limit <n>] [--tool <t>]`：列 issue。
+    IssueList {
+        tool: Option<String>,
+        status: Option<String>,
+        limit: u32,
+    },
+    /// `browse issue show <id>`：看 issue 详情。
+    IssueShow(String),
 }
 
 #[tokio::main]
@@ -114,6 +124,51 @@ async fn main() -> Result<()> {
                         eprintln!(
                             "browse: chrome 子命令不认识 {other}（install/use/list/doctor，退出 2）"
                         );
+                        std::process::exit(2);
+                    }
+                }
+            }
+            "issue" if snippets.is_empty() && mode_is_eval(&mode) => {
+                match next("issue")?.as_str() {
+                    "new" => {
+                        let title = next("issue new <标题>")?;
+                        // 可选 --body/-b（取参走 next 闭包保借用序）；参数尽即无
+                        // body，求值侧 stdin 管道兜底
+                        let mut body = String::new();
+                        match next("issue new 旗标") {
+                            Ok(f) if f == "--body" || f == "-b" => body = next("--body")?,
+                            Ok(f) => bail_arg(&f),
+                            Err(_) => {}
+                        }
+                        mode = Mode::IssueNew { title, body };
+                    }
+                    "list" => {
+                        let mut tool = None;
+                        let mut status = None;
+                        let mut limit = 20u32;
+                        // next 只在参数尽时报错，即旗标收尾
+                        while let Ok(f) = next("issue list 旗标") {
+                            match f.as_str() {
+                                "--tool" => tool = Some(next("--tool")?),
+                                "--status" => status = Some(next("--status")?),
+                                "--limit" => {
+                                    limit = next("--limit")?.parse().unwrap_or_else(|_| {
+                                        eprintln!("browse: --limit 要数字（退出 2）");
+                                        std::process::exit(2);
+                                    })
+                                }
+                                other2 => bail_arg(other2),
+                            }
+                        }
+                        mode = Mode::IssueList {
+                            tool,
+                            status,
+                            limit,
+                        };
+                    }
+                    "show" => mode = Mode::IssueShow(next("issue show <id>")?),
+                    other => {
+                        eprintln!("browse: issue 子命令不认识 {other}（new/list/show，退出 2）");
                         std::process::exit(2);
                     }
                 }
@@ -247,8 +302,38 @@ async fn main() -> Result<()> {
             );
             Ok(())
         }
+        // issue 通道（REQ-057）：直连 issues.ohmygh.com，不经 daemon
+        Mode::IssueNew { title, body } => {
+            let mut body = body;
+            if body.is_empty() && !std::io::stdin().is_terminal() {
+                tokio::io::AsyncReadExt::read_to_string(&mut tokio::io::stdin(), &mut body).await?;
+            }
+            let r = browse_cli::issue::new(&title, &body).await?;
+            println!("{}", serde_json::to_string_pretty(&r)?);
+            Ok(())
+        }
+        Mode::IssueList {
+            tool,
+            status,
+            limit,
+        } => {
+            let r = browse_cli::issue::list(tool.as_deref(), status.as_deref(), limit).await?;
+            println!("{}", serde_json::to_string_pretty(&r)?);
+            Ok(())
+        }
+        Mode::IssueShow(id) => {
+            let r = browse_cli::issue::show(&id).await?;
+            println!("{}", serde_json::to_string_pretty(&r)?);
+            Ok(())
+        }
         Mode::Eval => run_eval(snippets, new_tab, ws, port, chrome, headless, pipe, profile).await,
     }
+}
+
+/// 用法错统一出口（退出 2）。
+fn bail_arg(a: &str) -> ! {
+    eprintln!("browse: issue 参数不认识 {a}（用法错，退出 2）");
+    std::process::exit(2);
 }
 
 fn mode_is_eval(m: &Mode) -> bool {
@@ -481,6 +566,9 @@ browse：给 agent 用的 browse CLI（clean-chrome 专属）
   browse --serve [--bind host:port]          前台跑 daemon
   browse --version                           打印版本号（资产解包冒烟用）
   browse chrome install <版本> [部署目录]    镜像下载（缺省）或本地导入安装引擎
+  browse issue new <标题> [--body <正文>]    一键缺陷反馈（自动署名工具/版本/平台）
+  browse issue list [--status] [--limit]     列 issue（默认 tool=browse，新到旧）
+  browse issue show <id>                     看 issue 详情
                                               镜像：chrome.ohmygh.com/<ver>/<asset> 加 .sha256 锚
 
 片段方言（与 browser-harness-js 对齐）：

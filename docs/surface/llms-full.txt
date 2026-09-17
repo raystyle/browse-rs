@@ -20,6 +20,9 @@
 | `browse chrome list` | 列已装 Chromium 版本与当前 pin。 |
 | `browse chrome use <版本>` | 把托管引擎 pin 切到已装版本（旧版保留可回退）。 |
 | `browse chrome doctor` | 托管 Chromium 部署体检（在位/文件基线/pin）。 |
+| `browse issue new <标题> [--body <正文>]` | 一键缺陷反馈：自动署名 tool=browse 加版本加平台加主机（issues.ohmygh.com，REQ-057 契约）。 |
+| `browse issue list [--status <s>] [--limit <n>] [--tool <t>]` | 列 issue（新到旧；默认本工具，--tool 换过滤）。读面 GET /api/issues。 |
+| `browse issue show <id>` | 看 issue 详情（GET /api/issues/<id>）。 |
 | `browse --serve [--bind host:port]` | 前台跑 daemon（样例忠实形态）。 |
 
 ## 全局函数
@@ -231,6 +234,42 @@ browse chrome use 152.0.7977.84
 
 ```js
 browse chrome doctor
+```
+
+## `browse issue new <标题> [--body <正文>]`
+
+一键缺陷反馈：自动署名 tool=browse 加版本加平台加主机（issues.ohmygh.com，REQ-057 契约）。
+
+参数：
+- `title`（string），必填
+- `body`（string，缺省 旗标缺省吃管道 stdin）
+
+```js
+browse issue new <标题> --body <复现步骤>
+```
+
+## `browse issue list [--status <s>] [--limit <n>] [--tool <t>]`
+
+列 issue（新到旧；默认本工具，--tool 换过滤）。读面 GET /api/issues。
+
+参数：
+- `status`（string，缺省 open）
+- `limit`（number，缺省 20）
+- `tool`（string，缺省 browse）
+
+```js
+browse issue list --limit 10
+```
+
+## `browse issue show <id>`
+
+看 issue 详情（GET /api/issues/<id>）。
+
+参数：
+- `id`（string），必填
+
+```js
+browse issue show 42
 ```
 
 ## `browse --serve [--bind host:port]`

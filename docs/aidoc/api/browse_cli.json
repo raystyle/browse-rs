@@ -53,6 +53,31 @@
       "docs": "返回 daemon 日志与运行面目录（`%USERPROFILE%\\.browse-rs[\\<name>]`，多实例各一份）。"
     },
     {
+      "path": "browse_cli::issue",
+      "kind": "module",
+      "docs": "issue 通道客户端（REQ-057 契约，issues.ohmygh.com）：缺陷一键反馈。\n\n提交自动署名 `tool=browse` 加版本（编译期 Cargo 版）加平台加主机名，\n客户端先做与 Worker 同形的校验与截断（title 1 至 200、body 至多 20000、\nversion 40、platform 与 host 64）；读面 list 与 show 走 GET。\n`BROWSE_ISSUES_API` 覆写基址（测与灰度，同 omc 的 OMC_ISSUES_API 惯例）。"
+    },
+    {
+      "path": "browse_cli::issue::ISSUES_API",
+      "kind": "constant",
+      "docs": "issue 服务缺省基址（Worker 加 D1 真源，REQ-057）。"
+    },
+    {
+      "path": "browse_cli::issue::list",
+      "kind": "function",
+      "docs": "列 issue：`GET /api/issues?tool=&status=&limit=`（新到旧，limit 1 至 100）。\n\n# Errors\n\n网络或超时；服务端非 200。"
+    },
+    {
+      "path": "browse_cli::issue::new",
+      "kind": "function",
+      "docs": "提交一条 issue：`POST /api/issues`，回执 `{ok, id, url}`（url 即详情页）。\n\n# Errors\n\n客户端校验不过（title 空或超 200、body 超 20000）；429 限速（每 IP\n每时 10 条）；400 服务端校验；网络或超时。"
+    },
+    {
+      "path": "browse_cli::issue::show",
+      "kind": "function",
+      "docs": "看 issue 详情：`GET /api/issues/<id>`。\n\n# Errors\n\nid 不存在（404）；网络或超时。"
+    },
+    {
       "path": "browse_cli::render",
       "kind": "module",
       "docs": "求值结果的打印面：大值自动落盘（artifact/checkpoint 的降级形态，\n用户裁定）。daemon 与 vars 表不动，只保护 agent 上下文不被 10MB JSON 淹没。"

@@ -211,6 +211,37 @@ pub const COMMANDS: &[CmdSpec] = &[
         example: "browse chrome doctor",
     },
     CmdSpec {
+        name: "issue-new",
+        kind: CmdKind::Cli,
+        signature: "browse issue new <标题> [--body <正文>]",
+        args: &[
+            arg!("title", "string", true),
+            arg!("body", "string", false, "旗标缺省吃管道 stdin"),
+        ],
+        description: "一键缺陷反馈：自动署名 tool=browse 加版本加平台加主机（issues.ohmygh.com，REQ-057 契约）。",
+        example: "browse issue new <标题> --body <复现步骤>",
+    },
+    CmdSpec {
+        name: "issue-list",
+        kind: CmdKind::Cli,
+        signature: "browse issue list [--status <s>] [--limit <n>] [--tool <t>]",
+        args: &[
+            arg!("status", "string", false, "open"),
+            arg!("limit", "number", false, "20"),
+            arg!("tool", "string", false, "browse"),
+        ],
+        description: "列 issue（新到旧；默认本工具，--tool 换过滤）。读面 GET /api/issues。",
+        example: "browse issue list --limit 10",
+    },
+    CmdSpec {
+        name: "issue-show",
+        kind: CmdKind::Cli,
+        signature: "browse issue show <id>",
+        args: &[arg!("id", "string", true)],
+        description: "看 issue 详情（GET /api/issues/<id>）。",
+        example: "browse issue show 42",
+    },
+    CmdSpec {
         name: "serve",
         kind: CmdKind::Cli,
         signature: "browse --serve [--bind host:port]",

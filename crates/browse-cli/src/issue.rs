@@ -1,0 +1,159 @@
+//! issue 通道客户端（REQ-057 契约，issues.ohmygh.com）：缺陷一键反馈。
+//!
+//! 提交自动署名 `tool=browse` 加版本（编译期 Cargo 版）加平台加主机名，
+//! 客户端先做与 Worker 同形的校验与截断（title 1 至 200、body 至多 20000、
+//! version 40、platform 与 host 64）；读面 list 与 show 走 GET。
+//! `BROWSE_ISSUES_API` 覆写基址（测与灰度，同 omc 的 OMC_ISSUES_API 惯例）。
+
+use anyhow::{Result, bail};
+use serde_json::{Value, json};
+
+/// issue 服务缺省基址（Worker 加 D1 真源，REQ-057）。
+pub const ISSUES_API: &str = "https://issues.ohmygh.com";
+
+/// 工具署名（契约形 `^[a-z][a-z0-9_-]{0,31}$`，browse 合法）。
+const TOOL: &str = "browse";
+
+/// 基址解析（env 覆写，空值忽略，尾斜杠剥掉）。
+fn api_base() -> String {
+    std::env::var("BROWSE_ISSUES_API")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| ISSUES_API.to_string())
+        .trim_end_matches('/')
+        .to_string()
+}
+
+/// 按 UTF-8 字符数截断（契约上限）。
+fn truncate(s: String, n: usize) -> String {
+    s.chars().take(n).collect()
+}
+
+/// 运行平台形 `<os>-<arch>`（如 `linux-x86_64`）。
+fn platform() -> String {
+    truncate(
+        format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH),
+        64,
+    )
+}
+
+/// 主机名（unix 读 /etc/hostname，windows 读 COMPUTERNAME；取不到留空）。
+fn host() -> String {
+    let raw = if cfg!(windows) {
+        std::env::var("COMPUTERNAME").unwrap_or_default()
+    } else {
+        std::fs::read_to_string("/etc/hostname")
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default()
+    };
+    truncate(raw, 64)
+}
+
+async fn http() -> Result<reqwest::Client> {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+        .map_err(|e| anyhow::anyhow!("构建 http client 失败：{e}"))
+}
+
+/// 提交一条 issue：`POST /api/issues`，回执 `{ok, id, url}`（url 即详情页）。
+///
+/// # Errors
+///
+/// 客户端校验不过（title 空或超 200、body 超 20000）；429 限速（每 IP
+/// 每时 10 条）；400 服务端校验；网络或超时。
+pub async fn new(title: &str, body: &str) -> Result<Value> {
+    let title = title.trim();
+    if title.is_empty() || title.chars().count() > 200 {
+        bail!("title 长度要在 1 至 200（trim 后）；下一步：改标题再提");
+    }
+    if body.chars().count() > 20000 {
+        bail!("body 至多 20000 字符；下一步：精简正文或分段提交");
+    }
+    let payload = json!({
+        "tool": TOOL,
+        "title": title,
+        "body": body,
+        "version": truncate(env!("CARGO_PKG_VERSION").to_string(), 40),
+        "platform": platform(),
+        "host": host(),
+    });
+    let resp = http()
+        .await?
+        .post(format!("{}/api/issues", api_base()))
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| anyhow::anyhow!("issue 提交失败（{}）：{e}", api_base()))?;
+    match resp.status().as_u16() {
+        201 => resp
+            .json()
+            .await
+            .map_err(|e| anyhow::anyhow!("回执解析失败：{e}")),
+        429 => bail!("限速（每 IP 每时 10 条）；下一步：整点后再提，或去网页面看现有条目"),
+        400 => bail!("服务端校验不过（400）；下一步：核对 title 与 body 长度"),
+        code => bail!("issue 服务回 {code}；下一步：稍后重试，持续失败带此码反馈"),
+    }
+}
+
+/// 列 issue：`GET /api/issues?tool=&status=&limit=`（新到旧，limit 1 至 100）。
+///
+/// # Errors
+///
+/// 网络或超时；服务端非 200。
+pub async fn list(tool: Option<&str>, status: Option<&str>, limit: u32) -> Result<Value> {
+    let limit = limit.clamp(1, 100);
+    let mut url = format!("{}/api/issues?limit={limit}", api_base());
+    let tool = tool.unwrap_or(TOOL);
+    url.push_str(&format!("&tool={}", urlencode(tool)));
+    if let Some(s) = status {
+        url.push_str(&format!("&status={}", urlencode(s)));
+    }
+    let resp = http()
+        .await?
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| anyhow::anyhow!("issue 列表拉取失败：{e}"))?;
+    if !resp.status().is_success() {
+        bail!("issue 服务回 {}；下一步：稍后重试", resp.status().as_u16());
+    }
+    resp.json()
+        .await
+        .map_err(|e| anyhow::anyhow!("列表解析失败：{e}"))
+}
+
+/// 看 issue 详情：`GET /api/issues/<id>`。
+///
+/// # Errors
+///
+/// id 不存在（404）；网络或超时。
+pub async fn show(id: &str) -> Result<Value> {
+    let url = format!("{}/api/issues/{}", api_base(), urlencode(id));
+    let resp = http()
+        .await?
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| anyhow::anyhow!("issue 详情拉取失败：{e}"))?;
+    match resp.status().as_u16() {
+        200 => resp
+            .json()
+            .await
+            .map_err(|e| anyhow::anyhow!("详情解析失败：{e}")),
+        404 => bail!("issue {id} 不存在；下一步：browse issue list 核对 id"),
+        code => bail!("issue 服务回 {code}；下一步：稍后重试"),
+    }
+}
+
+/// 极简百分号编码（query 用：tool/status/id 都是受控字符集，留安全网）。
+fn urlencode(s: &str) -> String {
+    let mut out = String::new();
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' => out.push(b as char),
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
+}
