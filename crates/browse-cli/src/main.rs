@@ -592,7 +592,6 @@ browse：给 agent 用的 browse CLI
   browse issue new <标题> [--body <正文>]    一键缺陷反馈（自动署名工具/版本/平台）
   browse issue list [--status] [--limit]     列 issue（默认 tool=browse，新到旧）
   browse issue show <id>                     看 issue 详情
-                                              镜像：chrome.ohmygh.com/<ver>/<asset> 加 .sha256 锚
 
 片段方言：
   await session.connect({{port:9222}})

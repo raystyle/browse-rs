@@ -240,7 +240,7 @@
       "type": "object"
     },
     "cli.issue-new": {
-      "description": "browse issue new <标题> [--body <正文>] 一键缺陷反馈：自动署名 tool=browse 加版本加平台加主机（issues.ohmygh.com，REQ-057 契约）。",
+      "description": "browse issue new <标题> [--body <正文>] 一键缺陷反馈：自动署名 tool=browse 加版本加平台加主机。",
       "example": "browse issue new <标题> --body <复现步骤>",
       "input": {
         "properties": {

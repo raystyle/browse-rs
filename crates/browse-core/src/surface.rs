@@ -226,7 +226,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("title", "string", true),
             arg!("body", "string", false, "旗标缺省吃管道 stdin"),
         ],
-        description: "一键缺陷反馈：自动署名 tool=browse 加版本加平台加主机（issues.ohmygh.com，REQ-057 契约）。",
+        description: "一键缺陷反馈：自动署名 tool=browse 加版本加平台加主机。",
         example: "browse issue new <标题> --body <复现步骤>",
     },
     CmdSpec {
