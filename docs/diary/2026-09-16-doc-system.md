@@ -239,4 +239,5 @@
 - 顺带排障入档：装机面 stale 二进制陷阱（PATH 里 .local/bin 优先遮 .cargo/bin；tag 后 HEAD 构建顶旧版本号，--version 失去分辨力，全靠二进制指纹串分辨；主 daemon 持旧映像 Text file busy 需先 /quit）。另清两个 target/release 测试残留 daemon（9954/9972，7.5h）。
 - 封 0.5.0 判据：0.4.1 后三批能力新增/行为变化（REQ-057 issue 命令、REQ-060 --llms 升册、裸调用面对齐）取 minor；帮助面清理与发布链评审修批随卷。
 - 门禁回执：wsl 全件（fmt、clippy -D warnings、workspace test 12 组 0 败、doc test 29、rustdoc、aidoc check strict 经版本号入投影 8 件重生后 clean、PE 10 PASS）；lan-ubuntu 与 lan-mac rsync 同树 clippy 加 test 12 组 0 败。[实证: 三端 12 组 test result 全 ok，clippy 全 Finished 无警告]
-- tag v0.5.0 随批推远端；release.pwsh 首发自播回执随后批补记（真 tag 首跑，首发播种红一次预期在档照准）。
+- tag v0.5.0 随批推远端；release.ps1 首发自播回执随后批补记（真 tag 首跑，首发播种红一次预期在档照准）。
+- release 首跑排障（v0.5.0 真跑第一红）：`pwsh -File tools/release.pwsh` 秒红「Cannot bind argument to parameter 'Path' (empty string)」，同内容改名 .ps1 即通；根因是 pwsh 7.6.6 Linux 面不把 .pwsh 扩展当脚本（`&` 调用径直走 fork/exec，-File 形态内部同坑），脚本本体无病。处置：正名 tools/release.ps1 归家形（hst/ark 同名），活引用五处随迁（REQ-004 追正行、CHANGELOG 本版条、tools/README、release.yml 注、本批行；本节 09-17 历史批记两处按当时事实保留）；tag v0.5.0 自 47eafb8 移指本提交（未挂 release 无消费者，移指合规）。

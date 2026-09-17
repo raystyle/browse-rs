@@ -1,5 +1,5 @@
 # 播种流水（批一重构，总台核准 2026-09-17，对齐 build-release 标准三段式）：
-# CI 面不编译——本地编译打包与 gh release 直发在 tools/release.pwsh（批二），
+# CI 面不编译——本地编译打包与 gh release 直发在 tools/release.ps1（批二），
 # 本流水只管自动播种 R2：release published 事件触发，从 Release 拉资产
 # rclone 推双段（browse/<版本>/ immutable copy-only 加 browse/stable/ 滚动段
 # sync --delete-excluded），双段零上传红灯分别报数，dispatch 带 tag 补推口。
