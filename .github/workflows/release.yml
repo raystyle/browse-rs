@@ -1,138 +1,28 @@
-# 发布流水（总台令 2026-09-17 建，下版起自播）：v* tag 触发，三平台构建照
-# CLI 资产窗产线（wsl 实操同形：linux 本职加 win-gnu 交叉加 mac arm64），
-# 包形照 v0.4.1（单顶层目录 = browse 二进制加 README 加 LICENSE 双件，
-# linux/mac tar.gz 加 win zip，逐包 sha256sum 原生格式边车），gh release 挂件，
-# rclone 推镜像 browse/<版本>/ 六对象（env 形配置同家规：NO_CHECK_BUCKET
-# 必带加 immutable 缓存头；版本段无 v 前缀，与代发的 0.4.1 段一致）。
-# 总台只剩 catalog pin 滚（治理面）。
+# 播种流水（批一重构，总台核准 2026-09-17，对齐 build-release 标准三段式）：
+# CI 面不编译——本地编译打包与 gh release 直发在 tools/release.pwsh（批二），
+# 本流水只管自动播种 R2：release published 事件触发，从 Release 拉资产
+# rclone 推双段（browse/<版本>/ immutable copy-only 加 browse/stable/ 滚动段
+# sync --delete-excluded），双段零上传红灯分别报数，dispatch 带 tag 补推口。
+# 四键 Secrets env 形同家规（hst D41 实证：NO_CHECK_BUCKET 必带）。
 name: release
 
 on:
-  push:
-    tags: ['v*']
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 补推的 release tag（如 v0.4.2；从该 Release 拉资产重灌双段）
+        required: true
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            archive: tar.gz
-          - os: ubuntu-latest
-            target: x86_64-pc-windows-gnu
-            archive: zip
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            archive: tar.gz
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-      - name: Install mingw-w64
-        if: matrix.target == 'x86_64-pc-windows-gnu'
-        run: sudo apt-get update && sudo apt-get install -y mingw-w64
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.target }}
-      # tag 与 Cargo.toml workspace 版本一致性闸（flow-release 第四节：不一致 job 直接红）
-      - name: Version consistency gate
-        if: matrix.target == 'x86_64-unknown-linux-gnu'
-        run: |
-          tag="${GITHUB_REF#refs/tags/}"
-          want="${tag#v}"
-          got=$(grep -m1 '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
-          [ "$want" = "$got" ] || { echo "tag $tag 与 Cargo.toml $got 不一致"; exit 1; }
-      - name: Test
-        if: matrix.target != 'x86_64-pc-windows-gnu'
-        run: cargo test --locked
-      - name: Build
-        run: cargo build --release --locked --target ${{ matrix.target }} -p browse-cli
-      - name: Package
-        shell: bash
-        run: |
-          triple="${{ matrix.target }}"
-          tag="${GITHUB_REF#refs/tags/}"
-          src="target/${triple}/release/browse"
-          case "${triple}" in *-pc-windows-*) src="${src}.exe";; esac
-          d="browse-${tag}-${triple}"
-          mkdir -p "dist/${d}"
-          cp "$src" "dist/${d}/"
-          cp README.md LICENSE-MIT LICENSE-APACHE "dist/${d}/"
-          if [ "${{ matrix.archive }}" = "zip" ]; then
-            (cd dist && zip -q -r "${d}.zip" "$d" && sha256sum "${d}.zip" > "${d}.zip.sha256")
-          else
-            (cd dist && tar czf "${d}.tar.gz" "$d" && sha256sum "${d}.tar.gz" > "${d}.tar.gz.sha256")
-          fi
-      - name: Smoke unpack (linux/mac 岗本机直跑；win 交叉岗 PE 不可跑，另岗验)
-        if: matrix.target != 'x86_64-pc-windows-gnu'
-        shell: bash
-        run: |
-          triple="${{ matrix.target }}"
-          tag="${GITHUB_REF#refs/tags/}"
-          d="browse-${tag}-${triple}"
-          rm -rf /tmp/smoke && mkdir /tmp/smoke
-          tar xzf "dist/${d}.tar.gz" -C /tmp/smoke
-          got=$("/tmp/smoke/${d}/browse" --version)
-          echo "smoke: ${got}"
-          [ "$got" = "browse ${tag#v}" ]
-      - uses: actions/upload-artifact@v4
-        with:
-          name: browse-${{ matrix.target }}
-          path: dist/*
-
-  # win 交叉件运行时冒烟（家规 hst 形跳过，本仓加岗补齐总台令的冒烟必过面）
-  smoke-win:
-    needs: build
-    runs-on: windows-latest
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: browse-x86_64-pc-windows-gnu
-          path: dist
-      - name: Smoke unpack
-        shell: bash
-        run: |
-          tag="${GITHUB_REF#refs/tags/}"
-          d="browse-${tag}-x86_64-pc-windows-gnu"
-          unzip -q "dist/${d}.zip" -d /tmp/smoke 2>/dev/null || unzip -q "dist/${d}.zip" -d "$TEMP/smoke"
-          bin="/tmp/smoke/${d}/browse.exe"
-          [ -f "$bin" ] || bin="$TEMP/smoke/${d}/browse.exe"
-          got=$("$bin" --version)
-          echo "smoke: ${got}"
-          [ "$got" = "browse ${tag#v}" ]
-
-  release:
-    needs: [build, smoke-win]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v4
-        with:
-          path: dist
-          merge-multiple: true
-      - name: Publish
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          tag="${GITHUB_REF#refs/tags/}"
-          gh release create "$tag" dist/*.zip dist/*.tar.gz dist/*.sha256 --latest \
-            --title "browse $tag" \
-            --notes "正式版 $tag（版本 tag 触发自播构建）。三平台包加 sha256 边车；镜像 browse/${tag#v}/ 同步。agent 发现通道：browse --llms。"
-
-  # 镜像自推 R2（env 桶）：browse/<版本>/ 段六对象，immutable 段不 sync 只 copy
-  #（版本段不可变，无清理面）；家规 env 形四键加 NO_CHECK_BUCKET。
-  mirror:
-    needs: release
+  seed:
     runs-on: ubuntu-latest
     env:
       RCLONE_CONFIG_R2_TYPE: s3
@@ -144,20 +34,48 @@ jobs:
       RCLONE_CONFIG_R2_NO_CHECK_BUCKET: "true"
       R2_BUCKET: ${{ secrets.R2_BUCKET }}
     steps:
-      - uses: actions/download-artifact@v4
-        with:
-          path: dist
-          merge-multiple: true
+      - name: Resolve tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            tag="${{ github.event.inputs.tag }}"
+          else
+            tag="${GITHUB_REF#refs/tags/}"
+          fi
+          case "$tag" in
+            v*) ;;
+            *) echo "tag 形不对：$tag（要 v*）"; exit 1 ;;
+          esac
+          echo "TAG=$tag" >> "$GITHUB_ENV"
+          echo "VER=${tag#v}" >> "$GITHUB_ENV"
       - name: Install rclone if missing
         run: command -v rclone || (curl -fsSL https://rclone.org/install.sh | sudo bash)
-      - name: Mirror to R2
+      - name: Fetch release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          tag="${GITHUB_REF#refs/tags/}"
-          ver="${tag#v}"
-          mkdir -p dist-browse
-          mv dist/browse-* dist-browse/
-          rclone copy dist-browse/ "r2:${R2_BUCKET}/browse/${ver}/" \
+          mkdir -p dist && cd dist
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --clobber
+          # 资产清点：三包加三边车；边车锚原生校验（sha256sum -c）
+          n=$(ls ./*.zip ./*.tar.gz 2>/dev/null | wc -l)
+          [ "$n" -eq 3 ] || { echo "包数 $n != 3"; ls -la; exit 1; }
+          sha256sum -c ./*.sha256
+      - name: Seed version segment (immutable, copy-only)
+        run: |
+          rclone copy dist/ "r2:${R2_BUCKET}/browse/${VER}/" \
             --include "*.zip" --include "*.tar.gz" --include "*.sha256" \
             --header-upload "Cache-Control: public, max-age=31536000, immutable" \
             --checksum -v --stats-one-line
-          rclone lsl "r2:${R2_BUCKET}/browse/${ver}/"
+      - name: Seed stable segment (sync 滚代清旧)
+        run: |
+          rclone sync dist/ "r2:${R2_BUCKET}/browse/stable/" \
+            --include "*.zip" --include "*.tar.gz" --include "*.sha256" \
+            --delete-excluded \
+            --header-upload "Cache-Control: public, max-age=60" \
+            --checksum -v --stats-one-line
+      - name: Zero-upload red light (双段分别报数，零即红)
+        run: |
+          v_n=$(rclone lsf "r2:${R2_BUCKET}/browse/${VER}/" | wc -l)
+          s_n=$(rclone lsf "r2:${R2_BUCKET}/browse/stable/" | wc -l)
+          echo "版本段 browse/${VER}/：${v_n} 对象；stable 段 browse/stable/：${s_n} 对象"
+          [ "$v_n" -ge 6 ] || { echo "红灯：版本段对象数 ${v_n} < 6（半失败）"; exit 1; }
+          [ "$s_n" -ge 6 ] || { echo "红灯：stable 段对象数 ${s_n} < 6（半失败）"; exit 1; }
