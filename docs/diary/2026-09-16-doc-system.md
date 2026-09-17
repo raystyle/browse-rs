@@ -193,3 +193,9 @@
 - 产线：wsl 产 linux（x86_64-unknown-linux-gnu tar.gz）加 win-gnu（x86_64-pc-windows-gnu zip，mingw 交叉在册），mac 走 lan-mac 构建；三件皆 browse 0.4.1；每包含 browse 二进制加 README 加 LICENSE 双件（MIT/Apache 正本入仓 9b5c944，版权行本仓化），SKILL 不入包；逐包 .sha256 边车（sha256sum 原生格式）。
 - 解包冒烟三验必过 [实证: 三端解包直跑 browse --version 皆 0.4.1（win 经 interop，mac 经 ssh）]。
 - 六件归集 ~/repos/browse-rs/dist/（gitignored）；回执总台 wR:p1 含绝对路径加逐件 digest；总台接手分发链。
+
+## release 流水自播接线（总台令 2026-09-17 建，下版起生效）
+
+- .github/workflows/release.yml 立卷：v* tag 触发；矩阵三岗照 CLI 资产窗产线（ubuntu 出 linux 本职加 win-gnu 交叉 mingw，macos 出 arm64）；tag 与 Cargo.toml 版本一致性闸（flow-release 第四节）；包形照 v0.4.1（单顶层目录加 README 加 LICENSE 双件，tar.gz/tar.gz/zip 分流按 matrix.archive，sha256sum 原生边车）；linux/mac 岗解包冒烟 --version 断言，win 交叉件另设 windows 岗冒烟（家规 hst 形跳过面，本仓加岗补齐总台令必过面）；gh release 挂六件；rclone copy 推 browse/<版本>/ 段（无 v 前缀对齐代发段）加 immutable 缓存头，env 形四键加 NO_CHECK_BUCKET 同家规（hst D41 实证句照抄），版本段不可变只 copy 不 sync。
+- 验证：YAML 解析过；打包与冒烟脚本逐字烘焙 matrix 值对真 0.4.1 二进制沙盒重放，形对（tar.gz/zip 分流正确、边车格式对）加 smoke 断言 browse 0.4.1 过。真 tag 首跑在下版封版时。[实证: 沙盒重放 SMOKE-PASS]
+- 分工定式（追正后）：发布流水仓内自播，总台只剩 catalog pin 滚（治理面）；v0.4.1 系总台代发存量不动，自播自下版起。
