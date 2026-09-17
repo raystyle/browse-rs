@@ -232,3 +232,11 @@
 - 门禁：clippy 绿、12 组 test 0 败、surface 重生、aidoc check clean、PE exit 0。
 
 - 终态收讫（总台，2026-09-17）：909b1e0 与双 run success 自证通过，九笔链全量收讫，G 遗留挂后续批与首发播种红一次预期在档照准；browse 全备，封版 wave 尾单只剩 officecli，本仓候 wave 令（REVIEW 面）。
+
+## 帮助面清理与封 0.5.0（wave 令，2026-09-18）
+
+- 帮助面清理批（96fd607，用户令两刀）：删外部冗余注记（片段方言节的「与 browser-harness-js 对齐」、标题行「clean-chrome 专属」；读者解析不了的私有参照系是悬空指涉，lineage 留 ADR 与 crate 文档）；节标题独立一行、正文统一两格缩进（环境与退出码原先标题带内容同行，退出码节补空行）。
+- 顺带排障入档：装机面 stale 二进制陷阱（PATH 里 .local/bin 优先遮 .cargo/bin；tag 后 HEAD 构建顶旧版本号，--version 失去分辨力，全靠二进制指纹串分辨；主 daemon 持旧映像 Text file busy 需先 /quit）。另清两个 target/release 测试残留 daemon（9954/9972，7.5h）。
+- 封 0.5.0 判据：0.4.1 后三批能力新增/行为变化（REQ-057 issue 命令、REQ-060 --llms 升册、裸调用面对齐）取 minor；帮助面清理与发布链评审修批随卷。
+- 门禁回执：wsl 全件（fmt、clippy -D warnings、workspace test 12 组 0 败、doc test 29、rustdoc、aidoc check strict 经版本号入投影 8 件重生后 clean、PE 10 PASS）；lan-ubuntu 与 lan-mac rsync 同树 clippy 加 test 12 组 0 败。[实证: 三端 12 组 test result 全 ok，clippy 全 Finished 无警告]
+- tag v0.5.0 随批推远端；release.pwsh 首发自播回执随后批补记（真 tag 首跑，首发播种红一次预期在档照准）。
