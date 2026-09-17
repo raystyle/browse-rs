@@ -157,3 +157,8 @@
 - 修两件：chrome_binary_in_dir 布局感知解析（mac 三候选：裸 chrome、版本目录内 Chromium.app 包装形、目录本身即束的 Contents/MacOS 直达形），check_deployed 与 pinned_chrome 与祖先发现全切此口径；install_from_dir 对 .app 源保留束形（版本目录内存 Chromium.app），错误信息随 target 实际路径。
 - mac 真机全链 [实证: 导入 331 文件/711MB 束形保留自动 pin；BROWSE_NO_ATTACH=1 up --headless 得 spawned headless=true，evaluate 得 mac-ok；去 --headless 得 spawned headless=false（ssh 直启 GUI 会话窗口上屏），evaluate 通；down 干净退]。
 - 平台矩阵收官：五端全活（wsl/lan-linux 无头绿；lan-ubuntu/lan-win/lan-mac 有头加附着绿）。封 0.4.0（minor 判据：平台能力新增）；封版件第三步逐字过：版本先升，aidoc 后生（25 artifacts 含新 pub fn chrome_binary_in_dir），check clean 一次过。
+
+## 外部窗待办记录（用户令 2026-09-17）
+
+- 待办一（155 编译窗，ETA 2026-09-23 前后）：clean-chrome REQ-012 stable 触发、REQ-013 四台并轨全清重编 155；本工位随窗执行产物验收（用户令分工在册：导入安装、驱动冒烟、跨端实测）；lan-linux 树同步候窗；M028 junction 乘 siso 的 ADR-0008 修订议题随窗清。
+- 待办二（R2 首版资产落桶）：触发链 = clean-chrome 出包形定标（zip 加 .sha256 边车，命名候平台三元组形 chromium-<版本>-<三元组>.zip，跨三平台；本仓暂定单名约定将随定标升形）到 omc 桶上传（chrome.ohmygh.com 版本段路由）到本仓 happy-path 实测（browse chrome install 拉取装通）加 REQ-003 trace 回填；排期对话已发飞轮（clean-chrome 与总台两工位）。
