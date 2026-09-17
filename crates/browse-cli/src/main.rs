@@ -573,7 +573,7 @@ async fn run_stdin(new_tab: bool) -> Result<usize> {
 fn print_help() {
     println!(
         "\
-browse：给 agent 用的 browse CLI（clean-chrome 专属）
+browse：给 agent 用的 browse CLI
 
 用法：
   browse '<方言片段>'                       求值（自动拉 daemon 与引擎）
@@ -594,22 +594,25 @@ browse：给 agent 用的 browse CLI（clean-chrome 专属）
   browse issue show <id>                     看 issue 详情
                                               镜像：chrome.ohmygh.com/<ver>/<asset> 加 .sha256 锚
 
-片段方言（与 browser-harness-js 对齐）：
+片段方言：
   await session.connect({{port:9222}})
   const tabs = await listPageTargets()
   await session.use(tabs[0].targetId)
   await session.Page.navigate({{url:\"https://example.com\"}})
   await session.waitFor(\"Page.loadEventFired\", undefined, 15000)
-支持：字面量/对象/数组/成员/下标/await/const-let-var/return。
-不支持：函数字面量、if/for、模板字符串；页面逻辑放 Runtime.evaluate 的 expression。
+  支持：字面量/对象/数组/成员/下标/await/const-let-var/return。
+  不支持：函数字面量、if/for、模板字符串；页面逻辑放 Runtime.evaluate 的 expression。
 
-环境：BROWSE_PORT（daemon 端口，默认 9880）、BROWSE_NAME（命名实例：状态目录与
-      派生端口 9900-9999 隔离，多实例并行）、BROWSE_CHROME（chrome.exe 路径）、
-      BROWSE_CDP_WS（钉死连接）、BROWSE_NO_ATTACH=1（跳过附着探测强制 spawn）、
-      BROWSE_EVAL_TIMEOUT（秒，默认 300）。
-      --pipe：spawn 引擎走 CDP 管道通道（CLEAN_CHROME_DEBUG=pipe，零 TCP 面）。
-      --profile / BROWSE_PROFILE：spawn 引擎自定义 user-data-dir（默认固定
-      <state>/engine-profile，站点状态与会话跨跑持久；down 不删）。
-退出码：0 成功 / 1 执行失败 / 2 用法错。"
+环境：
+  BROWSE_PORT（daemon 端口，默认 9880）、BROWSE_NAME（命名实例：状态目录与
+  派生端口 9900-9999 隔离，多实例并行）、BROWSE_CHROME（chrome.exe 路径）、
+  BROWSE_CDP_WS（钉死连接）、BROWSE_NO_ATTACH=1（跳过附着探测强制 spawn）、
+  BROWSE_EVAL_TIMEOUT（秒，默认 300）。
+  --pipe：spawn 引擎走 CDP 管道通道（CLEAN_CHROME_DEBUG=pipe，零 TCP 面）。
+  --profile / BROWSE_PROFILE：spawn 引擎自定义 user-data-dir（默认固定
+  <state>/engine-profile，站点状态与会话跨跑持久；down 不删）。
+
+退出码：
+  0 成功 / 1 执行失败 / 2 用法错。"
     );
 }
