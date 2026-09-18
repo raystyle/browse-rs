@@ -16,7 +16,7 @@ missing_errors_doc = "deny"
 missing_panics_doc = "deny"
 
 [workspace.package]
-version = "0.6.1"
+version = "0.7.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/raystyle/browse-rs"
@@ -25,11 +25,13 @@ repository = "https://github.com/raystyle/browse-rs"
 anyhow = "1"
 axum = { version = "0.7", default-features = false, features = ["http1", "json", "tokio"] }
 futures = "0.3"
+flate2 = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 rustyline = "14"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
+tar = "0.4"
 tokio = { version = "1", features = ["full"] }
 tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
 zip = { version = "2", default-features = false, features = ["deflate"] }

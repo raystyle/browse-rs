@@ -16,6 +16,7 @@ clean-chrome（自编 Chromium），常驻 daemon 让会话、变量、活动 ta
 - 附着优先引擎策略：探测本机浏览器，缺则 spawn 隔离实例；绝不关用户浏览器
 - 内嵌 Chromium 版本管理器：install/update/use/remove/list/doctor，镜像锚校验原子落位
 - agent 面：`--llms` 手册直出、错误带可照抄「下一步」、裸调用不弹交互
+- 自更新：`browse update` 双通道（镜像 stable 段优先）加锚校验加自证回滚
 
 与家族分工：omc 管资源分发与总台协调；ark 管舰队执行与安装管理；browse
 自管浏览器引擎与会话（含 Chromium 版本管理器，ADR-0007）。
@@ -27,8 +28,9 @@ clean-chrome（自编 Chromium），常驻 daemon 让会话、变量、活动 ta
 
 四条通道：
 
-1. ark install（舰队安装管理，单通道契约：无自升级子命令，升级走管理方或重下；
-   catalog 入册随总台 catalog pin 滚动，未入册前走下三通道）
+1. ark install（舰队安装管理；ark 管理位的升级走 ark 滚 catalog pin，
+   `browse update` 识别 ark 布局会主动让位；catalog 入册随总台滚动，
+   未入册前走下三通道）
 2. GitHub Releases 直下：<https://github.com/raystyle/browse-rs/releases>
    （每版六件：三平台包加同名 `.sha256` 边车，`sha256sum -c` 核验）
 3. 镜像直下：`https://browse.ohmygh.com/browse/<版本>/<资产>`（GitHub
@@ -42,6 +44,11 @@ clean-chrome（自编 Chromium），常驻 daemon 让会话、变量、活动 ta
    | macOS arm64 | `browse-v<版本>-aarch64-apple-darwin.tar.gz` |
 
 4. 源码：`cargo install --path crates/browse-cli --force`
+
+自更新：`browse update`（GitHub latest 判新、semver 只升不降；下载走
+镜像 stable 段优先、GitHub 回落，`.sha256` 锚校验后自替换并自证回滚；
+ark 管理的安装拦走 ark）。**0.6.1 及更早没有此子命令**（会被当片段求
+值），先用下列任一通道手动升一次。
 
 五端注意：Windows（win-gnu 交叉构建，CRT 静态零 DLL 依赖）；Linux 最小
 系统补 `libnss3 libasound2t64` 族；macOS arm64。装好后首条命令自动拉起
@@ -74,6 +81,7 @@ daemon。
 | `BROWSE_DENY_DOMAINS` / `BROWSE_ALLOW_DOMAINS` | 域策略（后缀匹配，deny 优先） |
 | `BROWSE_CHROME_MIRROR` / `BROWSE_CHROME_ASSET` | 版本管理器镜像与资产名覆写 |
 | `BROWSE_CHROME_LATEST` | `chrome update` 发现源钉（缺省读镜像 `latest` 指针） |
+| `BROWSE_RELEASE_MIRROR` | `browse update` 自更新镜像源覆写（缺省 browse.ohmygh.com/browse） |
 | `BROWSE_ISSUES_API` | issue 通道基址覆写（测与灰度） |
 
 状态目录 `~/.browse-rs/`（Windows `%USERPROFILE%\.browse-rs`，命名实例在

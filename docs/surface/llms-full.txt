@@ -12,6 +12,7 @@
 | `browse --new-tab '<片段>'` | 求值前先开 about:blank 新 tab。 |
 | `browse --connect <ws|端口> '<片段>'` | 显式附着给定 ws URL 或调试端口。 |
 | `browse up [--headless] [--pipe] [--chrome <path>] [--profile <dir>] [--ws <url>] [--port <p>]` | 显式起引擎（附着优先，缺则 spawn clean-chrome 隔离实例；--profile 自定义 user-data-dir，默认固定 profile 持久保存站点会话）。 |
+| `browse update` | 自更新 browse 二进制（镜像 stable 段优先加 GitHub Releases 回退，sha256 锚校验，自证回滚；ark 管理安装拦走 ark）。 |
 | `browse down` | 退 daemon；只终结自己 spawn 的引擎，附着来源不动。 |
 | `browse status [--json]` | daemon/引擎/实例名/活动 tab 概览。 |
 | `browse --llms [--full|--json]` | agent 手册直出（裸形 markdown 紧凑手册；--full 完整目录，--json 机器形 Schema；不拉 daemon）。 |
@@ -157,6 +158,15 @@ browse --connect 9222 'return await listPageTargets()'
 
 ```js
 browse up --headless --profile ~/profiles/proj-a
+```
+
+## `browse update`
+
+自更新 browse 二进制（镜像 stable 段优先加 GitHub Releases 回退，sha256 锚校验，自证回滚；ark 管理安装拦走 ark）。
+
+
+```js
+browse update
 ```
 
 ## `browse down`

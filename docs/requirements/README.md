@@ -8,3 +8,4 @@
 | REQ-002 | implemented | should | browse --llms 发现通道 | browse --llms [--full\|--json] 三形态冒烟 + surface_contract |
 | REQ-003 | draft | must | browse 托管 clean-chrome（部署升级维护与自有用户数据） | null |
 | REQ-004 | implemented | must | semver 判据与封版流（0.1.0 首封） | tag v0.1.0 + 三路门禁（diary 2026-09-16 封版节） |
+| REQ-005 | implemented | should | browse update 自更新面（家族统一标准件） | self_update 单测五件 + 实弹幂等与 ark 拦截 + 评审侧双通道全链 |

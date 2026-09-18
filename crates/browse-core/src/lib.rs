@@ -36,6 +36,7 @@ pub mod js_host;
 pub mod parser;
 pub mod paths;
 pub mod record;
+pub mod self_update;
 pub mod semantic;
 pub mod server;
 pub mod surface;

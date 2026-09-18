@@ -141,6 +141,14 @@ pub const COMMANDS: &[CmdSpec] = &[
         example: "browse up --headless --profile ~/profiles/proj-a",
     },
     CmdSpec {
+        name: "self-update",
+        kind: CmdKind::Cli,
+        signature: "browse update",
+        args: &[],
+        description: "自更新 browse 二进制（镜像 stable 段优先加 GitHub Releases 回退，sha256 锚校验，自证回滚；ark 管理安装拦走 ark）。",
+        example: "browse update",
+    },
+    CmdSpec {
         name: "down",
         kind: CmdKind::Cli,
         signature: "browse down",

@@ -2,6 +2,11 @@
 
 版本级里程碑；逐批过程见 docs/diary。semver 判据在册 docs/requirements/REQ-004。
 
+## 0.7.0 - 2026-09-18
+
+- `browse update` 自更新面（REQ-005，家族统一标准件，对齐 build-release 公共契约第六节双通道）：GitHub latest 判新（semver 只升不降，本地领先报 localNewer 不动）；下载镜像 stable 滚动段优先、GitHub 回落，资产与边车恒同源，`.sha256` 锚校验硬拒不回落；自替换同目录暂存（防跨文件系统 rename）加 pid 备份加更新锁（陈旧收割）加 `--version` 自证五次重试加回滚复核；管理方布局（ark 落痕或用户面链接入口）让位走 ark；`BROWSE_RELEASE_MIRROR` 覆写加 `GH_TOKEN` 提限流
+- 评审三轮闭环入卷（F 全修含跨文件系统 rename 实弹雷、锁陈旧收割、回滚复核共用体；G 全收口含仓内双通道三态 mock 锁）；新依赖 tar/flate2（发布包 tar.gz 腿）
+
 ## 0.6.1 - 2026-09-18
 
 - 评审闸门三轮修复收口（3F 加 F1′ 加 16G）：chrome 子命令 CTA 随迁 update/remove；remove 残留态（登记在册目录已失）幂等清登记不再死结，回执带 `alreadyGone` 且释放量如实归零；`use_version` 加版本校验与部署在位闸，拦「登记在册目录已失」的假绿切空位 pin；release.ps1 自引用正名

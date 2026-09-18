@@ -1,6 +1,6 @@
 {
   "crate": "browse-core",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "items": [
     {
       "path": "browse_core::chrome_mgr",
@@ -251,6 +251,46 @@
       "path": "browse_core::record::stop",
       "kind": "function",
       "docs": "停止录制：停泵 -> 末冲（200ms 窗口内迟到的帧也收）->\n`Page.stopScreencast`，回 `{frames,bytes,dir}`。\n\n# Errors\n\n`Page.stopScreencast` 失败（帧已在盘上的不回滚）。"
+    },
+    {
+      "path": "browse_core::self_update",
+      "kind": "module",
+      "docs": "browse 自更新（用户令 2026-09-18；对齐 build-release 公共契约第六节\n双通道）：GitHub Releases latest 判新（semver 只升不降）-> 下载本平台\n资产（自家镜像 stable 滚动段优先，GitHub 回落，资产与边车恒同源）->\n`.sha256` 边车锚校验（与发布器同 digest 判据，不符即拒不回落）->\n解包取二进制 -> 原子自替换（同目录暂存防跨文件系统 rename，pid 后缀\n防并发互踩，`--version` 自证带重试，证败回滚并复核终态）。\n\nark 管理的安装拦自更新走 ark 单通道（判据：exe 同目录 `ark-managed`\n落痕，或用户面 bin 目录存在指向本 exe 的符号链接入口即 ark 布局；\n落痕生产者契约随家族统一标准派 ark 侧）。"
+    },
+    {
+      "path": "browse_core::self_update::GITHUB_REPO",
+      "kind": "constant",
+      "docs": "GitHub 仓（latest API 判新与回落下载）。"
+    },
+    {
+      "path": "browse_core::self_update::RELEASE_MIRROR",
+      "kind": "constant",
+      "docs": "镜像基址常量。\n\nstable 滚动段路由 `<base>/stable/<资产>`；`BROWSE_RELEASE_MIRROR` 覆写\n走测试或自建镜像。"
+    },
+    {
+      "path": "browse_core::self_update::asset_name",
+      "kind": "function",
+      "docs": "某版本的本平台资产名（`v` 前缀形，与 release 六件命名一致）。\n\n# Errors\n\n本平台无发布资产（aarch64/musl Linux）：错误带源码安装 CTA。"
+    },
+    {
+      "path": "browse_core::self_update::extract_binary",
+      "kind": "function",
+      "docs": "从发布包解出 browse 二进制到暂存目录。\n\n包形是单顶层目录（win zip，unix tar.gz）；收齐候选后要求**唯一**\n普通文件命中\n（`browse`/`browse.exe`，非零字节），多命中或零命中都报错。\n\n# Errors\n\n包损坏；候选零或多于一个；写盘失败。"
+    },
+    {
+      "path": "browse_core::self_update::latest_browse_version",
+      "kind": "function",
+      "docs": "发现最新版本号。\n\nGitHub Releases latest API（tag 去 `v` 前缀）；镜像 stable 段是下载\n通道非判新源（段内资产名带版本，无法反查最新号）。\n\n阻塞 http，调用方收 `spawn_blocking`。\n\n# Errors\n\nAPI 不可达、限流（403/429 带 token 指引）或未回 tag。"
+    },
+    {
+      "path": "browse_core::self_update::swap_binary",
+      "kind": "function",
+      "docs": "自替换二进制并自证回滚。\n\n三步舞：旧件挪 pid 备份 -> 新件入位 -> `--version` 自证（重试五次\n防杀软瞬时锁）-> 证毕清备份；证败回滚并**复核终态**，回滚失败报\n精确自救路径。\n\n# Errors\n\n备份或入位失败；自证失败且回滚成功；回滚自身失败（错误带备份与\n新件路径及手动复原命令）。"
+    },
+    {
+      "path": "browse_core::self_update::update_self",
+      "kind": "function",
+      "docs": "`browse update` 的自更新全链入口。\n\nGitHub latest 判新（semver 只升不降，本地领先报 localNewer 不动）；\n下载双通道锚校验解包；暂存落 exe 同目录（防跨文件系统 rename）；\n全程持锁防并行互踩；管理方布局安装拦走 ark。\n阻塞 http 与子进程，调用方收 `spawn_blocking`。\n\n# Errors\n\n透传 [`latest_browse_version`]（判新失败）与下载校验解包自替换\n（[`extract_binary`]/[`swap_binary`]）各步失败；ark 管理或另一\nupdate 在跑时带 CTA 拒绝。"
     },
     {
       "path": "browse_core::semantic",

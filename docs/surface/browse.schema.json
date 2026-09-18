@@ -386,6 +386,17 @@
       "output": "runtime JSON（回值随页面与 CDP 而定）",
       "type": "object"
     },
+    "cli.self-update": {
+      "description": "browse update 自更新 browse 二进制（镜像 stable 段优先加 GitHub Releases 回退，sha256 锚校验，自证回滚；ark 管理安装拦走 ark）。",
+      "example": "browse update",
+      "input": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
     "cli.serve": {
       "description": "browse --serve [--bind host:port] 前台跑 daemon（--bind 选监听地址）。",
       "example": "browse --serve --bind 127.0.0.1:9880",

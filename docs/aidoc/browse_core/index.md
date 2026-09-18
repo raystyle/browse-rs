@@ -1,4 +1,4 @@
-# browse-core 0.6.1
+# browse-core 0.7.0
 
 browse CLI 的核心库：方言宿主、引擎策略、daemon HTTP API。
 
@@ -40,6 +40,7 @@ assert_eq!(render(&stmts), "const tabs = await listPageTargets()");
 - [`parser`](parser.md): browser-harness-js 片段方言的语法分析器（纯函数）。
 - [`paths`](paths.md): 实例命名空间（多实例，ADR-0006）：`BROWSE_NAME` 一个名字同时决定
 - [`record`](record.md): 录制：`Page.startScreencast` 帧流落盘（方言无回调，泵任务代收）。
+- [`self_update`](self_update.md): browse 自更新（用户令 2026-09-18；对齐 build-release 公共契约第六节
 - [`semantic`](semantic.md): 语义层近期面：tab 族、交互三件、等待判官。
 - [`server`](server.md): daemon 的 HTTP API：常驻会话 + 方言求值 + 引擎生命周期。
 - [`surface`](surface.md): 命令面目录（incur-rs 原则的方言版适配）：CLI 子命令、方言全局函数、

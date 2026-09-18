@@ -1,5 +1,5 @@
 <!-- browse_cli/index.md -->
-# browse-cli 0.6.1
+# browse-cli 0.7.0
 
 browse CLI 的可测半边：daemon 客户端（HTTP 调用 + 自动拉起）。
 
@@ -74,7 +74,7 @@ version 40、platform 与 host 64）；读面 list 与 show 走 GET。
 
 
 <!-- browse_core/index.md -->
-# browse-core 0.6.1
+# browse-core 0.7.0
 
 browse CLI 的核心库：方言宿主、引擎策略、daemon HTTP API。
 
@@ -116,6 +116,7 @@ assert_eq!(render(&stmts), "const tabs = await listPageTargets()");
 - [`parser`](parser.md): browser-harness-js 片段方言的语法分析器（纯函数）。
 - [`paths`](paths.md): 实例命名空间（多实例，ADR-0006）：`BROWSE_NAME` 一个名字同时决定
 - [`record`](record.md): 录制：`Page.startScreencast` 帧流落盘（方言无回调，泵任务代收）。
+- [`self_update`](self_update.md): browse 自更新（用户令 2026-09-18；对齐 build-release 公共契约第六节
 - [`semantic`](semantic.md): 语义层近期面：tab 族、交互三件、等待判官。
 - [`server`](server.md): daemon 的 HTTP API：常驻会话 + 方言求值 + 引擎生命周期。
 - [`surface`](surface.md): 命令面目录（incur-rs 原则的方言版适配）：CLI 子命令、方言全局函数、
@@ -288,6 +289,34 @@ browser-harness-js 片段方言的语法分析器（纯函数）。
 - `Recorder` — 承载一场进行中的录制，聚合目录、计数器、停泵旗标与泵任务句柄。
 
 
+<!-- browse_core/self_update.md -->
+# browse-core::self_update
+
+browse 自更新（用户令 2026-09-18；对齐 build-release 公共契约第六节
+双通道）：GitHub Releases latest 判新（semver 只升不降）-> 下载本平台
+资产（自家镜像 stable 滚动段优先，GitHub 回落，资产与边车恒同源）->
+`.sha256` 边车锚校验（与发布器同 digest 判据，不符即拒不回落）->
+解包取二进制 -> 原子自替换（同目录暂存防跨文件系统 rename，pid 后缀
+防并发互踩，`--version` 自证带重试，证败回滚并复核终态）。
+
+ark 管理的安装拦自更新走 ark 单通道（判据：exe 同目录 `ark-managed`
+落痕，或用户面 bin 目录存在指向本 exe 的符号链接入口即 ark 布局；
+落痕生产者契约随家族统一标准派 ark 侧）。
+
+## Functions
+
+- `asset_name` — 某版本的本平台资产名（`v` 前缀形，与 release 六件命名一致）。
+- `extract_binary` — 从发布包解出 browse 二进制到暂存目录。
+- `latest_browse_version` — 发现最新版本号。
+- `swap_binary` — 自替换二进制并自证回滚。
+- `update_self` — `browse update` 的自更新全链入口。
+
+## Constants
+
+- `GITHUB_REPO` — GitHub 仓（latest API 判新与回落下载）。
+- `RELEASE_MIRROR` — 镜像基址常量。
+
+
 <!-- browse_core/semantic.md -->
 # browse-core::semantic
 
@@ -380,7 +409,7 @@ session 方法**只在这一处登记为数据**，JSON Schema 与 LLM 清单
 
 
 <!-- cdp/index.md -->
-# cdp 0.6.1
+# cdp 0.7.0
 
 Chrome DevTools Protocol（CDP）连接层：一条常驻 browser-level WebSocket 会话。
 

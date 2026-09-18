@@ -326,3 +326,14 @@
 - 夹带用户令：README 部署节补 GitHub Releases 通道（四通道形）加特性列表命令清单补 update/remove。
 
 - 封 0.6.1（patch：0.6.0 后为评审修复批加文档，判据文档/修复取 patch；修复本体经评审三轮终审放行，封版批纯机械件无新代码）。
+
+## 自更新面批加统一标准（用户令，2026-09-18）
+
+- 新面 `browse update`（新模块 self_update）：GitHub Releases latest 判新 -> 下载走镜像 stable 滚动段优先加 GitHub 404 回落（build-release 公共契约第六节双通道，用户令统一标准件）-> .sha256 边车锚校验（与发布器同 digest 判据）-> tar.gz/zip 解包取二进制（新依赖 tar 加 flate2）-> 自替换三步舞（旧件挪 .bak 入位自证 --version 证毕清备份证败回滚）。ark 管理安装（exe 同目录 ark-managed 落痕）拦走 ark 单通道（元数据对齐归管理方）。顶层子命令形（hst/herdr 同形；cli-docs 的 --update 旗标件与子命令形不冲突，契约原文即 update 子命令）。
+- 与 chrome 引擎 latest 指针口径分家：browse 工具族标准源是 stable 滚动段（资产名带版本不可反查，判新走 GitHub tag），chrome 引擎走 latest 纯文本指针，两口径并存各自在册。
+- 实证 [实证: browse update 实弹 upToDate:true 0.6.1（真 GitHub API 链）；管理方布局拦 CTA 带命中物；stable 段边车 200（digest 与发布侧逐字同）；单测五件（资产名形、semver 判新、解包唯一命中、自替换回滚、双通道三态 mock）；评审三轮闭环（F0 暂存态、F1 跨文件系统 rename 实弹复现、F1′ 锁陈旧收割、F4 回滚复核共用体、G 全收），终审放行；非 linux 面 SIGKILL 后需人工删锁（pid_alive 保守判活）在档]
+- 门禁：fmt、clippy -D warnings、test 12 组、doc test、rustdoc、aidoc check strict（self_update 模块页入册 27 artifacts）、PE 全绿。
+- 统一标准转呈：ark/hst/reader 经飞轮派单（回执验收判据同 build-release：同工具 self update 与管理器 update 同报已最新，终态同 digest）。
+- 版本判定：能力新增取 minor，封 0.7.0（候评审放行后走）。
+
+- 封 0.7.0（minor：自更新面能力新增；判据在册 REQ-005）。评审三轮随卷记：一轮 4F（跨文件系统 rename 实弹复现真雷居首）加 14G，二轮 F0 暂存态加 F1′ 锁两态加三件未落地纠偏，三轮终审放行加五条随卷小件（锁竞态回读、代理时序、措辞、diary 订正）。

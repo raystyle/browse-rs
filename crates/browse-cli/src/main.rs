@@ -29,6 +29,8 @@ enum Mode {
     Down,
     /// `browse status`：看 daemon/引擎状态。
     Status,
+    /// `browse update`：browse 自更新（发现加锚校验加自替换；ark 管理拦）。
+    Update,
     /// `browse chrome install <版本> [部署目录]`：镜像下载或本地导入安装 Chromium 版本。
     ChromeInstall {
         version: String,
@@ -116,6 +118,7 @@ async fn main() -> Result<()> {
             "up" if snippets.is_empty() && mode_is_eval(&mode) => mode = Mode::Up,
             "down" if snippets.is_empty() && mode_is_eval(&mode) => mode = Mode::Down,
             "status" if snippets.is_empty() && mode_is_eval(&mode) => mode = Mode::Status,
+            "update" if snippets.is_empty() && mode_is_eval(&mode) => mode = Mode::Update,
             "chrome" if snippets.is_empty() && mode_is_eval(&mode) => {
                 match next("chrome")?.as_str() {
                     "list" => mode = Mode::ChromeList,
@@ -257,6 +260,14 @@ async fn main() -> Result<()> {
             }
             client::quit().await?;
             println!("daemon 退出（自起引擎已随之下线；附着来源浏览器不受影响）");
+            Ok(())
+        }
+        // 自更新：纯本地链（发现加下载加自替换），blocking 全收 spawn_blocking
+        Mode::Update => {
+            let brief = tokio::task::spawn_blocking(browse_core::self_update::update_self)
+                .await
+                .map_err(|e| anyhow!("自更新任务崩了：{e}"))??;
+            println!("{}", serde_json::to_string_pretty(&brief)?);
             Ok(())
         }
         Mode::Status => {
