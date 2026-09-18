@@ -74,7 +74,7 @@
       "type": "object"
     },
     "chromeUpdate": {
-      "description": "chromeUpdate() 升级到镜像最新版并 pin 切过去（发现源 latest.txt，BROWSE_CHROME_LATEST 可钉）。",
+      "description": "chromeUpdate() 升级到镜像最新版并 pin 切过去（发现源 latest，BROWSE_CHROME_LATEST 可钉）。",
       "example": "return await chromeUpdate()",
       "input": {
         "properties": {},
@@ -165,7 +165,7 @@
       "type": "object"
     },
     "cli.chrome-update": {
-      "description": "browse chrome update 升级到镜像最新版并默认切用（发现源 latest.txt，BROWSE_CHROME_LATEST 可钉）。",
+      "description": "browse chrome update 升级到镜像最新版并默认切用（发现源 latest，BROWSE_CHROME_LATEST 可钉）。",
       "example": "browse chrome update",
       "input": {
         "properties": {},

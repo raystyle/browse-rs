@@ -46,7 +46,7 @@ daemon。
 
 前置引擎：`browse chrome install <版本>` 从镜像装 clean-chrome（sha256
 边车锚校验后原子落位），或本地导入部署目录；`browse chrome update`
-升到最新版并默认切用（发现源 `latest.txt`，`BROWSE_CHROME_LATEST` 可钉）。
+升到最新版并默认切用（发现源 `latest`，`BROWSE_CHROME_LATEST` 可钉）。
 
 ## 配置
 
@@ -64,7 +64,7 @@ daemon。
 | `BROWSE_EVAL_TIMEOUT` | 单次求值超时秒数（默认 300） |
 | `BROWSE_DENY_DOMAINS` / `BROWSE_ALLOW_DOMAINS` | 域策略（后缀匹配，deny 优先） |
 | `BROWSE_CHROME_MIRROR` / `BROWSE_CHROME_ASSET` | 版本管理器镜像与资产名覆写 |
-| `BROWSE_CHROME_LATEST` | `chrome update` 发现源钉（缺省读镜像 `latest.txt`） |
+| `BROWSE_CHROME_LATEST` | `chrome update` 发现源钉（缺省读镜像 `latest` 指针） |
 | `BROWSE_ISSUES_API` | issue 通道基址覆写（测与灰度） |
 
 状态目录 `~/.browse-rs/`（Windows `%USERPROFILE%\.browse-rs`，命名实例在

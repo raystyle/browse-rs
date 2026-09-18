@@ -284,3 +284,10 @@
 - issue #16 处置路径改为上游解：155 资产上线后 chrome update 拉到即恒 false，本仓零代码；单保持 open 候验证后关。
 - 门禁：fmt、clippy -D warnings、test 12 组、e2e 双通道 2/2（撤断言后复跑）、aidoc check strict、PE 全绿。
 - 版本判定：撤回行为变化件后，0.6.0 卷内容改为 update 加 remove 两面（能力新增 minor），stealth 不再计卷。
+
+## 发现端点对齐 latest 批（clean-chrome 结案回执随批，2026-09-18）
+
+- #16 考古收官（clean-chrome 工位双附着器对拍加序列二分定案）：你 daemon 无罪，真凶是 Target.attachToTarget(flat) 附着动作本身，且只在 linux 152 资产上翻板（同源 Windows 直连与 flat 后均 false，Edge 153 不翻，linux 资产 flat 后恒 true 跨连接持续）；我方两态 true 全部命中此格。51 锚恒 false 后引擎面归零，与撤批裁定（等 155 源码级）正交闭环。
+- 发现端点对齐：latest_version 缺省读 <mirror>/latest 纯文本指针（clean-chrome 提案口径，桶根单行四段版本号，随 155 入册，物件候 omc 落），弃我自拟 latest.txt 名；端点返回非纯文本（SPA 兜底页）给专门 CTA。活面五处随迁（README、getting-started、REQ-003、目录双条描述）；本 diary 历史批记按当时事实保留。
+- 实证 [实证: browse chrome update 裸跑 CTA 指向 latest 指针缺位；aidoc 重生后 strict clean；test 12 组 0 败]
+- 门禁：fmt、clippy -D warnings、test 12 组、aidoc check strict、PE 全绿。

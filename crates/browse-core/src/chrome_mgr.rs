@@ -458,16 +458,16 @@ pub fn use_version(root: &Path, version: &str) -> Result<Value> {
 }
 
 /// 发现镜像最新版本：优先 `BROWSE_CHROME_LATEST` 环境钉（离线与测试面），
-/// 缺省读 `<mirror>/latest.txt` 单行版本号（155 前的过渡发现口径，端点候
-/// omc 落桶；版本发现正式定标在 REQ-003 余量）。
+/// 缺省读 `<mirror>/latest` 纯文本指针（四段版本号单行；clean-chrome 提案
+/// 口径，随 155 窗入册，桶物件候 omc 落；版本发现正式定标在 REQ-003 余量）。
 ///
 /// 阻塞 http，调用方须收在 `spawn_blocking` 里（async 上下文 drop 该
 /// client 会 panic，与镜像安装腿同规）。
 ///
 /// # Errors
 ///
-/// `latest.txt` 404 或不可达（错误带过渡指引：显式装或环境钉）；返回
-/// 内容不是合法版本号（限字母数字与 `. _ -`，同版本目录名口径）。
+/// `latest` 指针 404 或不可达（错误带过渡指引：显式装或环境钉）；返回
+/// 内容不是纯文本版本号（如还是 SPA 兜底页）。
 pub fn latest_version() -> Result<String> {
     if let Some(v) = std::env::var("BROWSE_CHROME_LATEST")
         .ok()
@@ -478,7 +478,7 @@ pub fn latest_version() -> Result<String> {
         return Ok(v);
     }
     let (mirror, _) = mirror_and_asset("");
-    let url = format!("{mirror}/latest.txt");
+    let url = format!("{mirror}/latest");
     let client = reqwest::blocking::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(30))
         .build()
@@ -489,14 +489,20 @@ pub fn latest_version() -> Result<String> {
         .and_then(|r| r.error_for_status())
         .map_err(|e| {
             anyhow::anyhow!(
-                "读 {url} 失败（{e}）；镜像暂无 latest.txt 发现端点（155 前过渡口径）；\
+                "读 {url} 失败（{e}）；镜像暂无 latest 版本指针（clean-chrome 口径随 155 入册）；\
                  下一步：browse chrome install <版本> 显式装，或 BROWSE_CHROME_LATEST=<版本> 钉住发现源"
             )
         })?
         .text()
         .map_err(|e| anyhow::anyhow!("读 {url} body 失败：{e}"))?;
     let v = body.trim().lines().last().unwrap_or("").trim().to_string();
-    valid_version(&v)?;
+    if valid_version(&v).is_err() {
+        bail!(
+            "{url} 返回的不是纯文本版本指针（得 {:?}，可能是 SPA 兜底页）；\
+             下一步：BROWSE_CHROME_LATEST=<版本> 钉住发现源，或候 155 窗 latest 指针入册",
+            v.chars().take(40).collect::<String>()
+        );
+    }
     Ok(v)
 }
 

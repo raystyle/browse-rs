@@ -82,7 +82,7 @@ printf '%s\n' \
 ## 9. 引擎版本管理（chrome）
 
 ```bash
-browse chrome update                 # 升最新并默认切用（发现源 latest.txt；BROWSE_CHROME_LATEST 可钉）
+browse chrome update                 # 升最新并默认切用（发现源 latest；BROWSE_CHROME_LATEST 可钉）
 browse chrome list                   # 已装版本与当前 pin
 browse chrome use 152.0.7977.84      # pin 切换（旧版保留可回退）
 browse chrome remove 152.0.7977.84   # 删旧版（pin 指向的拒删，先 use 切走）

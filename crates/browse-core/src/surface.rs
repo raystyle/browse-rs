@@ -215,7 +215,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Cli,
         signature: "browse chrome update",
         args: &[],
-        description: "升级到镜像最新版并默认切用（发现源 latest.txt，BROWSE_CHROME_LATEST 可钉）。",
+        description: "升级到镜像最新版并默认切用（发现源 latest，BROWSE_CHROME_LATEST 可钉）。",
         example: "browse chrome update",
     },
     CmdSpec {
@@ -327,7 +327,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "chromeUpdate()",
         args: &[],
-        description: "升级到镜像最新版并 pin 切过去（发现源 latest.txt，BROWSE_CHROME_LATEST 可钉）。",
+        description: "升级到镜像最新版并 pin 切过去（发现源 latest，BROWSE_CHROME_LATEST 可钉）。",
         example: "return await chromeUpdate()",
     },
     CmdSpec {
