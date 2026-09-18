@@ -48,6 +48,11 @@ daemon。
 边车锚校验后原子落位），或本地导入部署目录；`browse chrome update`
 升到最新版并默认切用（发现源 `latest`，`BROWSE_CHROME_LATEST` 可钉）。
 
+版本说明：`152.0.7977.84-r2` 是补丁族重发版（同 152 基线，`-r2` 后缀即
+补丁形版本号）：内嵌 clean-chrome 第 51 锚，`navigator.webdriver` 源码级
+恒 false，修复自起引擎被 Google 登录一票否决的问题；旧版 `152.0.7977.84`
+（r1）保留可回退（`browse chrome use` 切回，`browse chrome remove` 清理）。
+
 ## 配置
 
 环境变量：

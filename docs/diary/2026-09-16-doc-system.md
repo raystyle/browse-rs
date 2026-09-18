@@ -311,3 +311,9 @@
 - 判据：0.5.1 后 update 加 remove 两面能力新增取 minor；#15 修复与 r2 全链随卷。
 - 门禁：fmt、clippy -D warnings、test 12 组 0 败、aidoc check strict（版本入投影 8 件重生后）、PE 全绿。
 - tag v0.6.0 轻量形随批推远端，release.ps1 全链自播，回执随后批补记。
+
+## README r2 说明批加五端舰队滚动（用户令，2026-09-18）
+
+- README 部署节补 r2 特殊说明：152.0.7977.84-r2 是补丁族重发版（同 152 基线，-r2 后缀即补丁形版本号），51 锚 webdriver 源码级恒 false 修 Google 登录一票否决；r1 保留可回退（use 切回，remove 清理）。
+- 五端四机默认实例滚动（browse 0.6.0 二进制加引擎 r2）[实证: wsl 与 win（产物交叉件入 C:\Users\ray\bin）与 mac 与 lan-ubuntu（rsync 同树重建）与 lan-linux（产物直拷，该端无工具链）五端 chrome update 全 installedNow:true 加 pin r2；win/mac 默认实例另证 webdriver false 加 length 3；win/mac/lan-linux 旧 r1 保留 prevPin 回填]。
+- herdr 回执 omc 总台工位（wR:p1 原子投递，总台 working 态消化中）。
