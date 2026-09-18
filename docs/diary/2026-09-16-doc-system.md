@@ -303,3 +303,11 @@
 - 不候 omc 排程，借宿主 dist（/mnt/c/dev-chrome/dist）起本地镜像（版本段布局同构，python http.server），环境钉双覆写跑通全链：browse chrome update 得 installedNow:true 加锚校验落位加 pin 切 152.0.7977.84-r2（previousPin 152.0.7977.84 回填，旧版保留可回退）。
 - 终结实证（linux 翻板平台，正是 flat 附着翻板格）[实证: browse up --headless spawn r2 引擎（channel=port），flat 附着后页面脚本读 navigator.webdriver 得 false；同格今晨旧 152 资产读 true]。#16 闭单条件成立，单状态候用户或总台关。
 - 后续：omc 上桶加 latest 指针后舰队面同链自动可达；本机 r2 已 pin 即用。
+
+## 封 0.6.0（总台派单 wave 令，2026-09-18）
+
+- 前置闭环：总台返工毕（r2 六对象移段 /152.0.7977.84-r2/ 加桶根 latest 单行指针，clean-chrome 桶钟实证 digest 逐字等）；返工方向对我仓零代码变更（段=完整版本串即缺省拼段），剥段 B 计划不启用在档。
+- 三端真桶实测（缺省发现链零环境钉）[实证: wsl 走 remove 加 update 重装路径（prevPin 回填）、win 与 mac 走 BROWSE_NAME=r2v6 隔离实例（prevPin:null）；三端 installedNow:true 拉各自平台包；flat 附着读 navigator.webdriver 三端全 false；"abc".length 三端全 3；wsl 另证 Google 登录面加载 v3/signin/identifier 表单页非 rejected 页；两端隔离实例已 down 清场]
+- 判据：0.5.1 后 update 加 remove 两面能力新增取 minor；#15 修复与 r2 全链随卷。
+- 门禁：fmt、clippy -D warnings、test 12 组 0 败、aidoc check strict（版本入投影 8 件重生后）、PE 全绿。
+- tag v0.6.0 轻量形随批推远端，release.ps1 全链自播，回执随后批补记。

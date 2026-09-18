@@ -2,6 +2,13 @@
 
 版本级里程碑；逐批过程见 docs/diary。semver 判据在册 docs/requirements/REQ-004。
 
+## 0.6.0 - 2026-09-18
+
+- `browse chrome update`：发现镜像最新版（桶根 `latest` 纯文本指针，`BROWSE_CHROME_LATEST` 可钉）加未装则镜像安装（sha256 锚校验链）加 pin 切最新；幂等，回执带 previousPin
+- `browse chrome remove <版本>`：删已装版本（目录与登记一起清，回执带释放文件数与字节数；pin 指向的拒删保「pin 永远指向在位版本」不变量）
+- 修 #15：方言 `.length` 成员访问不再静默丢（数组元素数；字符串按 UTF-16 单元同 JS），回归锁三态
+- r2 补丁形资产全链（152.0.7977.84-r2，clean-chrome 51 锚 webdriver 源码级恒 false）：版本号收连字符后缀（兼容锁在册）；三端真桶实测 update 拉新、flat 附着读 webdriver false、Google 登录面进 v3/signin 表单页。stealth 注入按用户裁定撤批不自带，r2 即终态
+
 ## 0.5.1 - 2026-09-18
 
 - 帮助面重排进 cli-docs 标准节序：头行 `browse@版本` 注入、Usage synopsis、Commands/Options 分家列对齐（CJK 展宽）、环境变量逐条 default 后缀；`print_help` 改 `surface::render_help` 活树派生（curated 加守卫形），`help_covers_catalog` 守卫锁命令树全覆盖与版本注入

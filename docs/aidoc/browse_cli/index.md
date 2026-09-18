@@ -1,4 +1,4 @@
-# browse-cli 0.5.1
+# browse-cli 0.6.0
 
 browse CLI 的可测半边：daemon 客户端（HTTP 调用 + 自动拉起）。
 
