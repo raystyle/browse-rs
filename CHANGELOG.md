@@ -2,6 +2,13 @@
 
 版本级里程碑；逐批过程见 docs/diary。semver 判据在册 docs/requirements/REQ-004。
 
+## 0.6.1 - 2026-09-18
+
+- 评审闸门三轮修复收口（3F 加 F1′ 加 16G）：chrome 子命令 CTA 随迁 update/remove；remove 残留态（登记在册目录已失）幂等清登记不再死结，回执带 `alreadyGone` 且释放量如实归零；`use_version` 加版本校验与部署在位闸，拦「登记在册目录已失」的假绿切空位 pin；release.ps1 自引用正名
+- 守卫硬化：派发守卫改调用形真派发（原裸名断言空转假绿）；帮助面行首精确匹配加 Commands/Options 行数双向对称断言加旗标双向反查守卫；r2 兼容与残留态四条新回归锁
+- README：部署节升四通道（新增 GitHub Releases 直下）、r2 补丁族版本说明（实测口径归因）、命令清单补全 update/remove
+- 文档：五端舰队滚动与评审闭环入册（diary）
+
 ## 0.6.0 - 2026-09-18
 
 - `browse chrome update`：发现镜像最新版（桶根 `latest` 纯文本指针，`BROWSE_CHROME_LATEST` 可钉）加未装则镜像安装（sha256 锚校验链）加 pin 切最新；幂等，回执带 previousPin

@@ -324,3 +324,5 @@
 - 评审格 browse-codex-review（wY:p4 右侧）常驻建立（codex YOLO 加本仓 cwd，信任屏替答在档）；后续新批恢复先闸后推。
 - 余量清单在档：G7′ manifest 读改写竞态（候锁文件或写前重读）、评审员提 G1″/G2″。
 - 夹带用户令：README 部署节补 GitHub Releases 通道（四通道形）加特性列表命令清单补 update/remove。
+
+- 封 0.6.1（patch：0.6.0 后为评审修复批加文档，判据文档/修复取 patch；修复本体经评审三轮终审放行，封版批纯机械件无新代码）。
