@@ -577,6 +577,30 @@ pub const COMMANDS: &[CmdSpec] = &[
         description: "把值打到 daemon stderr（调试用）。",
         example: "await print(tabs)",
     },
+    CmdSpec {
+        name: "JSON.parse",
+        kind: CmdKind::Global,
+        signature: "JSON.parse(s)",
+        args: &[arg!("s", "string", true)],
+        description: "宿主侧把 JSON 文本解析成值（getResponseBody 等结果的小加工，#21）。",
+        example: r#"return JSON.parse(body).title"#,
+    },
+    CmdSpec {
+        name: "JSON.stringify",
+        kind: CmdKind::Global,
+        signature: "JSON.stringify(v, indent?)",
+        args: &[arg!("v", "any", true), arg!("indent", "int", false)],
+        description: "宿主侧把值序列化成字符串回传（indent 大于 0 出两格缩进多行形）。",
+        example: "return JSON.stringify(tabs, 2)",
+    },
+    CmdSpec {
+        name: "value-methods",
+        kind: CmdKind::Global,
+        signature: "值.slice(start,end?) 等",
+        args: &[],
+        description: "字符串与数组的小加工（#21）：字符串 slice(start,end?)/split(sep)/includes(sub)/startsWith(sub)/endsWith(sub)/trim()/toUpperCase()/toLowerCase()；数组 slice(start,end?)/join(sep?)/includes(v)/concat(数组...)。slice 按 UTF-16 单元（同 .length，代理对切中间出替换符）；大小写转换非 locale；join 对容器元素打紧凑 JSON；includes 数值宽等（1 与 1.0 同值）。纯函数无控制流，页面内逻辑仍走 Runtime.evaluate。",
+        example: r#"return body.slice(0, 200)"#,
+    },
     // ---- session 方法 ----
     CmdSpec {
         name: "connect",

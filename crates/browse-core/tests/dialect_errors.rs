@@ -56,14 +56,35 @@ async fn eval_errors_carry_next_step() {
     assert!(e.contains("未知函数 nosuchglobal"), "{e}");
     assert!(e.contains("listPageTargets()"), "应列出可用全局: {e}");
 
-    // 对字符串值调方法（#21）：报错带 receiver 类型与带引号形态，
-    // 不再裸打让 JSON 文本看着像对象
-    let e = err_of(r#"return "slideshow".slice()"#).await;
+    // 对字符串值调未知方法（#21）：报错带 receiver 类型与带引号形态，
+    // 不再裸打让 JSON 文本看着像对象，并列出该方法面的清单
+    let e = err_of(r#"return "slideshow".frobnicate()"#).await;
     assert!(
         e.contains("字符串\"slideshow\""),
         "receiver 应带类型与引号形态: {e}"
     );
-    assert!(e.contains(".slice"), "{e}");
+    assert!(e.contains("字符串可调 slice"), "{e}");
+    assert!(e.contains("下一步："), "{e}");
+
+    // JSON.parse 非法文本（#21）：CTA 指引先看原值形态
+    let e = err_of(r#"return JSON.parse("{oops")"#).await;
+    assert!(e.contains("不是合法 JSON"), "{e}");
+    assert!(e.contains("下一步："), "{e}");
+
+    // 超范围整数字面量（评审 G2 既存补）：不再裸报 number too large
+    let e = err_of("return 99999999999999999999999").await;
+    assert!(e.contains("超出 64 位"), "{e}");
+    assert!(e.contains("下一步："), "{e}");
+    assert!(e.contains("行"), "应带位置: {e}");
+
+    // 浮点形态错（评审 G-b）：1.2.3 的 CTA 也有锁
+    let e = err_of("return 1.2.3").await;
+    assert!(e.contains("解析不了"), "{e}");
+    assert!(e.contains("下一步："), "{e}");
+
+    // 负号后无数字（评审 G-a）：归因形态而非超范围
+    let e = err_of("return -").await;
+    assert!(e.contains("形态不对"), "{e}");
     assert!(e.contains("下一步："), "{e}");
 }
 

@@ -1,6 +1,46 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "definitions": {
+    "JSON.parse": {
+      "description": "JSON.parse(s) 宿主侧把 JSON 文本解析成值（getResponseBody 等结果的小加工，#21）。",
+      "example": "return JSON.parse(body).title",
+      "input": {
+        "properties": {
+          "s": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "s"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "JSON.stringify": {
+      "description": "JSON.stringify(v, indent?) 宿主侧把值序列化成字符串回传（indent 大于 0 出两格缩进多行形）。",
+      "example": "return JSON.stringify(tabs, 2)",
+      "input": {
+        "properties": {
+          "indent": {
+            "description": "",
+            "type": "int"
+          },
+          "v": {
+            "description": "",
+            "type": "any"
+          }
+        },
+        "required": [
+          "v"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
     "cdpMethods": {
       "description": "cdpMethods(domain?) 652 个 CDP 命令的运行时探针（按域过滤）。",
       "example": "return await cdpMethods(\"Network\")",
@@ -1125,6 +1165,17 @@
         "required": [
           "targetId"
         ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "value-methods": {
+      "description": "值.slice(start,end?) 等 字符串与数组的小加工（#21）：字符串 slice(start,end?)/split(sep)/includes(sub)/startsWith(sub)/endsWith(sub)/trim()/toUpperCase()/toLowerCase()；数组 slice(start,end?)/join(sep?)/includes(v)/concat(数组...)。slice 按 UTF-16 单元（同 .length，代理对切中间出替换符）；大小写转换非 locale；join 对容器元素打紧凑 JSON；includes 数值宽等（1 与 1.0 同值）。纯函数无控制流，页面内逻辑仍走 Runtime.evaluate。",
+      "example": "return body.slice(0, 200)",
+      "input": {
+        "properties": {},
+        "required": [],
         "type": "object"
       },
       "output": "runtime JSON（回值随页面与 CDP 而定）",

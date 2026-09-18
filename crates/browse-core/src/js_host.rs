@@ -186,6 +186,9 @@ impl JsHost {
                     if name == "session" {
                         return Ok(json!({"__host": "session"}));
                     }
+                    if name == "JSON" {
+                        return Ok(json!({"__host": "json"}));
+                    }
                     if name == "undefined" {
                         return Ok(Value::Null);
                     }
@@ -271,8 +274,30 @@ impl JsHost {
                     }
                     return self.call_session(prop, argv).await;
                 }
+                if o.get("__host").and_then(|v| v.as_str()) == Some("json") {
+                    return call_json_ns(prop, argv);
+                }
+                // 值方法面（#21）：字符串与数组的小加工，纯函数无控制流；
+                // 不是该方法面的成员落到类型感知 CTA
+                if let Some(res) = value_method(&o, prop, argv) {
+                    return res;
+                }
+                if o.is_string() {
+                    bail!(
+                        "不能调用 {}.{prop}；下一步：字符串可调 {}，序列化走 JSON.stringify，页面内逻辑走 session.Runtime.evaluate",
+                        preview(&o),
+                        STRING_METHODS.join("/")
+                    );
+                }
+                if o.is_array() {
+                    bail!(
+                        "不能调用 {}.{prop}；下一步：数组可调 {}，元素级加工走页面侧 session.Runtime.evaluate",
+                        preview(&o),
+                        ARRAY_METHODS.join("/")
+                    );
+                }
                 bail!(
-                    "不能调用 {}.{}；下一步：可调用的是宿主全局函数或 session.<Domain>.<method>(params)",
+                    "不能调用 {}.{}；下一步：可调用的是宿主全局函数、值方法面（字符串与数组）或 session.<Domain>.<method>(params)",
                     preview(&o),
                     prop
                 )
@@ -1124,6 +1149,213 @@ fn connect_opts(v: Option<&Value>) -> ConnectOptions {
     }
 }
 
+// ---- 值方法面与 JSON 命名空间（#21）：方言结果在宿主侧的小加工 ----
+// 纯函数、无控制流；页面内逻辑仍走 Runtime.evaluate（分工见 --llms 手册）。
+
+/// 字符串方法面清单（#21）：CTA 文案由此派生，surface 目录描述由测试绑定；
+/// 增删方法改这里（两边一起红才是同步）。
+pub(crate) const STRING_METHODS: &[&str] = &[
+    "slice(start,end?)",
+    "split(sep)",
+    "includes(sub)",
+    "startsWith(sub)",
+    "endsWith(sub)",
+    "trim()",
+    "toUpperCase()",
+    "toLowerCase()",
+];
+
+/// 数组方法面清单（#21）：同字符串清单的同源纪律。
+pub(crate) const ARRAY_METHODS: &[&str] = &[
+    "slice(start,end?)",
+    "join(sep?)",
+    "includes(v)",
+    "concat(数组...)",
+];
+
+/// 值等值（数组 includes 用，#21）：JSON 等值之外数值跨形态宽等，
+/// 1 与 1.0 同值（对齐 JS）；整数段 i64/u64 精确比，浮点兜底。
+fn json_value_eq(a: &Value, b: &Value) -> bool {
+    if a == b {
+        return true;
+    }
+    let (Value::Number(x), Value::Number(y)) = (a, b) else {
+        return false;
+    };
+    if let (Some(p), Some(q)) = (x.as_i64(), y.as_i64()) {
+        return p == q;
+    }
+    if let (Some(p), Some(q)) = (x.as_u64(), y.as_u64()) {
+        return p == q;
+    }
+    x.as_f64().zip(y.as_f64()).is_some_and(|(p, q)| p == q)
+}
+
+/// JS 语义的索引规约：负数从尾部数，钳到 [0, len]。
+fn js_index(i: i64, len: usize) -> usize {
+    let len = len as i64;
+    (if i < 0 { len + i } else { i }).clamp(0, len) as usize
+}
+
+/// 字符串按 UTF-16 单元切片（与 `.length` 同口径，JS slice 语义；
+/// start 不小于 end 得空串，切在代理对中间由 from_utf16_lossy 收尾）。
+fn js_slice_units(s: &str, start: i64, end: Option<i64>) -> String {
+    let units: Vec<u16> = s.encode_utf16().collect();
+    let a = js_index(start, units.len());
+    let b = js_index(end.unwrap_or(units.len() as i64), units.len());
+    if a >= b {
+        return String::new();
+    }
+    String::from_utf16_lossy(&units[a..b])
+}
+
+/// 数组切片（同上索引语义，元素克隆）。
+fn js_slice_items<T: Clone>(items: &[T], start: i64, end: Option<i64>) -> Vec<T> {
+    let a = js_index(start, items.len());
+    let b = js_index(end.unwrap_or(items.len() as i64), items.len());
+    if a >= b {
+        Vec::new()
+    } else {
+        items[a..b].to_vec()
+    }
+}
+
+/// 取第 i 个字符串参数，带形态化 CTA。
+fn str_arg<'a>(argv: &'a [Value], i: usize, who: &str) -> Result<&'a str> {
+    argv.get(i).and_then(Value::as_str).ok_or_else(|| {
+        anyhow!(
+            "{who} 应是字符串；下一步：检查实参形态（当前：{}）",
+            preview(argv.get(i).unwrap_or(&Value::Null))
+        )
+    })
+}
+
+/// 取第 i 个整数参数（布尔与浮点不接受），带 CTA。
+fn int_arg(argv: &[Value], i: usize, who: &str) -> Result<i64> {
+    argv.get(i).and_then(Value::as_i64).ok_or_else(|| {
+        anyhow!(
+            "{who} 应是整数；下一步：检查实参形态（当前：{}）",
+            preview(argv.get(i).unwrap_or(&Value::Null))
+        )
+    })
+}
+
+/// 取可选的第 i 个整数参数（缺省或 null 得 None）。
+fn opt_int_arg(argv: &[Value], i: usize, who: &str) -> Result<Option<i64>> {
+    match argv.get(i) {
+        None | Some(Value::Null) => Ok(None),
+        Some(_) => int_arg(argv, i, who).map(Some),
+    }
+}
+
+/// 值方法面入口：字符串与数组的成员调用；非该方法面的成员返回 None，
+/// 由调用方落类型感知 CTA。
+fn value_method(o: &Value, prop: &str, argv: &[Value]) -> Option<Result<Value>> {
+    match o {
+        Value::String(s) => string_method(s, prop, argv),
+        Value::Array(a) => array_method(a, prop, argv),
+        _ => None,
+    }
+}
+
+/// 字符串方法面：slice 按UTF-16 单元（同 `.length` 口径），大小写转换按
+/// 字符非 locale 敏感。
+fn string_method(s: &str, prop: &str, argv: &[Value]) -> Option<Result<Value>> {
+    Some(match prop {
+        "slice" => (|| {
+            let start = int_arg(argv, 0, "slice 的 start")?;
+            let end = opt_int_arg(argv, 1, "slice 的 end")?;
+            Ok(json!(js_slice_units(s, start, end)))
+        })(),
+        "split" => (|| {
+            let sep = str_arg(argv, 0, "split 的分隔符")?;
+            if sep.is_empty() {
+                bail!(
+                    "split 的分隔符不能是空串；下一步：逐字符拆解走页面侧 Runtime.evaluate 或 shell 处理"
+                );
+            }
+            Ok(json!(s.split(sep).map(|p| json!(p)).collect::<Vec<_>>()))
+        })(),
+        "includes" => (|| Ok(json!(s.contains(str_arg(argv, 0, "includes 的子串")?))))(),
+        "startsWith" => (|| Ok(json!(s.starts_with(str_arg(argv, 0, "startsWith 的前缀")?))))(),
+        "endsWith" => (|| Ok(json!(s.ends_with(str_arg(argv, 0, "endsWith 的后缀")?))))(),
+        "trim" => Ok(json!(s.trim())),
+        "toUpperCase" => Ok(json!(s.to_uppercase())),
+        "toLowerCase" => Ok(json!(s.to_lowercase())),
+        _ => return None,
+    })
+}
+
+/// 数组方法面：join 对容器元素打紧凑 JSON（与 JS 的 [object Object] 不同，
+/// 取对 agent 更有用的形态）。
+fn array_method(a: &[Value], prop: &str, argv: &[Value]) -> Option<Result<Value>> {
+    Some(match prop {
+        "slice" => (|| {
+            let start = int_arg(argv, 0, "slice 的 start")?;
+            let end = opt_int_arg(argv, 1, "slice 的 end")?;
+            Ok(Value::Array(js_slice_items(a, start, end)))
+        })(),
+        "join" => {
+            let sep = argv.first().and_then(Value::as_str).unwrap_or(",");
+            let parts: Vec<String> = a
+                .iter()
+                .map(|v| match v {
+                    Value::Null => String::new(),
+                    Value::String(s) => s.clone(),
+                    other => other.to_string(),
+                })
+                .collect();
+            Ok(json!(parts.join(sep)))
+        }
+        "includes" => (|| {
+            let needle = argv.first().cloned().ok_or_else(|| {
+                anyhow!("includes 应带一个待查值；下一步：includes(v) 按值等值比对")
+            })?;
+            Ok(json!(a.iter().any(|x| json_value_eq(x, &needle))))
+        })(),
+        "concat" => (|| {
+            let mut out = a.to_vec();
+            for (i, v) in argv.iter().enumerate() {
+                match v {
+                    Value::Array(xs) => out.extend(xs.iter().cloned()),
+                    _ => bail!(
+                        "concat 的第 {} 个实参应是数组；下一步：concat(数组...) 逐个拼接（当前：{}）",
+                        i + 1,
+                        preview(v)
+                    ),
+                }
+            }
+            Ok(Value::Array(out))
+        })(),
+        _ => return None,
+    })
+}
+
+/// JSON 命名空间（#21）：`JSON.parse` 与 `JSON.stringify` 做宿主侧的
+/// 序列化往返（结果小加工、回传 shell）。
+fn call_json_ns(prop: &str, argv: &[Value]) -> Result<Value> {
+    match prop {
+        "parse" => {
+            let s = str_arg(argv, 0, "JSON.parse 的入参")?;
+            serde_json::from_str(s).map_err(|e| anyhow!(
+                "不是合法 JSON（{e}）；下一步：先 await print(x) 看原值形态再解析；CDP getResponseBody 的 body 已是解码后字符串"
+            ))
+        }
+        "stringify" => {
+            let v = argv.first().cloned().unwrap_or(Value::Null);
+            let indent = opt_int_arg(argv, 1, "JSON.stringify 的 indent")?.unwrap_or(0);
+            if indent > 0 {
+                Ok(json!(serde_json::to_string_pretty(&v)?))
+            } else {
+                Ok(json!(v.to_string()))
+            }
+        }
+        other => {
+            bail!("JSON.{other} 不存在；下一步：JSON 只有 parse(字符串) 与 stringify(值, indent?)")
+        }
+    }
+}
+
 /// 预览截断帽（字符数）：超长截断并标注总长。
 const PREVIEW_MAX_CHARS: usize = 24;
 
@@ -1281,6 +1513,164 @@ mod tests {
         let p = preview(&json!(long));
         assert!(p.contains(&format!("共 {n} 字符")), "超长应标注总长: {p}");
         assert!(p.chars().count() < n, "预览应被截断: {p}");
+    }
+
+    /// JSON 命名空间（#21）：parse/stringify 往返、indent 多行、错误带 CTA。
+    #[tokio::test]
+    async fn json_namespace_roundtrip() {
+        let host = JsHost::new(cdp::Session::new());
+        let v = host
+            .eval_snippet(r#"return JSON.parse("{\"a\":1,\"b\":[2,3]}")"#)
+            .await
+            .expect("parse");
+        assert_eq!(v.pointer("/b/1"), Some(&json!(3)));
+        let s = host
+            .eval_snippet(r#"return JSON.stringify({"a": 1})"#)
+            .await
+            .expect("stringify");
+        assert_eq!(s, json!("{\"a\":1}"));
+        let pretty = host
+            .eval_snippet(r#"return JSON.stringify({"a": 1}, 2)"#)
+            .await
+            .expect("stringify pretty");
+        assert!(
+            pretty.as_str().is_some_and(|p| p.contains('\n')),
+            "indent 应出多行: {pretty:?}"
+        );
+        let e = host
+            .eval_snippet(r#"return JSON.parse("{oops")"#)
+            .await
+            .expect_err("坏 JSON 应报错")
+            .to_string();
+        assert!(e.contains("不是合法 JSON") && e.contains("下一步："), "{e}");
+        let e = host
+            .eval_snippet("return JSON.bogus()")
+            .await
+            .expect_err("未知 JSON 方法应报错")
+            .to_string();
+        assert!(
+            e.contains("JSON.bogus 不存在") && e.contains("parse"),
+            "{e}"
+        );
+    }
+
+    /// 值方法面（#21）：字符串与数组方法、UTF-16 口径、错误 CTA 列方法清单。
+    #[tokio::test]
+    async fn value_methods_face() {
+        let host = JsHost::new(cdp::Session::new());
+        // 字符串：slice 正负索引与 UTF-16 单元口径、split、trim、大小写、前后缀
+        let v = host
+            .eval_snippet(r#"return "hello".slice(1, 3)"#)
+            .await
+            .unwrap();
+        assert_eq!(v, json!("el"));
+        let v = host
+            .eval_snippet(r#"return "hello".slice(-3)"#)
+            .await
+            .unwrap();
+        assert_eq!(v, json!("llo"));
+        let v = host
+            .eval_snippet(r#"return "hello".slice(3, 1)"#)
+            .await
+            .unwrap();
+        assert_eq!(v, json!(""));
+        let v = host
+            .eval_snippet(r#"return "中文字".slice(1, 2)"#)
+            .await
+            .unwrap();
+        assert_eq!(v, json!("文"));
+        let v = host
+            .eval_snippet(r#"return "a,b,,c".split(",")"#)
+            .await
+            .unwrap();
+        assert_eq!(v, json!(["a", "b", "", "c"]));
+        let v = host.eval_snippet(r#"return " x ".trim()"#).await.unwrap();
+        assert_eq!(v, json!("x"));
+        let v = host
+            .eval_snippet(r#"return "Hi".toLowerCase()"#)
+            .await
+            .unwrap();
+        assert_eq!(v, json!("hi"));
+        let v = host
+            .eval_snippet(r#"return "report.pdf".endsWith(".pdf")"#)
+            .await
+            .unwrap();
+        assert_eq!(v, json!(true));
+        // 数组：slice、join（null 空串、容器紧凑 JSON）、includes、concat
+        let v = host
+            .eval_snippet(r#"return [1,2,3,4].slice(-2)"#)
+            .await
+            .unwrap();
+        assert_eq!(v, json!([3, 4]));
+        let v = host
+            .eval_snippet(r#"return [1,null,"x"].join("-")"#)
+            .await
+            .unwrap();
+        assert_eq!(v, json!("1--x"));
+        let v = host
+            .eval_snippet(r#"return [{"k":1}].join()"#)
+            .await
+            .unwrap();
+        assert_eq!(v, json!("{\"k\":1}"));
+        let v = host
+            .eval_snippet(r#"return [1,2].includes(2)"#)
+            .await
+            .unwrap();
+        assert_eq!(v, json!(true));
+        // includes 数值宽等（#21 评审 F）：1 与 1.0 跨形态同值，对齐 JS
+        let v = host
+            .eval_snippet(r#"return [1,2].includes(2.0)"#)
+            .await
+            .unwrap();
+        assert_eq!(v, json!(true));
+        let v = host
+            .eval_snippet(r#"return [1.5].includes(1.5)"#)
+            .await
+            .unwrap();
+        assert_eq!(v, json!(true));
+        let v = host
+            .eval_snippet(r#"return [1].includes(3)"#)
+            .await
+            .unwrap();
+        assert_eq!(v, json!(false));
+        let v = host
+            .eval_snippet(r#"return [1].concat([2],[3])"#)
+            .await
+            .unwrap();
+        assert_eq!(v, json!([1, 2, 3]));
+        // 错误 CTA：类型感知，各自列方法清单
+        let e = host
+            .eval_snippet(r#"return "abc".nope()"#)
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(
+            e.contains("字符串可调 slice") && e.contains("trim()"),
+            "{e}"
+        );
+        let e = host
+            .eval_snippet(r#"return [1].nope()"#)
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains("数组可调 slice") && e.contains("concat"), "{e}");
+    }
+
+    /// 方法面清单与 surface 目录同源绑定（#21 评审 G）：增删方法只改
+    /// consts 不改目录描述，在这里红。
+    #[test]
+    fn method_face_catalog_lists_all_methods() {
+        let entry = crate::surface::COMMANDS
+            .iter()
+            .find(|c| c.name == "value-methods")
+            .expect("value-methods 条目应在目录");
+        for m in STRING_METHODS.iter().chain(ARRAY_METHODS.iter()) {
+            let name = m.split('(').next().unwrap();
+            assert!(
+                entry.description.contains(name),
+                "{name} 应在 value-methods 目录描述里"
+            );
+        }
     }
 
     /// length 成员访问：字符串（UTF-16 单元）与数组（元素数）求值不静默（#15 回归锁）。

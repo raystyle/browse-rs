@@ -616,9 +616,25 @@ impl<'a> Parser<'a> {
         }
         let s = &self.src[start..self.pos];
         if s.contains('.') {
-            Ok(json!(s.parse::<f64>()?))
+            s.parse::<f64>().map(|v| json!(v)).map_err(|_| {
+                anyhow!(
+                    "数字字面量 {s} 解析不了（{}）；下一步：检查小数点与位数",
+                    self.here()
+                )
+            })
         } else {
-            Ok(json!(s.parse::<i64>()?))
+            s.parse::<i64>()
+                .map(|v| json!(v))
+                .map_err(|e| {
+                    // 按错误分型：真溢出才给大数出路，形态错（如裸负号）归因形态
+                    let hint =
+                        if matches!(e.kind(), std::num::IntErrorKind::PosOverflow | std::num::IntErrorKind::NegOverflow) {
+                            format!("整数 {s} 超出 64 位范围；下一步：超范围大数改字符串字面量承载，页面侧大整数走 session.Runtime.evaluate 的 BigInt")
+                        } else {
+                            format!("数字字面量 {s} 形态不对；下一步：此处应是数字（负号后须跟数字）")
+                        };
+                    anyhow!("{hint}（{}）", self.here())
+                })
         }
     }
 }

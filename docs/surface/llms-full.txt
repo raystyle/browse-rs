@@ -68,6 +68,9 @@
 | `recordStop()` | 停止录制，回 {frames,bytes,dir}（PNG 已在盘上）。 |
 | `hostFunctions()` | 本目录的运行时探针（agent 自描述，schema/清单同源）。 |
 | `print(x)` | 把值打到 daemon stderr（调试用）。 |
+| `JSON.parse(s)` | 宿主侧把 JSON 文本解析成值（getResponseBody 等结果的小加工，#21）。 |
+| `JSON.stringify(v, indent?)` | 宿主侧把值序列化成字符串回传（indent 大于 0 出两格缩进多行形）。 |
+| `值.slice(start,end?) 等` | 字符串与数组的小加工（#21）：字符串 slice(start,end?)/split(sep)/includes(sub)/startsWith(sub)/endsWith(sub)/trim()/toUpperCase()/toLowerCase()；数组 slice(start,end?)/join(sep?)/includes(v)/concat(数组...)。slice 按 UTF-16 单元（同 .length，代理对切中间出替换符）；大小写转换非 locale；join 对容器元素打紧凑 JSON；includes 数值宽等（1 与 1.0 同值）。纯函数无控制流，页面内逻辑仍走 Runtime.evaluate。 |
 
 ## session 方法
 
@@ -693,6 +696,38 @@ return await hostFunctions()
 
 ```js
 await print(tabs)
+```
+
+## `JSON.parse(s)`
+
+宿主侧把 JSON 文本解析成值（getResponseBody 等结果的小加工，#21）。
+
+参数：
+- `s`（string），必填
+
+```js
+return JSON.parse(body).title
+```
+
+## `JSON.stringify(v, indent?)`
+
+宿主侧把值序列化成字符串回传（indent 大于 0 出两格缩进多行形）。
+
+参数：
+- `v`（any），必填
+- `indent`（int）
+
+```js
+return JSON.stringify(tabs, 2)
+```
+
+## `值.slice(start,end?) 等`
+
+字符串与数组的小加工（#21）：字符串 slice(start,end?)/split(sep)/includes(sub)/startsWith(sub)/endsWith(sub)/trim()/toUpperCase()/toLowerCase()；数组 slice(start,end?)/join(sep?)/includes(v)/concat(数组...)。slice 按 UTF-16 单元（同 .length，代理对切中间出替换符）；大小写转换非 locale；join 对容器元素打紧凑 JSON；includes 数值宽等（1 与 1.0 同值）。纯函数无控制流，页面内逻辑仍走 Runtime.evaluate。
+
+
+```js
+return body.slice(0, 200)
 ```
 
 ## `session.connect(opts?)`
