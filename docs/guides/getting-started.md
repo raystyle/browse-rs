@@ -14,7 +14,7 @@ browse --help
 ```bash
 browse --headless 'await session.Page.navigate({url:"data:text/html,<title>hi</title>"} )'
 browse 'return (await session.Runtime.evaluate({expression:"document.title", returnByValue:true})).result.value'
-# hi
+# "hi"（字符串带引号，与对象输出可区分，#21）
 ```
 
 - `--headless` 只影响**首次** spawn 的引擎形态；daemon 常驻，后续调用免拉起。

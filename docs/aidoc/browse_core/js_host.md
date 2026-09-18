@@ -12,7 +12,7 @@
 
 ## Functions
 
-- `render_result` — 把方言求值结果渲染成 CLI stdout 文本：标量裸打、空容器不打、其余打 JSON。
+- `render_result` — 把方言求值结果渲染成 CLI stdout 文本：字符串带引号（JSON 转义，与对象
 
 ## Types
 

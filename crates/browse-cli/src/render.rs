@@ -16,7 +16,8 @@ fn drops_dir() -> PathBuf {
 }
 
 /// 渲染求值结果；超阈值时写文件并返回提示行（含路径与预览），
-/// 未超阈值返回正常渲染。
+/// 未超阈值返回正常渲染。落盘文件写原文（字符串不带展示引号），stdout
+/// 展示面才带类型区分（#21）；回执 `bytes` 是工件字节（非展示形态长度）。
 ///
 /// # Errors
 ///
@@ -26,12 +27,20 @@ fn drops_dir() -> PathBuf {
 ///
 /// ```
 /// use serde_json::json;
-/// // 小值正常渲染
-/// assert_eq!(browse_cli::render::render_or_drop_sync(&json!("hi")).unwrap(), "hi");
-/// // 大值落盘（同步测试路径）
+/// // 小值正常渲染（字符串带引号，与对象输出可区分）
+/// assert_eq!(
+///     browse_cli::render::render_or_drop_sync(&json!("hi")).unwrap(),
+///     "\"hi\""
+/// );
+/// // 大值落盘（同步测试路径）；回执 bytes 是工件字节，不含展示引号
 /// let big = json!("x".repeat(browse_cli::render::DROP_THRESHOLD + 1));
 /// let line = browse_cli::render::render_or_drop_sync(&big).unwrap();
 /// assert!(line.contains("__dropped"), "{line}");
+/// let receipt: serde_json::Value = serde_json::from_str(&line).unwrap();
+/// assert_eq!(
+///     receipt["bytes"].as_u64(),
+///     Some(browse_cli::render::DROP_THRESHOLD as u64 + 1)
+/// );
 /// ```
 pub fn render_or_drop_sync(v: &Value) -> std::io::Result<String> {
     let rendered = browse_core::render_result(v);
@@ -49,7 +58,12 @@ pub fn render_or_drop_sync(v: &Value) -> std::io::Result<String> {
         _ => "txt",
     };
     let path = dir.join(format!("value-{ts}.{ext}"));
-    std::fs::write(&path, &rendered)?;
+    // 文件是工件不是展示：字符串落原文，容器落 JSON 序列化
+    let raw = match v {
+        Value::String(s) => s.clone(),
+        _ => rendered.clone(),
+    };
+    std::fs::write(&path, &raw)?;
     let preview: String = rendered.chars().take(PREVIEW_CHARS).collect();
     let suffix = if rendered.chars().count() > PREVIEW_CHARS {
         "…"
@@ -58,7 +72,7 @@ pub fn render_or_drop_sync(v: &Value) -> std::io::Result<String> {
     };
     Ok(format!(
         "{{\"__dropped\": true, \"bytes\": {}, \"path\": {}, \"preview\": {}}}",
-        rendered.len(),
+        raw.len(),
         Value::String(path.display().to_string()),
         Value::String(format!("{preview}{suffix}"))
     ))

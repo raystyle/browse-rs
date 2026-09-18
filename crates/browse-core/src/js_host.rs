@@ -1124,27 +1124,57 @@ fn connect_opts(v: Option<&Value>) -> ConnectOptions {
     }
 }
 
-fn preview(v: &Value) -> String {
-    match v {
-        Value::String(s) => s.clone(),
-        other => other.to_string(),
+/// 预览截断帽（字符数）：超长截断并标注总长。
+const PREVIEW_MAX_CHARS: usize = 24;
+
+/// 按预览帽截断，超长时尾注总字符数。
+fn trunc_preview(s: &str) -> String {
+    let n = s.chars().count();
+    if n > PREVIEW_MAX_CHARS {
+        format!(
+            "{}…(共 {n} 字符)",
+            s.chars().take(PREVIEW_MAX_CHARS).collect::<String>()
+        )
+    } else {
+        s.to_string()
     }
 }
 
-/// 把方言求值结果渲染成 CLI stdout 文本：标量裸打、空容器不打、其余打 JSON。
+/// 求值值的类型化短预览（报错与 `print` 调试）：标类型加截断内容，字符串
+/// 带引号、容器打 JSON 截断；杜绝「JSON 文本看着像对象」的误导（#21）。
+fn preview(v: &Value) -> String {
+    match v {
+        Value::Null => "null".to_string(),
+        Value::Bool(b) => format!("布尔 {b}"),
+        Value::Number(n) => format!("数字 {n}"),
+        Value::String(s) => format!("字符串\"{}\"", trunc_preview(s)),
+        Value::Array(a) => {
+            let s = serde_json::to_string(a).unwrap_or_default();
+            format!("数组 {}", trunc_preview(&s))
+        }
+        Value::Object(o) => {
+            let s = serde_json::to_string(o).unwrap_or_default();
+            format!("对象 {}", trunc_preview(&s))
+        }
+    }
+}
+
+/// 把方言求值结果渲染成 CLI stdout 文本：字符串带引号（JSON 转义，与对象
+/// 输出可区分，#21）、数字与布尔裸打、空容器不打、其余打 JSON。
 ///
 /// # Examples
 ///
 /// ```
 /// use serde_json::json;
-/// assert_eq!(browse_core::render_result(&json!("hi")), "hi");
+/// assert_eq!(browse_core::render_result(&json!("hi")), "\"hi\"");
+/// assert_eq!(browse_core::render_result(&json!("a\"b\n")), "\"a\\\"b\\n\"");
+/// assert_eq!(browse_core::render_result(&json!(7)), "7");
 /// assert_eq!(browse_core::render_result(&json!({})), "");
 /// assert_eq!(browse_core::render_result(&json!({"a": 1})), r#"{"a":1}"#);
 /// ```
 pub fn render_result(v: &Value) -> String {
     match v {
         Value::Null => String::new(),
-        Value::String(s) => s.clone(),
         Value::Array(a) if a.is_empty() => String::new(),
         Value::Object(o) if o.is_empty() => String::new(),
         other => other.to_string(),
@@ -1217,6 +1247,40 @@ mod tests {
             let dec = base64_decode(&enc).unwrap();
             assert_eq!(dec, s.as_bytes(), "{s:?} 往返失败");
         }
+    }
+
+    /// 渲染带类型区分（#21）：字符串带引号与对象输出可区分，标量裸打不变。
+    #[test]
+    fn render_result_types_strings() {
+        assert_eq!(render_result(&json!("hi")), "\"hi\"");
+        assert_eq!(render_result(&json!("a\"b\n")), "\"a\\\"b\\n\"");
+        assert_eq!(render_result(&json!(7)), "7");
+        assert_eq!(render_result(&json!(true)), "true");
+        assert_eq!(render_result(&json!({})), "");
+        assert_eq!(render_result(&json!([])), "");
+        assert_eq!(render_result(&json!({"a": 1})), r#"{"a":1}"#);
+        // JSON 文本字符串不再与对象输出同形（getResponseBody 陷阱，#21）
+        assert_eq!(render_result(&json!(r#"{"a":1}"#)), "\"{\\\"a\\\":1}\"");
+        assert_ne!(
+            render_result(&json!(r#"{"a":1}"#)),
+            render_result(&json!({"a": 1}))
+        );
+    }
+
+    /// 类型化预览（#21）：报错与 print 的 receiver 标类型，超长按字符截断标总长。
+    #[test]
+    fn preview_is_typed_and_truncated() {
+        assert_eq!(preview(&json!(null)), "null");
+        assert_eq!(preview(&json!(false)), "布尔 false");
+        assert_eq!(preview(&json!(42)), "数字 42");
+        assert_eq!(preview(&json!("abc")), "字符串\"abc\"");
+        assert_eq!(preview(&json!([1, 2])), "数组 [1,2]");
+        assert_eq!(preview(&json!({"a": 1})), "对象 {\"a\":1}");
+        let long = "中文一二三四五六".repeat(10);
+        let n = long.chars().count();
+        let p = preview(&json!(long));
+        assert!(p.contains(&format!("共 {n} 字符")), "超长应标注总长: {p}");
+        assert!(p.chars().count() < n, "预览应被截断: {p}");
     }
 
     /// length 成员访问：字符串（UTF-16 单元）与数组（元素数）求值不静默（#15 回归锁）。

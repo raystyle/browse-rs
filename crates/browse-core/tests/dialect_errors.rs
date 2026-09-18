@@ -55,6 +55,16 @@ async fn eval_errors_carry_next_step() {
     let e = err_of("await nosuchglobal()").await;
     assert!(e.contains("未知函数 nosuchglobal"), "{e}");
     assert!(e.contains("listPageTargets()"), "应列出可用全局: {e}");
+
+    // 对字符串值调方法（#21）：报错带 receiver 类型与带引号形态，
+    // 不再裸打让 JSON 文本看着像对象
+    let e = err_of(r#"return "slideshow".slice()"#).await;
+    assert!(
+        e.contains("字符串\"slideshow\""),
+        "receiver 应带类型与引号形态: {e}"
+    );
+    assert!(e.contains(".slice"), "{e}");
+    assert!(e.contains("下一步："), "{e}");
 }
 
 #[tokio::test]

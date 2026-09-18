@@ -150,7 +150,7 @@
     {
       "path": "browse_core::js_host::render_result",
       "kind": "function",
-      "docs": "把方言求值结果渲染成 CLI stdout 文本：标量裸打、空容器不打、其余打 JSON。\n\n# Examples\n\n```\nuse serde_json::json;\nassert_eq!(browse_core::render_result(&json!(\"hi\")), \"hi\");\nassert_eq!(browse_core::render_result(&json!({})), \"\");\nassert_eq!(browse_core::render_result(&json!({\"a\": 1})), r#\"{\"a\":1}\"#);\n```"
+      "docs": "把方言求值结果渲染成 CLI stdout 文本：字符串带引号（JSON 转义，与对象\n输出可区分，#21）、数字与布尔裸打、空容器不打、其余打 JSON。\n\n# Examples\n\n```\nuse serde_json::json;\nassert_eq!(browse_core::render_result(&json!(\"hi\")), \"\\\"hi\\\"\");\nassert_eq!(browse_core::render_result(&json!(\"a\\\"b\\n\")), \"\\\"a\\\\\\\"b\\\\n\\\"\");\nassert_eq!(browse_core::render_result(&json!(7)), \"7\");\nassert_eq!(browse_core::render_result(&json!({})), \"\");\nassert_eq!(browse_core::render_result(&json!({\"a\": 1})), r#\"{\"a\":1}\"#);\n```"
     },
     {
       "path": "browse_core::parser",

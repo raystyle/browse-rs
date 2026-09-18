@@ -90,7 +90,7 @@
     {
       "path": "browse_cli::render::render_or_drop_sync",
       "kind": "function",
-      "docs": "渲染求值结果；超阈值时写文件并返回提示行（含路径与预览），\n未超阈值返回正常渲染。\n\n# Errors\n\n落盘失败（目录不可写）。\n\n# Examples\n\n```\nuse serde_json::json;\n// 小值正常渲染\nassert_eq!(browse_cli::render::render_or_drop_sync(&json!(\"hi\")).unwrap(), \"hi\");\n// 大值落盘（同步测试路径）\nlet big = json!(\"x\".repeat(browse_cli::render::DROP_THRESHOLD + 1));\nlet line = browse_cli::render::render_or_drop_sync(&big).unwrap();\nassert!(line.contains(\"__dropped\"), \"{line}\");\n```"
+      "docs": "渲染求值结果；超阈值时写文件并返回提示行（含路径与预览），\n未超阈值返回正常渲染。落盘文件写原文（字符串不带展示引号），stdout\n展示面才带类型区分（#21）；回执 `bytes` 是工件字节（非展示形态长度）。\n\n# Errors\n\n落盘失败（目录不可写）。\n\n# Examples\n\n```\nuse serde_json::json;\n// 小值正常渲染（字符串带引号，与对象输出可区分）\nassert_eq!(\n    browse_cli::render::render_or_drop_sync(&json!(\"hi\")).unwrap(),\n    \"\\\"hi\\\"\"\n);\n// 大值落盘（同步测试路径）；回执 bytes 是工件字节，不含展示引号\nlet big = json!(\"x\".repeat(browse_cli::render::DROP_THRESHOLD + 1));\nlet line = browse_cli::render::render_or_drop_sync(&big).unwrap();\nassert!(line.contains(\"__dropped\"), \"{line}\");\nlet receipt: serde_json::Value = serde_json::from_str(&line).unwrap();\nassert_eq!(\n    receipt[\"bytes\"].as_u64(),\n    Some(browse_cli::render::DROP_THRESHOLD as u64 + 1)\n);\n```"
     }
   ]
 }
