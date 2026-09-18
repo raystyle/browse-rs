@@ -72,6 +72,9 @@ fn catalog_names_unique() {
 #[tokio::test]
 async fn every_catalog_entry_dispatches() {
     let host = JsHost::new(cdp::Session::new());
+    // chromeUpdate 探针的隔离窗：钉非法发现值（不建 http client、不触网），
+    // 保留原值探针后还原；进程内无其他读者
+    let mut saved_latest: Option<String> = None;
     for c in surface::COMMANDS {
         let call = match c.kind {
             // 调用形才走真派发（裸名只撞变量表，断言会空转假绿）
@@ -79,19 +82,21 @@ async fn every_catalog_entry_dispatches() {
             CmdKind::Session => format!("session.{name}()", name = c.name),
             CmdKind::Cli => continue, // CLI 形态不走方言派发
         };
-        // chromeUpdate 探针要隔离网络：钉死环回拒连镜像（进程内无其他读者，
-        // 本测独占该 env 窗口）
         if c.name == "chromeUpdate" {
-            // SAFETY: 测试进程内短窗设置，探针后即刻还原；无并发读者（见上注）
+            // SAFETY: 短窗覆写，探针后按原值还原；无并发读者（见上注）
             unsafe {
-                std::env::set_var("BROWSE_CHROME_MIRROR", "http://127.0.0.1:9");
+                saved_latest = std::env::var("BROWSE_CHROME_LATEST").ok();
+                std::env::set_var("BROWSE_CHROME_LATEST", "!!探针非法值!!");
             }
         }
         let r = host.eval_snippet(&call).await;
         if c.name == "chromeUpdate" {
-            // SAFETY: 同上，还原窗口
+            // SAFETY: 同上，还原窗口（原值存在则回写，否则清除）
             unsafe {
-                std::env::remove_var("BROWSE_CHROME_MIRROR");
+                match saved_latest.as_ref() {
+                    Some(v) => std::env::set_var("BROWSE_CHROME_LATEST", v),
+                    None => std::env::remove_var("BROWSE_CHROME_LATEST"),
+                }
             }
         }
         let msg = match &r {
@@ -154,6 +159,8 @@ fn help_lists_every_cli_flag() {
     let mut flags: Vec<String> = src
         .split(['"', '|'])
         .map(str::trim)
+        // 未来形如 --foo=<v> 的取值臂取 = 前段
+        .map(|t| t.split('=').next().unwrap_or(t))
         .filter(|t| {
             t.starts_with("--")
                 && t.len() > 2
@@ -165,13 +172,37 @@ fn help_lists_every_cli_flag() {
     flags.sort();
     flags.dedup();
     assert!(!flags.is_empty(), "旗标抽取不应为空（抽取器坏了）");
-    for f in flags {
-        let hit = help.lines().map(str::trim_start).any(|l| {
-            l == f
+    let options_rows: Vec<&str> = help
+        .lines()
+        .skip_while(|l| !l.starts_with("Options:"))
+        .skip(1)
+        .take_while(|l| !l.starts_with("片段方言"))
+        .filter(|l| !l.trim().is_empty())
+        .collect();
+    // 对称断言：解析面旗标各占 Options 一行（漏登与重复都让行数失配）
+    assert_eq!(
+        options_rows.len(),
+        flags.len(),
+        "Options 节行数应等于解析面旗标数（豁免表 exempt：{exempt:?}）"
+    );
+    for f in &flags {
+        let hit = options_rows.iter().any(|l| {
+            let l = l.trim_start();
+            l == f.as_str()
                 || l.starts_with(&format!("{f} "))
                 || l.starts_with(&format!("{f},"))
                 || l.starts_with(&format!("{f}  "))
         });
-        assert!(hit, "帮助面缺旗标 {f}");
+        assert!(hit, "帮助面缺旗标 {f}（豁免表 exempt：{exempt:?}）");
+    }
+    // 反向守卫：Options 宣传的旗标解析面必须真认识（防帮助面宣传不存在的旗标）
+    for row in &options_rows {
+        let tok = row.trim_start().split([' ', ',']).next().unwrap_or("");
+        assert!(
+            src.contains(&format!("\"{tok}\""))
+                || src.contains(&format!("\"{tok} |"))
+                || exempt.contains(&tok),
+            "帮助面宣传的旗标 {tok} 解析面不认识"
+        );
     }
 }

@@ -14,7 +14,7 @@ clean-chrome（自编 Chromium），常驻 daemon 让会话、变量、活动 ta
 - 常驻 daemon：会话、变量、活动 tab 与元素引用跨命令存活
 - 页面级原语：snapshot/screenshot/pdf、clickRef/fillRef、路由拦截与假应答
 - 附着优先引擎策略：探测本机浏览器，缺则 spawn 隔离实例；绝不关用户浏览器
-- 内嵌 Chromium 版本管理器：install/use/list/doctor，镜像锚校验原子落位
+- 内嵌 Chromium 版本管理器：install/update/use/remove/list/doctor，镜像锚校验原子落位
 - agent 面：`--llms` 手册直出、错误带可照抄「下一步」、裸调用不弹交互
 
 与家族分工：omc 管资源分发与总台协调；ark 管舰队执行与安装管理；browse
@@ -25,11 +25,14 @@ clean-chrome（自编 Chromium），常驻 daemon 让会话、变量、活动 ta
 
 ## 部署
 
-三条通道：
+四条通道：
 
 1. ark install（舰队安装管理，单通道契约：无自升级子命令，升级走管理方或重下；
-   catalog 入册随总台 catalog pin 滚动，未入册前走下两通道）
-2. 镜像直下：`https://browse.ohmygh.com/browse/<版本>/<资产>`，三平台包
+   catalog 入册随总台 catalog pin 滚动，未入册前走下三通道）
+2. GitHub Releases 直下：<https://github.com/raystyle/browse-rs/releases>
+   （每版六件：三平台包加同名 `.sha256` 边车，`sha256sum -c` 核验）
+3. 镜像直下：`https://browse.ohmygh.com/browse/<版本>/<资产>`（GitHub
+   Releases 的播种副本），三平台包
    加同名 `.sha256` 边车（sha256sum 原生格式，下载后 `sha256sum -c` 核验）：
 
    | 平台 | 资产 |
@@ -38,7 +41,7 @@ clean-chrome（自编 Chromium），常驻 daemon 让会话、变量、活动 ta
    | Windows x86_64 | `browse-v<版本>-x86_64-pc-windows-gnu.zip` |
    | macOS arm64 | `browse-v<版本>-aarch64-apple-darwin.tar.gz` |
 
-3. 源码：`cargo install --path crates/browse-cli --force`
+4. 源码：`cargo install --path crates/browse-cli --force`
 
 五端注意：Windows（win-gnu 交叉构建，CRT 静态零 DLL 依赖）；Linux 最小
 系统补 `libnss3 libasound2t64` 族；macOS arm64。装好后首条命令自动拉起

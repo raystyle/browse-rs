@@ -54,7 +54,7 @@ fn valid_version(v: &str) -> Result<()> {
         Ok(())
     } else {
         bail!(
-            "版本号 {v:?} 非法（只允许字母数字与 . _ -，至多 64 字符）；\
+            "版本号 {v:?} 非法（只允许字母数字与 . _ -，且不得为 . 或 ..，至多 64 字符）；\
              下一步：用 chromeInstall 传入目录名自带的版本（如 chromium-152.0.7977.84 的 152.0.7977.84）"
         )
     }
@@ -446,13 +446,22 @@ fn count_tree(dir: &Path) -> (u64, u64) {
 ///
 /// 版本未安装（错误带 chromeList/chromeInstall CTA）。
 pub fn use_version(root: &Path, version: &str) -> Result<Value> {
+    valid_version(version)?;
     let mut m = read_manifest(root);
     if !m.installed.iter().any(|i| i.version == version) {
         let have: Vec<&str> = m.installed.iter().map(|i| i.version.as_str()).collect();
         bail!(
             "版本 {version} 未安装（已装：[{}]）；\
-             下一步：chromeInstall({{fromDir: \"chromium-{version}\"}}) 先装，或 chromeList() 看已装",
+             下一步：browse chrome install <版本> 先装，或 browse chrome list 看已装",
             have.join(", ")
+        );
+    }
+    // 部署在位闸（F1′/G3′ 单点修）：登记在册但目录已失的残留态不许成 pin，
+    // 否则 pin 指向空位破「pin 永远指向在位版本」不变量
+    if check_deployed(&version_dir(root, version)).is_err() {
+        bail!(
+            "版本 {version} 登记在册但部署已失（残留态，可能是中断残留）；\
+             下一步：browse chrome install {version} 重装，或 browse chrome remove {version} 清登记"
         );
     }
     m.pinned = Some(version.to_string());
@@ -591,10 +600,12 @@ pub fn remove_version(root: &Path, version: &str) -> Result<Value> {
     let rec = rec.clone();
     let dir = version_dir(root, version);
     // NotFound 视作已删（幂等：两次 remove 竞态或删后写 manifest 中断的残留态，
-    // 登记必须照样清，否则任何 CLI 面都清不掉该登记项）
+    // 登记必须照样清，否则任何 CLI 面都清不掉该登记项）；该路径实际零字节
+    // 释放，回执如实标 alreadyGone 且释放量归零（G1′）
+    let mut already_gone = false;
     match std::fs::remove_dir_all(&dir) {
         Ok(()) => {}
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => already_gone = true,
         Err(e) => bail!(
             "删 {} 失败：{e}；下一步：查占用（引擎在跑先 browse down）后重试 browse chrome remove {version}",
             dir.display()
@@ -604,8 +615,9 @@ pub fn remove_version(root: &Path, version: &str) -> Result<Value> {
     write_manifest(root, &m)?;
     Ok(json!({
         "removed": version,
-        "files": rec.files,
-        "bytes": rec.bytes,
+        "alreadyGone": already_gone,
+        "files": if already_gone { 0 } else { rec.files },
+        "bytes": if already_gone { 0 } else { rec.bytes },
         "pinned": m.pinned,
     }))
 }
@@ -809,7 +821,7 @@ mod tests {
         );
 
         let err = use_version(&root, "9.9.9").unwrap_err();
-        assert!(format!("{err:#}").contains("chromeInstall"));
+        assert!(format!("{err:#}").contains("browse chrome install"));
 
         std::fs::remove_dir_all(&root).ok();
         std::fs::remove_dir_all(&base).ok();
@@ -1009,6 +1021,47 @@ mod tests {
         );
         std::fs::remove_dir_all(&root).ok();
         std::fs::remove_dir_all(&base).ok();
+    }
+
+    /// F1′ 回归：登记在册但目录已失（残留态），update 不许假绿切 pin
+    /// （use_version 的部署在位闸拦截）。
+    #[test]
+    fn update_refuses_registered_but_gone() {
+        let root = tmp_root("rghost");
+        let base = tmp_root("rghost-src");
+        let a = fake_deploy(&base);
+        let b = fake_deploy(&base);
+        install_from_dir(&root, "1.0.0.0", &a).unwrap();
+        install_from_dir(&root, "2.0.0.0", &b).unwrap();
+        use_version(&root, "1.0.0.0").unwrap();
+        // 手造残留：登记在册、目录移走
+        std::fs::remove_dir_all(version_dir(&root, "2.0.0.0")).unwrap();
+        let err = update_with(&root, "2.0.0.0").unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(
+            msg.contains("部署已失") && msg.contains("残留态"),
+            "残留态应被部署闸拦：{msg}"
+        );
+        assert_eq!(
+            read_manifest(&root).pinned.as_deref(),
+            Some("1.0.0.0"),
+            "pin 不得被切到空位"
+        );
+        std::fs::remove_dir_all(&root).ok();
+        std::fs::remove_dir_all(&base).ok();
+    }
+
+    /// G3′：use_version 拒非法版本号，CTA 不再指向必红的 fromDir 形。
+    #[test]
+    fn use_version_rejects_invalid_version() {
+        let root = tmp_root("uvinv");
+        let err = use_version(&root, "..").unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(
+            msg.contains("非法") && !msg.contains("fromDir"),
+            "报文：{msg}"
+        );
+        std::fs::remove_dir_all(&root).ok();
     }
 
     /// G5：版本校验显式拒 `.` 与 `..`（防路径穿越注释承诺兑现）。
