@@ -2,7 +2,7 @@
 //! `docs/surface/` 的 schema/llms 是派生物，本测试锁两层漂移：
 //!
 //! 1. 盘上产物与渲染器输出逐字节一致（改目录必须 `browse --gen-surface`）。
-//! 2. 目录里的每个全局函数/session 方法都有真实派发臂（eval 裸名，
+//! 2. 目录里的每个全局函数/session 方法都有真实派发臂（调用形 eval，
 //!    错误不许是「未知函数」；不需要浏览器，走 Not-connected 报错即可证）。
 
 use browse_core::{CmdKind, JsHost, surface};
@@ -74,11 +74,26 @@ async fn every_catalog_entry_dispatches() {
     let host = JsHost::new(cdp::Session::new());
     for c in surface::COMMANDS {
         let call = match c.kind {
-            CmdKind::Global => c.name.to_string(),
-            CmdKind::Session => format!("session.{name}", name = c.name),
+            // 调用形才走真派发（裸名只撞变量表，断言会空转假绿）
+            CmdKind::Global => format!("{name}()", name = c.name),
+            CmdKind::Session => format!("session.{name}()", name = c.name),
             CmdKind::Cli => continue, // CLI 形态不走方言派发
         };
+        // chromeUpdate 探针要隔离网络：钉死环回拒连镜像（进程内无其他读者，
+        // 本测独占该 env 窗口）
+        if c.name == "chromeUpdate" {
+            // SAFETY: 测试进程内短窗设置，探针后即刻还原；无并发读者（见上注）
+            unsafe {
+                std::env::set_var("BROWSE_CHROME_MIRROR", "http://127.0.0.1:9");
+            }
+        }
         let r = host.eval_snippet(&call).await;
+        if c.name == "chromeUpdate" {
+            // SAFETY: 同上，还原窗口
+            unsafe {
+                std::env::remove_var("BROWSE_CHROME_MIRROR");
+            }
+        }
         let msg = match &r {
             Ok(_) => continue, // 有返回值必是真实臂（如 hostFunctions）
             Err(e) => format!("{e:#}"),
@@ -91,25 +106,72 @@ async fn every_catalog_entry_dispatches() {
     }
 }
 
-/// 帮助面漂移守卫（cli-docs 第四节）：`render_help` 必须覆盖目录全部 CLI
-/// 条目（命令形态取截断名、旗标形态取旗标 token），且头行版本从载体注入。
+/// 帮助面漂移守卫（cli-docs 第四节）：`render_help` 必须行首精确覆盖目录
+/// 全部 CLI 条目（防前缀超串假绿），Commands 节行数等于目录命令条数，头行
+/// 版本从载体注入。
 #[test]
 fn help_covers_catalog() {
     let help = surface::render_help();
+    let cli_cmds = surface::COMMANDS
+        .iter()
+        .filter(|c| c.kind == CmdKind::Cli && !c.signature.starts_with("browse --"))
+        .count();
+    let cmd_lines = help
+        .lines()
+        .skip_while(|l| !l.starts_with("Commands:"))
+        .skip(1)
+        .take_while(|l| !l.starts_with("Options:"))
+        .filter(|l| !l.trim().is_empty())
+        .count();
+    assert_eq!(cmd_lines, cli_cmds, "Commands 节行数应等于目录命令条数");
     for c in surface::COMMANDS.iter().filter(|c| c.kind == CmdKind::Cli) {
         let needle = if c.signature.starts_with("browse --") {
             c.signature.split(' ').nth(1).expect("旗标 token")
         } else {
             c.signature.split(" [").next().expect("命令名")
         };
-        assert!(
-            help.contains(needle),
-            "帮助面缺 CLI 条目 {needle}（{name}）",
-            name = c.name
-        );
+        let hit = help.lines().map(str::trim_start).any(|l| {
+            l == needle
+                || l.starts_with(&format!("{needle} "))
+                || l.starts_with(&format!("{needle}  "))
+        });
+        assert!(hit, "帮助面缺 CLI 条目 {needle}（{name}）", name = c.name);
     }
     assert!(
         help.contains(&format!("browse@{}", env!("CARGO_PKG_VERSION"))),
         "帮助面头行版本未注入"
     );
+}
+
+/// 反查守卫：main.rs 解析面认识的全部长旗标必须出现在帮助面（维护件与
+/// 子命令私有旗标在豁免表）；防新增全局旗标漏进 Options 节。
+#[test]
+fn help_lists_every_cli_flag() {
+    let help = surface::render_help();
+    let src = std::fs::read_to_string(repo_root().join("crates/browse-cli/src/main.rs"))
+        .expect("main.rs 应可读");
+    let exempt = ["--gen-surface", "--body", "--tool", "--status", "--limit"];
+    let mut flags: Vec<String> = src
+        .split(['"', '|'])
+        .map(str::trim)
+        .filter(|t| {
+            t.starts_with("--")
+                && t.len() > 2
+                && t.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+                && !exempt.contains(t)
+        })
+        .map(str::to_string)
+        .collect();
+    flags.sort();
+    flags.dedup();
+    assert!(!flags.is_empty(), "旗标抽取不应为空（抽取器坏了）");
+    for f in flags {
+        let hit = help.lines().map(str::trim_start).any(|l| {
+            l == f
+                || l.starts_with(&format!("{f} "))
+                || l.starts_with(&format!("{f},"))
+                || l.starts_with(&format!("{f}  "))
+        });
+        assert!(hit, "帮助面缺旗标 {f}");
+    }
 }

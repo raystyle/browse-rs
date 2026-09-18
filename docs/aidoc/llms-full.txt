@@ -152,7 +152,7 @@ assert_eq!(render(&stmts), "const tabs = await listPageTargets()");
 - `read_manifest` — 读登记册；根目录不存在或 manifest 缺失视为空册。
 - `remove_version` — 删除一个已装版本：目录与 manifest 登记一起清，回执带释放的文件数与
 - `update` — `browse chrome update`：发现最新版（[`latest_version`]），未装则镜像
-- `update_with` — 带显式版本的 update 内核（测试与程序化面，不触发现端点）：未装则装
+- `update_with` — 带显式版本的 update 内核（测试与程序化面，不触发现端点）：未登记则装
 - `use_version` — pin 切换到已装版本（引擎发现序的托管位生效点）。
 - `version_dir` — 某版本的落位目录（不校验存在）。
 - `version_from_dir_name` — 从部署目录名提取版本（`chromium-152.0.7977.84` 出 `152.0.7977.84`；

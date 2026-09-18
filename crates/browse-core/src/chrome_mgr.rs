@@ -41,9 +41,12 @@ pub struct ChromeManifest {
     pub pinned: Option<String>,
 }
 
-/// 校验版本字符串（同时是目录名）：限 `[A-Za-z0-9._-]`，防路径穿越。
+/// 校验版本字符串（同时是目录名）：限 `[A-Za-z0-9._-]` 且显式拒 `.`/`..`，
+/// 防路径穿越。
 fn valid_version(v: &str) -> Result<()> {
     let ok = !v.is_empty()
+        && v != "."
+        && v != ".."
         && v.len() <= 64
         && v.chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'));
@@ -471,10 +474,12 @@ pub fn use_version(root: &Path, version: &str) -> Result<Value> {
 pub fn latest_version() -> Result<String> {
     if let Some(v) = std::env::var("BROWSE_CHROME_LATEST")
         .ok()
-        .filter(|s| !s.is_empty())
+        .filter(|s| !s.trim().is_empty())
     {
         let v = v.trim().to_string();
-        valid_version(&v)?;
+        valid_version(&v).map_err(|e| {
+            e.context("BROWSE_CHROME_LATEST 钉的版本号非法；下一步：改成合法版本（如 152.0.7977.84-r2）或清掉该变量走镜像 latest 指针")
+        })?;
         return Ok(v);
     }
     let (mirror, _) = mirror_and_asset("");
@@ -495,7 +500,14 @@ pub fn latest_version() -> Result<String> {
         })?
         .text()
         .map_err(|e| anyhow::anyhow!("读 {url} body 失败：{e}"))?;
-    let v = body.trim().lines().last().unwrap_or("").trim().to_string();
+    // 定标单行指针：取首个非空行；后续行视作尾杂（多行内容不是纯文本指针）
+    let v = body
+        .trim()
+        .lines()
+        .find(|l| !l.trim().is_empty())
+        .unwrap_or("")
+        .trim()
+        .to_string();
     if valid_version(&v).is_err() {
         bail!(
             "{url} 返回的不是纯文本版本指针（得 {:?}，可能是 SPA 兜底页）；\
@@ -519,17 +531,27 @@ pub fn update(root: &Path) -> Result<Value> {
     update_with(root, &latest)
 }
 
-/// 带显式版本的 update 内核（测试与程序化面，不触发现端点）：未装则装
-/// （镜像腿），pin 切到该版。
+/// 带显式版本的 update 内核（测试与程序化面，不触发现端点）：未登记则装
+/// （镜像腿；已装判据与 [`use_version`] 同以 manifest 为准），pin 切到该版。
 ///
 /// # Errors
 ///
-/// 同 [`update`]（除发现失败）。
+/// 同 [`update`]（除发现失败）；目录在而 manifest 未登记的孤儿目录带专门
+/// CTA（先清目录再 update）。
 pub fn update_with(root: &Path, latest: &str) -> Result<Value> {
     valid_version(latest)?;
-    let previous = read_manifest(root).pinned;
-    let installed_now = !version_dir(root, latest).exists();
+    let m = read_manifest(root);
+    let previous = m.pinned;
+    let installed_now = !m.installed.iter().any(|i| i.version == latest);
     if installed_now {
+        // 孤儿目录（目录在、未登记）会让 install 的 exists 闸红且无出路，前置拦
+        if version_dir(root, latest).exists() {
+            bail!(
+                "版本 {latest} 的目录在位但 manifest 未登记（孤儿目录，可能是中断残留）；\
+                 下一步：手动删 {} 后重跑 update（或 chrome install 重登记）",
+                version_dir(root, latest).display()
+            );
+        }
         install_from_mirror(root, latest)?;
     }
     use_version(root, latest)?;
@@ -568,7 +590,16 @@ pub fn remove_version(root: &Path, version: &str) -> Result<Value> {
     }
     let rec = rec.clone();
     let dir = version_dir(root, version);
-    std::fs::remove_dir_all(&dir).map_err(|e| anyhow::anyhow!("删 {} 失败：{e}", dir.display()))?;
+    // NotFound 视作已删（幂等：两次 remove 竞态或删后写 manifest 中断的残留态，
+    // 登记必须照样清，否则任何 CLI 面都清不掉该登记项）
+    match std::fs::remove_dir_all(&dir) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => bail!(
+            "删 {} 失败：{e}；下一步：查占用（引擎在跑先 browse down）后重试 browse chrome remove {version}",
+            dir.display()
+        ),
+    }
     m.installed.retain(|i| i.version != version);
     write_manifest(root, &m)?;
     Ok(json!({
@@ -952,6 +983,55 @@ mod tests {
 
         std::fs::remove_dir_all(&root).ok();
         std::fs::remove_dir_all(&base).ok();
+    }
+
+    /// F2 残留态恢复：登记在而目录已失（竞态或中断残留），remove 幂等清登记
+    /// 不再死结。
+    #[test]
+    fn remove_recovers_from_leftover_entry() {
+        let root = tmp_root("rml");
+        let base = tmp_root("rml-src");
+        let a = fake_deploy(&base);
+        let b = fake_deploy(&base);
+        install_from_dir(&root, "1.0.0.0", &a).unwrap();
+        install_from_dir(&root, "2.0.0.0", &b).unwrap();
+        use_version(&root, "1.0.0.0").unwrap();
+        // 手造残留：目录删掉、登记留着
+        std::fs::remove_dir_all(version_dir(&root, "2.0.0.0")).unwrap();
+        let brief = remove_version(&root, "2.0.0.0").unwrap();
+        assert_eq!(brief["removed"], json!("2.0.0.0"));
+        assert!(
+            !read_manifest(&root)
+                .installed
+                .iter()
+                .any(|i| i.version == "2.0.0.0"),
+            "登记应被清"
+        );
+        std::fs::remove_dir_all(&root).ok();
+        std::fs::remove_dir_all(&base).ok();
+    }
+
+    /// G5：版本校验显式拒 `.` 与 `..`（防路径穿越注释承诺兑现）。
+    #[test]
+    fn version_guard_rejects_dot_and_dotdot() {
+        assert!(valid_version(".").is_err());
+        assert!(valid_version("..").is_err());
+        assert!(update_with(std::path::Path::new("/tmp"), "..").is_err());
+    }
+
+    /// G6：孤儿目录（目录在、manifest 未登记）update 前置拦并带清目录 CTA，
+    /// 不再落进 install 的 exists 闸死结。
+    #[test]
+    fn update_blocks_orphan_dir_with_cta() {
+        let root = tmp_root("orphan");
+        std::fs::create_dir_all(version_dir(&root, "3.0.0.0")).unwrap();
+        let err = update_with(&root, "3.0.0.0").unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(
+            msg.contains("孤儿目录") && msg.contains("手动删"),
+            "孤儿目录应带清目录 CTA：{msg}"
+        );
+        std::fs::remove_dir_all(&root).ok();
     }
 
     /// r2 后缀形版本（clean-chrome 补丁族重发资产，51 锚恒 false 版）：

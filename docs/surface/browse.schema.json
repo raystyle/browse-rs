@@ -274,7 +274,7 @@
       "type": "object"
     },
     "cli.issue-list": {
-      "description": "browse issue list [--status <s>] [--limit <n>] [--tool <t>] 列 issue（新到旧；默认本工具，--tool 换过滤）。读面 GET /api/issues。",
+      "description": "browse issue list [--status <s>] [--limit <n>] [--tool <t>] 列 issue（新到旧；默认本工具，--tool 换过滤）。",
       "example": "browse issue list --limit 10",
       "input": {
         "properties": {
@@ -320,7 +320,7 @@
       "type": "object"
     },
     "cli.issue-show": {
-      "description": "browse issue show <id> 看 issue 详情（GET /api/issues/<id>）。",
+      "description": "browse issue show <id> 看 issue 详情。",
       "example": "browse issue show 42",
       "input": {
         "properties": {

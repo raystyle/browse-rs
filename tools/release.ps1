@@ -1,6 +1,6 @@
 #requires -Version 7
 <#
-release.pwsh —— browse 本地发布面（批二，总台核准 2026-09-17）
+release.ps1 —— browse 本地发布面（批二，总台核准 2026-09-17）
 
 对齐 build-release 标准三段式的第一二段：本地编译打包 + gh release 直发
 --latest 禁 draft；第三段（R2 双段播种）在 .github/workflows/release.yml
@@ -17,7 +17,7 @@ release.pwsh —— browse 本地发布面（批二，总台核准 2026-09-17）
     三包各解出跑 browse --version 对 tag 逐字（win 经 interop、mac 经 ssh）
   6 gh release 直发 dist 全量 --latest
 
-用法：pwsh tools/release.pwsh -Tag v0.4.2
+用法：pwsh tools/release.ps1 -Tag v0.6.0
 前置：远端 tag 已推；gh 已登录；ssh lan-mac 可达；mingw-w64 与 zip 在位。
 #>
 [CmdletBinding()]

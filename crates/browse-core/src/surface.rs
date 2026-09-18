@@ -254,7 +254,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("limit", "number", false, "20"),
             arg!("tool", "string", false, "browse"),
         ],
-        description: "列 issue（新到旧；默认本工具，--tool 换过滤）。读面 GET /api/issues。",
+        description: "列 issue（新到旧；默认本工具，--tool 换过滤）。",
         example: "browse issue list --limit 10",
     },
     CmdSpec {
@@ -262,7 +262,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Cli,
         signature: "browse issue show <id>",
         args: &[arg!("id", "string", true)],
-        description: "看 issue 详情（GET /api/issues/<id>）。",
+        description: "看 issue 详情。",
         example: "browse issue show 42",
     },
     CmdSpec {
@@ -815,9 +815,14 @@ pub fn render_manual() -> String {
 // 合并按字典序渲染；描述与 [`COMMANDS`] 条目无重复。
 const COMPANION_FLAGS: &[(&str, &str)] = &[
     (
+        "--bind <host:port>",
+        "--serve 监听地址（default: 127.0.0.1:9880）",
+    ),
+    (
         "--chrome <path>",
         "显式引擎路径（伴 up 与求值前置；缺省走发现序）",
     ),
+    ("--eval, -e <片段>", "显式求值（与缺省形态等价）"),
     ("--full", "--llms 变体：完整目录"),
     ("--headless", "无头引擎（伴 up 与求值前置）"),
     ("--help, -h", "人读帮助"),

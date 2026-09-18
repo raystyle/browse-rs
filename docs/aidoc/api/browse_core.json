@@ -95,7 +95,7 @@
     {
       "path": "browse_core::chrome_mgr::update_with",
       "kind": "function",
-      "docs": "带显式版本的 update 内核（测试与程序化面，不触发现端点）：未装则装\n（镜像腿），pin 切到该版。\n\n# Errors\n\n同 [`update`]（除发现失败）。"
+      "docs": "带显式版本的 update 内核（测试与程序化面，不触发现端点）：未登记则装\n（镜像腿；已装判据与 [`use_version`] 同以 manifest 为准），pin 切到该版。\n\n# Errors\n\n同 [`update`]（除发现失败）；目录在而 manifest 未登记的孤儿目录带专门\nCTA（先清目录再 update）。"
     },
     {
       "path": "browse_core::chrome_mgr::use_version",

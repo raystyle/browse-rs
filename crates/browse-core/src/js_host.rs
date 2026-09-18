@@ -385,7 +385,7 @@ impl JsHost {
             "chromeDoctor" => Ok(crate::chrome_mgr::doctor_json(
                 &crate::chrome_mgr::chromium_root(),
             )),
-            // 发现源 latest.txt（BROWSE_CHROME_LATEST 可钉）加镜像安装加
+            // 发现源 <mirror>/latest 指针（BROWSE_CHROME_LATEST 可钉）加镜像安装加
             // pin 切换，blocking 全收 spawn_blocking（与 install 腿同规）
             "chromeUpdate" => {
                 let root = crate::chrome_mgr::chromium_root();

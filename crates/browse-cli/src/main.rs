@@ -130,7 +130,7 @@ async fn main() -> Result<()> {
                     }
                     other => {
                         eprintln!(
-                            "browse: chrome 子命令不认识 {other}（install/use/list/doctor，退出 2）"
+                            "browse: chrome 子命令不认识 {other}（install/use/update/remove/list/doctor，退出 2）"
                         );
                         std::process::exit(2);
                     }
@@ -302,13 +302,15 @@ async fn main() -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&r)?);
             Ok(())
         }
-        // remove 同为纯本地操作（目录删除加 manifest 去登记），无 blocking http
+        // remove 同为本地重 IO（大版本目录整删），与 update 腿同规收 spawn_blocking
         Mode::ChromeRemove(v) => {
-            let r = browse_core::chrome_mgr::remove_version(
-                &browse_core::chrome_mgr::chromium_root(),
-                &v,
-            )?;
-            println!("{}", serde_json::to_string_pretty(&r)?);
+            let root = browse_core::chrome_mgr::chromium_root();
+            let brief = tokio::task::spawn_blocking(move || {
+                browse_core::chrome_mgr::remove_version(&root, &v)
+            })
+            .await
+            .map_err(|e| anyhow!("删除任务崩了：{e}"))??;
+            println!("{}", serde_json::to_string_pretty(&brief)?);
             Ok(())
         }
         // update 腿同样纯本地操作（发现加下载加 pin），blocking 全收 spawn_blocking
