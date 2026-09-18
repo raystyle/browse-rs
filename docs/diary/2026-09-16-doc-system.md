@@ -297,3 +297,9 @@
 - 152.0.7977.84-r2 三平台资产产出（51 锚恒 false 版，三端双态验证全 false 含 linux 翻板平台），候 omc 上桶加 latest 指针；资产名形 chromium-152.0.7977.84-r2-<三元组>.zip 与我仓 asset_name 直出形一致，valid_version 收连字符后缀。
 - 处置：加 r2_suffix_version_compatible 回归锁（版本校验、资产名、目录名提取三面，防未来收紧 valid_version 误伤补丁形资产）；探桶确认尚未上（r2 边车与 latest 均 404 加 SPA 兜底）；上桶后动作链预定：BROWSE_CHROME_LATEST=152.0.7977.84-r2 或 latest 指针直跑 browse chrome update，拉新 spawn 验 webdriver false，#16 即终结闭单。
 - 门禁：fmt、clippy -D warnings、test 12 组 0 败、aidoc check strict、PE 全绿。
+
+## r2 本地镜像全链预验终结 #16（clean-chrome 资产，2026-09-18）
+
+- 不候 omc 排程，借宿主 dist（/mnt/c/dev-chrome/dist）起本地镜像（版本段布局同构，python http.server），环境钉双覆写跑通全链：browse chrome update 得 installedNow:true 加锚校验落位加 pin 切 152.0.7977.84-r2（previousPin 152.0.7977.84 回填，旧版保留可回退）。
+- 终结实证（linux 翻板平台，正是 flat 附着翻板格）[实证: browse up --headless spawn r2 引擎（channel=port），flat 附着后页面脚本读 navigator.webdriver 得 false；同格今晨旧 152 资产读 true]。#16 闭单条件成立，单状态候用户或总台关。
+- 后续：omc 上桶加 latest 指针后舰队面同链自动可达；本机 r2 已 pin 即用。
