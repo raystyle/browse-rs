@@ -83,6 +83,11 @@
       "docs": "读登记册；根目录不存在或 manifest 缺失视为空册。"
     },
     {
+      "path": "browse_core::chrome_mgr::remove_version",
+      "kind": "function",
+      "docs": "删除一个已装版本：目录与 manifest 登记一起清，回执带释放的文件数与\n字节数（取自登记基线）。**pin 指向的版本拒删**（保「pin 永远指向在位\n版本」不变量，doctor 的 pinOk 不破）；先 [`use_version`] 切走或先装\n新版再删。\n\n# Errors\n\n版本未安装（错误带已装清单 CTA）；版本是当前 pin（错误带先切 CTA）；\n目录删除失败。"
+    },
+    {
       "path": "browse_core::chrome_mgr::update",
       "kind": "function",
       "docs": "`browse chrome update`：发现最新版（[`latest_version`]），未装则镜像\n安装，再把托管 pin 切过去（默认使用最新版）；已是该版时幂等。\n阻塞 http，调用方收 `spawn_blocking`。\n\n# Errors\n\n透传 [`latest_version`]（发现失败）与 [`install_from_mirror_with`]\n（下载安装失败）；pin 切换见 [`use_version`]。"

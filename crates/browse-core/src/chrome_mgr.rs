@@ -535,6 +535,44 @@ pub fn update_with(root: &Path, latest: &str) -> Result<Value> {
     }))
 }
 
+/// 删除一个已装版本：目录与 manifest 登记一起清，回执带释放的文件数与
+/// 字节数（取自登记基线）。**pin 指向的版本拒删**（保「pin 永远指向在位
+/// 版本」不变量，doctor 的 pinOk 不破）；先 [`use_version`] 切走或先装
+/// 新版再删。
+///
+/// # Errors
+///
+/// 版本未安装（错误带已装清单 CTA）；版本是当前 pin（错误带先切 CTA）；
+/// 目录删除失败。
+pub fn remove_version(root: &Path, version: &str) -> Result<Value> {
+    valid_version(version)?;
+    let mut m = read_manifest(root);
+    let Some(rec) = m.installed.iter().find(|i| i.version == version) else {
+        let have: Vec<&str> = m.installed.iter().map(|i| i.version.as_str()).collect();
+        bail!(
+            "版本 {version} 未安装（已装：[{}]）；下一步：browse chrome list 核对版本号",
+            have.join(", ")
+        );
+    };
+    if m.pinned.as_deref() == Some(version) {
+        bail!(
+            "版本 {version} 是当前 pin（引擎托管位正用它）；下一步：browse chrome use <其他已装版> \
+             先切走再删；若只有这一个版本，先 browse chrome install <新版> 装新再切再删"
+        );
+    }
+    let rec = rec.clone();
+    let dir = version_dir(root, version);
+    std::fs::remove_dir_all(&dir).map_err(|e| anyhow::anyhow!("删 {} 失败：{e}", dir.display()))?;
+    m.installed.retain(|i| i.version != version);
+    write_manifest(root, &m)?;
+    Ok(json!({
+        "removed": version,
+        "files": rec.files,
+        "bytes": rec.bytes,
+        "pinned": m.pinned,
+    }))
+}
+
 /// 列已装版本与 pin（给 chromeList 面与 CLI）。
 pub fn list_json(root: &Path) -> Value {
     let m = read_manifest(root);
@@ -905,6 +943,46 @@ mod tests {
         // 幂等：再 update 同版本，previousPin 即当前 pin
         let again = update_with(&root, "2.0.0.0").unwrap();
         assert_eq!(again["previousPin"], json!("2.0.0.0"));
+
+        std::fs::remove_dir_all(&root).ok();
+        std::fs::remove_dir_all(&base).ok();
+    }
+
+    /// remove 三态：删非 pin 版（目录加登记清、pin 不动、回释放量）、
+    /// pin 指向的拒删、未装的拒删。
+    #[test]
+    fn remove_version_three_states() {
+        let root = tmp_root("rm");
+        let base = tmp_root("rm-src");
+        let a = fake_deploy(&base);
+        let b = fake_deploy(&base);
+
+        install_from_dir(&root, "1.0.0.0", &a).unwrap();
+        install_from_dir(&root, "2.0.0.0", &b).unwrap();
+        use_version(&root, "1.0.0.0").unwrap();
+
+        // pin 指向的拒删并带先切 CTA
+        let err = remove_version(&root, "1.0.0.0").unwrap_err();
+        assert!(
+            format!("{err:#}").contains("chrome use"),
+            "CTA 应指先切 pin：{err:#}"
+        );
+
+        // 删非 pin 版：目录没了、登记没了、pin 不动
+        let brief = remove_version(&root, "2.0.0.0").unwrap();
+        assert_eq!(brief["removed"], json!("2.0.0.0"));
+        assert_eq!(brief["files"], json!(2), "fake_deploy 两文件");
+        assert!(!version_dir(&root, "2.0.0.0").exists());
+        let m = read_manifest(&root);
+        assert_eq!(m.installed.len(), 1);
+        assert_eq!(m.pinned.as_deref(), Some("1.0.0.0"), "pin 不动");
+
+        // 未装的拒删并带已装清单
+        let err = remove_version(&root, "9.9.9.9").unwrap_err();
+        assert!(
+            format!("{err:#}").contains("1.0.0.0"),
+            "错误应带已装清单：{err:#}"
+        );
 
         std::fs::remove_dir_all(&root).ok();
         std::fs::remove_dir_all(&base).ok();

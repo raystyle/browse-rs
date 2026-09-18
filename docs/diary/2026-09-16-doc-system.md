@@ -269,3 +269,11 @@
 - 实证 [实证: 无端点裸跑出 CTA 错；BROWSE_CHROME_LATEST=152.0.7977.84（本机已装版）实弹 update 得 installedNow:false 加 pin 持位加 previousPin 回填，不触网络；单测 update_switches_pin_when_installed 三态绿]
 - 门禁：fmt、clippy -D warnings、test 12 组、doc test、rustdoc、aidoc check strict、PE 全绿（途中 rustdoc 抓一处 pub 文档链私有项，去链改述即过）。
 - 版本判定：能力新增取 minor，与 stealth 批同卷 0.6.0，候 wave 令。
+
+## chrome remove 批加文档随册（用户令建加更新文档，2026-09-18）
+
+- 新面 `browse chrome remove <版本>` 与方言 `chromeRemove(version)`：版本目录与 manifest 登记一起清，回执带释放文件数与字节数（取登记基线）；pin 指向的版本拒删（保「pin 永远指向在位版本」不变量，doctor 的 pinOk 不破），错误带先切 CTA；未装版本拒删带已装清单。与 update 批同日成对（升加删完整生命周期面）。
+- 文档随册（用户令）：README 三处（前置引擎句、使用例两行、环境表 BROWSE_CHROME_LATEST 行）；getting-started 新「引擎版本管理」节五行；REQ-003 勾选两面加命令面计数升 12 条加发现来源过渡形入定标项注。
+- 实证 [实证: pin 拒删出先切 CTA；未装拒删带已装清单；帮助面两命令活树自带；单测 remove_version_three_states 三态绿]
+- 门禁：fmt、clippy -D warnings、test 12 组、doc test、rustdoc、aidoc check strict、PE 全绿。
+- 版本判定：能力新增取 minor，与 stealth 加 update 同卷 0.6.0，候 wave 令。

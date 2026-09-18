@@ -26,6 +26,7 @@
 - `manifest_path` — manifest 落盘路径。
 - `pinned_chrome` — 托管位解析：pin 版本的 chrome 二进制路径（发现序的托管档）。
 - `read_manifest` — 读登记册；根目录不存在或 manifest 缺失视为空册。
+- `remove_version` — 删除一个已装版本：目录与 manifest 登记一起清，回执带释放的文件数与
 - `update` — `browse chrome update`：发现最新版（[`latest_version`]），未装则镜像
 - `update_with` — 带显式版本的 update 内核（测试与程序化面，不触发现端点）：未装则装
 - `use_version` — pin 切换到已装版本（引擎发现序的托管位生效点）。

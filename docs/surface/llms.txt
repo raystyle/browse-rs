@@ -21,6 +21,7 @@
 | `browse chrome list` | 列已装 Chromium 版本与当前 pin。 |
 | `browse chrome use <版本>` | 把托管引擎 pin 切到已装版本（旧版保留可回退）。 |
 | `browse chrome update` | 升级到镜像最新版并默认切用（发现源 latest.txt，BROWSE_CHROME_LATEST 可钉）。 |
+| `browse chrome remove <版本>` | 删已装版本（目录加登记一起清；pin 指向的拒删，先 use 切走）。 |
 | `browse chrome doctor` | 托管 Chromium 部署体检（在位/文件基线/pin）。 |
 | `browse issue new <标题> [--body <正文>]` | 一键缺陷反馈：自动署名 tool=browse 加版本加平台加主机。 |
 | `browse issue list [--status <s>] [--limit <n>] [--tool <t>]` | 列 issue（新到旧；默认本工具，--tool 换过滤）。读面 GET /api/issues。 |
@@ -38,6 +39,7 @@
 | `chromeList()` | 列已装 Chromium 版本与当前 pin。 |
 | `chromeUse(version)` | pin 切到已装版本（引擎发现序的托管位）。 |
 | `chromeUpdate()` | 升级到镜像最新版并 pin 切过去（发现源 latest.txt，BROWSE_CHROME_LATEST 可钉）。 |
+| `chromeRemove(version)` | 删已装版本（目录加登记一起清；pin 指向的拒删，先 chromeUse 切走）。 |
 | `chromeDoctor()` | 托管 Chromium 部署体检（在位/文件基线/pin 健康）。 |
 | `cdpMethods(domain?)` | 652 个 CDP 命令的运行时探针（按域过滤）。 |
 | `snapshot()` | AX 树快照：nodes 带 role/name/value/短 ref（e1、e2…），引用表的唯一来源。 |

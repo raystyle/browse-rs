@@ -374,6 +374,14 @@ impl JsHost {
                 };
                 crate::chrome_mgr::use_version(&crate::chrome_mgr::chromium_root(), v)
             }
+            "chromeRemove" => {
+                let Some(v) = argv.first().and_then(Value::as_str) else {
+                    bail!(
+                        "chromeRemove 缺 version；下一步：chromeRemove(\"152.0.7977.84\")，先 chromeList() 看已装"
+                    );
+                };
+                crate::chrome_mgr::remove_version(&crate::chrome_mgr::chromium_root(), v)
+            }
             "chromeDoctor" => Ok(crate::chrome_mgr::doctor_json(
                 &crate::chrome_mgr::chromium_root(),
             )),
@@ -698,7 +706,7 @@ impl JsHost {
                 crate::record::stop(&self.session, rec).await
             }
             other => bail!(
-                "未知函数 {other}；下一步：可用全局 listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/snapshot()/screenshot(path?, full?)/pdf(path?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/clickAt(x,y)/fillInput(sel,text)/clickRef(ref)/fillRef(ref,text)/selectOption(ref,value)/pressKey(key)/dialogStatus()/dialogAccept(text?)/dialogDismiss()/routeBlock(pattern)/routeMock(pattern,body,opts?)/routeClear()/waitLoad(ms?)/waitIdle(ms?)/recordStart(opts?)/recordStop()/chromeInstall(opts?)/chromeList()/chromeUse(version)/chromeUpdate()/chromeDoctor()/print(x)；CDP 走 session.<Domain>.<method>(params)"
+                "未知函数 {other}；下一步：可用全局 listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/snapshot()/screenshot(path?, full?)/pdf(path?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/clickAt(x,y)/fillInput(sel,text)/clickRef(ref)/fillRef(ref,text)/selectOption(ref,value)/pressKey(key)/dialogStatus()/dialogAccept(text?)/dialogDismiss()/routeBlock(pattern)/routeMock(pattern,body,opts?)/routeClear()/waitLoad(ms?)/waitIdle(ms?)/recordStart(opts?)/recordStop()/chromeInstall(opts?)/chromeList()/chromeUse(version)/chromeUpdate()/chromeRemove(version)/chromeDoctor()/print(x)；CDP 走 session.<Domain>.<method>(params)"
             ),
         }
     }

@@ -40,6 +40,8 @@ enum Mode {
     ChromeUse(String),
     /// `browse chrome update`：发现最新版，未装则镜像装，pin 切最新。
     ChromeUpdate,
+    /// `browse chrome remove <版本>`：删已装版本（pin 指向的拒删）。
+    ChromeRemove(String),
     /// `browse chrome doctor`：托管部署体检。
     ChromeDoctor,
     /// `browse issue new <标题> [--body <正文>]`：一键提交缺陷反馈（REQ-057）。
@@ -119,6 +121,7 @@ async fn main() -> Result<()> {
                     "list" => mode = Mode::ChromeList,
                     "doctor" => mode = Mode::ChromeDoctor,
                     "use" => mode = Mode::ChromeUse(next("chrome use")?),
+                    "remove" => mode = Mode::ChromeRemove(next("chrome remove <版本>")?),
                     "update" => mode = Mode::ChromeUpdate,
                     "install" => {
                         let version = next("chrome install <版本>")?;
@@ -293,6 +296,15 @@ async fn main() -> Result<()> {
         }
         Mode::ChromeUse(v) => {
             let r = browse_core::chrome_mgr::use_version(
+                &browse_core::chrome_mgr::chromium_root(),
+                &v,
+            )?;
+            println!("{}", serde_json::to_string_pretty(&r)?);
+            Ok(())
+        }
+        // remove 同为纯本地操作（目录删除加 manifest 去登记），无 blocking http
+        Mode::ChromeRemove(v) => {
+            let r = browse_core::chrome_mgr::remove_version(
                 &browse_core::chrome_mgr::chromium_root(),
                 &v,
             )?;

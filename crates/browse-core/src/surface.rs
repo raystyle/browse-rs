@@ -219,6 +219,14 @@ pub const COMMANDS: &[CmdSpec] = &[
         example: "browse chrome update",
     },
     CmdSpec {
+        name: "chrome-remove",
+        kind: CmdKind::Cli,
+        signature: "browse chrome remove <版本>",
+        args: &[arg!("version", "string", true)],
+        description: "删已装版本（目录加登记一起清；pin 指向的拒删，先 use 切走）。",
+        example: "browse chrome remove 152.0.7977.84",
+    },
+    CmdSpec {
         name: "chrome-doctor",
         kind: CmdKind::Cli,
         signature: "browse chrome doctor",
@@ -321,6 +329,14 @@ pub const COMMANDS: &[CmdSpec] = &[
         args: &[],
         description: "升级到镜像最新版并 pin 切过去（发现源 latest.txt，BROWSE_CHROME_LATEST 可钉）。",
         example: "return await chromeUpdate()",
+    },
+    CmdSpec {
+        name: "chromeRemove",
+        kind: CmdKind::Global,
+        signature: "chromeRemove(version)",
+        args: &[arg!("version", "string", true)],
+        description: "删已装版本（目录加登记一起清；pin 指向的拒删，先 chromeUse 切走）。",
+        example: "await chromeRemove(\"152.0.7977.84\")",
     },
     CmdSpec {
         name: "chromeDoctor",

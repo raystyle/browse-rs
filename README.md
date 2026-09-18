@@ -45,7 +45,8 @@ clean-chrome（自编 Chromium），常驻 daemon 让会话、变量、活动 ta
 daemon。
 
 前置引擎：`browse chrome install <版本>` 从镜像装 clean-chrome（sha256
-边车锚校验后原子落位），或本地导入部署目录。
+边车锚校验后原子落位），或本地导入部署目录；`browse chrome update`
+升到最新版并默认切用（发现源 `latest.txt`，`BROWSE_CHROME_LATEST` 可钉）。
 
 ## 配置
 
@@ -64,6 +65,7 @@ daemon。
 | `BROWSE_EVAL_TIMEOUT` | 单次求值超时秒数（默认 300） |
 | `BROWSE_DENY_DOMAINS` / `BROWSE_ALLOW_DOMAINS` | 域策略（后缀匹配，deny 优先） |
 | `BROWSE_CHROME_MIRROR` / `BROWSE_CHROME_ASSET` | 版本管理器镜像与资产名覆写 |
+| `BROWSE_CHROME_LATEST` | `chrome update` 发现源钉（缺省读镜像 `latest.txt`） |
 | `BROWSE_ISSUES_API` | issue 通道基址覆写（测与灰度） |
 
 状态目录 `~/.browse-rs/`（Windows `%USERPROFILE%\.browse-rs`，命名实例在
@@ -86,6 +88,8 @@ browse 'return await screenshot()'                    # 截图；pdf()/recordSta
 browse 'await routeBlock("*://ads.example.com/*")'    # 拦网；routeMock 本地假应答
 browse 'return await detectBrowsers()'                # 探测可附着浏览器
 browse chrome install 152.0.7977.84                   # 镜像装引擎（或本地导入）
+browse chrome update                                   # 升最新版并默认切用
+browse chrome remove <旧版本>                          # 删旧版（pin 指向的拒删，先 use 切走）
 browse issue new "标题" --body "复现步骤"              # 缺陷一键反馈（自动署名）
 browse down                                           # 幂等退场（附着来源不动）
 ```

@@ -55,6 +55,24 @@
       "output": "runtime JSON（回值随页面与 CDP 而定）",
       "type": "object"
     },
+    "chromeRemove": {
+      "description": "chromeRemove(version) 删已装版本（目录加登记一起清；pin 指向的拒删，先 chromeUse 切走）。",
+      "example": "await chromeRemove(\"152.0.7977.84\")",
+      "input": {
+        "properties": {
+          "version": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
     "chromeUpdate": {
       "description": "chromeUpdate() 升级到镜像最新版并 pin 切过去（发现源 latest.txt，BROWSE_CHROME_LATEST 可钉）。",
       "example": "return await chromeUpdate()",
@@ -123,6 +141,24 @@
       "input": {
         "properties": {},
         "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "cli.chrome-remove": {
+      "description": "browse chrome remove <版本> 删已装版本（目录加登记一起清；pin 指向的拒删，先 use 切走）。",
+      "example": "browse chrome remove 152.0.7977.84",
+      "input": {
+        "properties": {
+          "version": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version"
+        ],
         "type": "object"
       },
       "output": "runtime JSON（回值随页面与 CDP 而定）",
