@@ -38,6 +38,8 @@ enum Mode {
     ChromeList,
     /// `browse chrome use <版本>`：pin 切换。
     ChromeUse(String),
+    /// `browse chrome update`：发现最新版，未装则镜像装，pin 切最新。
+    ChromeUpdate,
     /// `browse chrome doctor`：托管部署体检。
     ChromeDoctor,
     /// `browse issue new <标题> [--body <正文>]`：一键提交缺陷反馈（REQ-057）。
@@ -117,6 +119,7 @@ async fn main() -> Result<()> {
                     "list" => mode = Mode::ChromeList,
                     "doctor" => mode = Mode::ChromeDoctor,
                     "use" => mode = Mode::ChromeUse(next("chrome use")?),
+                    "update" => mode = Mode::ChromeUpdate,
                     "install" => {
                         let version = next("chrome install <版本>")?;
                         let from_dir = args.next().filter(|s| !s.starts_with('-'));
@@ -294,6 +297,15 @@ async fn main() -> Result<()> {
                 &v,
             )?;
             println!("{}", serde_json::to_string_pretty(&r)?);
+            Ok(())
+        }
+        // update 腿同样纯本地操作（发现加下载加 pin），blocking 全收 spawn_blocking
+        Mode::ChromeUpdate => {
+            let root = browse_core::chrome_mgr::chromium_root();
+            let brief = tokio::task::spawn_blocking(move || browse_core::chrome_mgr::update(&root))
+                .await
+                .map_err(|e| anyhow!("升级任务崩了：{e}"))??;
+            println!("{}", serde_json::to_string_pretty(&brief)?);
             Ok(())
         }
         Mode::ChromeDoctor => {

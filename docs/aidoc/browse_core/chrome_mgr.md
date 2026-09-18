@@ -21,10 +21,13 @@
 - `install_from_dir` — 从本地部署目录导入安装一个版本（整目录复制到 `<root>/<version>/`），
 - `install_from_mirror` — 从 R2 镜像下载安装一个版本（环境覆写形态；见 [`install_from_mirror_with`]）。
 - `install_from_mirror_with` — 带显式镜像基址与资产名的下载安装（env 包装的内核，测试与程序化面）：
+- `latest_version` — 发现镜像最新版本：优先 `BROWSE_CHROME_LATEST` 环境钉（离线与测试面），
 - `list_json` — 列已装版本与 pin（给 chromeList 面与 CLI）。
 - `manifest_path` — manifest 落盘路径。
 - `pinned_chrome` — 托管位解析：pin 版本的 chrome 二进制路径（发现序的托管档）。
 - `read_manifest` — 读登记册；根目录不存在或 manifest 缺失视为空册。
+- `update` — `browse chrome update`：发现最新版（[`latest_version`]），未装则镜像
+- `update_with` — 带显式版本的 update 内核（测试与程序化面，不触发现端点）：未装则装
 - `use_version` — pin 切换到已装版本（引擎发现序的托管位生效点）。
 - `version_dir` — 某版本的落位目录（不校验存在）。
 - `version_from_dir_name` — 从部署目录名提取版本（`chromium-152.0.7977.84` 出 `152.0.7977.84`；

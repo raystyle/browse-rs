@@ -211,6 +211,14 @@ pub const COMMANDS: &[CmdSpec] = &[
         example: "browse chrome use 152.0.7977.84",
     },
     CmdSpec {
+        name: "chrome-update",
+        kind: CmdKind::Cli,
+        signature: "browse chrome update",
+        args: &[],
+        description: "升级到镜像最新版并默认切用（发现源 latest.txt，BROWSE_CHROME_LATEST 可钉）。",
+        example: "browse chrome update",
+    },
+    CmdSpec {
         name: "chrome-doctor",
         kind: CmdKind::Cli,
         signature: "browse chrome doctor",
@@ -305,6 +313,14 @@ pub const COMMANDS: &[CmdSpec] = &[
         args: &[arg!("version", "string", true)],
         description: "pin 切到已装版本（引擎发现序的托管位）。",
         example: "await chromeUse(\"152.0.7977.84\")",
+    },
+    CmdSpec {
+        name: "chromeUpdate",
+        kind: CmdKind::Global,
+        signature: "chromeUpdate()",
+        args: &[],
+        description: "升级到镜像最新版并 pin 切过去（发现源 latest.txt，BROWSE_CHROME_LATEST 可钉）。",
+        example: "return await chromeUpdate()",
     },
     CmdSpec {
         name: "chromeDoctor",

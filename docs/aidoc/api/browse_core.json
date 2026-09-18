@@ -58,6 +58,11 @@
       "docs": "带显式镜像基址与资产名的下载安装（env 包装的内核，测试与程序化面）：\n`<mirror>/<version>/<asset>` 下载加同名 `.sha256` 边车锚校验，\nzip 解包后原子落位 `<root>/<version>/`，manifest 登记并自动 pin。\n\n# Errors\n\n版本号非法或目标已存在（同本地导入）；边车或资产 404（错误带端点与\n覆写指引）；sha256 不匹配（错包即弃，不留残目录）；边车内容非法；\n解包后无 chrome 二进制；下载或写盘失败。"
     },
     {
+      "path": "browse_core::chrome_mgr::latest_version",
+      "kind": "function",
+      "docs": "发现镜像最新版本：优先 `BROWSE_CHROME_LATEST` 环境钉（离线与测试面），\n缺省读 `<mirror>/latest.txt` 单行版本号（155 前的过渡发现口径，端点候\nomc 落桶；版本发现正式定标在 REQ-003 余量）。\n\n阻塞 http，调用方须收在 `spawn_blocking` 里（async 上下文 drop 该\nclient 会 panic，与镜像安装腿同规）。\n\n# Errors\n\n`latest.txt` 404 或不可达（错误带过渡指引：显式装或环境钉）；返回\n内容不是合法版本号（限字母数字与 `. _ -`，同版本目录名口径）。"
+    },
+    {
       "path": "browse_core::chrome_mgr::list_json",
       "kind": "function",
       "docs": "列已装版本与 pin（给 chromeList 面与 CLI）。"
@@ -76,6 +81,16 @@
       "path": "browse_core::chrome_mgr::read_manifest",
       "kind": "function",
       "docs": "读登记册；根目录不存在或 manifest 缺失视为空册。"
+    },
+    {
+      "path": "browse_core::chrome_mgr::update",
+      "kind": "function",
+      "docs": "`browse chrome update`：发现最新版（[`latest_version`]），未装则镜像\n安装，再把托管 pin 切过去（默认使用最新版）；已是该版时幂等。\n阻塞 http，调用方收 `spawn_blocking`。\n\n# Errors\n\n透传 [`latest_version`]（发现失败）与 [`install_from_mirror_with`]\n（下载安装失败）；pin 切换见 [`use_version`]。"
+    },
+    {
+      "path": "browse_core::chrome_mgr::update_with",
+      "kind": "function",
+      "docs": "带显式版本的 update 内核（测试与程序化面，不触发现端点）：未装则装\n（镜像腿），pin 切到该版。\n\n# Errors\n\n同 [`update`]（除发现失败）。"
     },
     {
       "path": "browse_core::chrome_mgr::use_version",

@@ -260,3 +260,12 @@
 - 三方取证（clean-chrome 工位）：其「port 通道源码级 webdriver false」论断在本仓实产物上被反证：BROWSE_NO_STEALTH=1 实测本机 Linux 有头与无头加 port 两态均 true，加 issue 的 Windows 有头证词，两平台同象；已回执对方建议复核 152 实构建。脚本注入法四态（port/pipe、有头/无头）全覆盖，pipe 态源码级恒 true 场景注入是唯一解（对方同判）。
 - 门禁：fmt、clippy -D warnings、test 12 组、doc test、aidoc check strict（无漂移）、PE、e2e 双通道 2/2 全绿。
 - 版本判定：#16 默认行为变化取 minor，下封 0.6.0；候 wave 令。悬置转呈：clean-chrome 补丁族工单（源码级恒 false）属对方锚面扩张，候用户裁定。
+
+## chrome update 批（用户令，2026-09-18）
+
+- 新面 `browse chrome update` 与方言全局 `chromeUpdate()`：发现最新版，未装则镜像安装（复用 install_from_mirror 锚校验链），托管 pin 切到最新（默认使用最新版）；已在该版幂等。回执 {version, installedNow, previousPin, pinned}。
+- 版本发现口径（REQ-003 余量的过渡形）：优先 BROWSE_CHROME_LATEST 环境钉（离线与测试面），缺省读 <mirror>/latest.txt 单行版本；端点现未在桶（404 全扫实证），候 omc 落桶（一行物件），正式定标仍候 155 窗。端点缺位时错误带两路 CTA（显式 install 或环境钉）。
+- 目录双条登记（chrome-update CLI 加 chromeUpdate 全局），surface 三投影重生，帮助面与手册活树自带；blocking http 全收 spawn_blocking（与镜像腿同规）。
+- 实证 [实证: 无端点裸跑出 CTA 错；BROWSE_CHROME_LATEST=152.0.7977.84（本机已装版）实弹 update 得 installedNow:false 加 pin 持位加 previousPin 回填，不触网络；单测 update_switches_pin_when_installed 三态绿]
+- 门禁：fmt、clippy -D warnings、test 12 组、doc test、rustdoc、aidoc check strict、PE 全绿（途中 rustdoc 抓一处 pub 文档链私有项，去链改述即过）。
+- 版本判定：能力新增取 minor，与 stealth 批同卷 0.6.0，候 wave 令。

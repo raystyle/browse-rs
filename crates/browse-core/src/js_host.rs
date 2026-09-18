@@ -377,6 +377,14 @@ impl JsHost {
             "chromeDoctor" => Ok(crate::chrome_mgr::doctor_json(
                 &crate::chrome_mgr::chromium_root(),
             )),
+            // 发现源 latest.txt（BROWSE_CHROME_LATEST 可钉）加镜像安装加
+            // pin 切换，blocking 全收 spawn_blocking（与 install 腿同规）
+            "chromeUpdate" => {
+                let root = crate::chrome_mgr::chromium_root();
+                tokio::task::spawn_blocking(move || crate::chrome_mgr::update(&root))
+                    .await
+                    .map_err(|e| anyhow::anyhow!("升级任务崩了：{e}"))?
+            }
             // 页内截图存文件，回 {path, bytes}；full 走 captureBeyondViewport
             "screenshot" => {
                 let path = argv.first().and_then(Value::as_str).map(str::to_string);
@@ -690,7 +698,7 @@ impl JsHost {
                 crate::record::stop(&self.session, rec).await
             }
             other => bail!(
-                "未知函数 {other}；下一步：可用全局 listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/snapshot()/screenshot(path?, full?)/pdf(path?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/clickAt(x,y)/fillInput(sel,text)/clickRef(ref)/fillRef(ref,text)/selectOption(ref,value)/pressKey(key)/dialogStatus()/dialogAccept(text?)/dialogDismiss()/routeBlock(pattern)/routeMock(pattern,body,opts?)/routeClear()/waitLoad(ms?)/waitIdle(ms?)/recordStart(opts?)/recordStop()/chromeInstall(opts?)/chromeList()/chromeUse(version)/chromeDoctor()/print(x)；CDP 走 session.<Domain>.<method>(params)"
+                "未知函数 {other}；下一步：可用全局 listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/snapshot()/screenshot(path?, full?)/pdf(path?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/clickAt(x,y)/fillInput(sel,text)/clickRef(ref)/fillRef(ref,text)/selectOption(ref,value)/pressKey(key)/dialogStatus()/dialogAccept(text?)/dialogDismiss()/routeBlock(pattern)/routeMock(pattern,body,opts?)/routeClear()/waitLoad(ms?)/waitIdle(ms?)/recordStart(opts?)/recordStop()/chromeInstall(opts?)/chromeList()/chromeUse(version)/chromeUpdate()/chromeDoctor()/print(x)；CDP 走 session.<Domain>.<method>(params)"
             ),
         }
     }

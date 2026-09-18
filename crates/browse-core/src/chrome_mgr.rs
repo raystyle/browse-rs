@@ -457,6 +457,84 @@ pub fn use_version(root: &Path, version: &str) -> Result<Value> {
     Ok(json!({ "pinned": version }))
 }
 
+/// 发现镜像最新版本：优先 `BROWSE_CHROME_LATEST` 环境钉（离线与测试面），
+/// 缺省读 `<mirror>/latest.txt` 单行版本号（155 前的过渡发现口径，端点候
+/// omc 落桶；版本发现正式定标在 REQ-003 余量）。
+///
+/// 阻塞 http，调用方须收在 `spawn_blocking` 里（async 上下文 drop 该
+/// client 会 panic，与镜像安装腿同规）。
+///
+/// # Errors
+///
+/// `latest.txt` 404 或不可达（错误带过渡指引：显式装或环境钉）；返回
+/// 内容不是合法版本号（限字母数字与 `. _ -`，同版本目录名口径）。
+pub fn latest_version() -> Result<String> {
+    if let Some(v) = std::env::var("BROWSE_CHROME_LATEST")
+        .ok()
+        .filter(|s| !s.is_empty())
+    {
+        let v = v.trim().to_string();
+        valid_version(&v)?;
+        return Ok(v);
+    }
+    let (mirror, _) = mirror_and_asset("");
+    let url = format!("{mirror}/latest.txt");
+    let client = reqwest::blocking::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| anyhow::anyhow!("构建 http client 失败：{e}"))?;
+    let body = client
+        .get(&url)
+        .send()
+        .and_then(|r| r.error_for_status())
+        .map_err(|e| {
+            anyhow::anyhow!(
+                "读 {url} 失败（{e}）；镜像暂无 latest.txt 发现端点（155 前过渡口径）；\
+                 下一步：browse chrome install <版本> 显式装，或 BROWSE_CHROME_LATEST=<版本> 钉住发现源"
+            )
+        })?
+        .text()
+        .map_err(|e| anyhow::anyhow!("读 {url} body 失败：{e}"))?;
+    let v = body.trim().lines().last().unwrap_or("").trim().to_string();
+    valid_version(&v)?;
+    Ok(v)
+}
+
+/// `browse chrome update`：发现最新版（[`latest_version`]），未装则镜像
+/// 安装，再把托管 pin 切过去（默认使用最新版）；已是该版时幂等。
+/// 阻塞 http，调用方收 `spawn_blocking`。
+///
+/// # Errors
+///
+/// 透传 [`latest_version`]（发现失败）与 [`install_from_mirror_with`]
+/// （下载安装失败）；pin 切换见 [`use_version`]。
+pub fn update(root: &Path) -> Result<Value> {
+    let latest = latest_version()?;
+    update_with(root, &latest)
+}
+
+/// 带显式版本的 update 内核（测试与程序化面，不触发现端点）：未装则装
+/// （镜像腿），pin 切到该版。
+///
+/// # Errors
+///
+/// 同 [`update`]（除发现失败）。
+pub fn update_with(root: &Path, latest: &str) -> Result<Value> {
+    valid_version(latest)?;
+    let previous = read_manifest(root).pinned;
+    let installed_now = !version_dir(root, latest).exists();
+    if installed_now {
+        install_from_mirror(root, latest)?;
+    }
+    use_version(root, latest)?;
+    Ok(json!({
+        "version": latest,
+        "installedNow": installed_now,
+        "previousPin": previous,
+        "pinned": latest,
+    }))
+}
+
 /// 列已装版本与 pin（给 chromeList 面与 CLI）。
 pub fn list_json(root: &Path) -> Value {
     let m = read_manifest(root);
@@ -798,5 +876,37 @@ mod tests {
             n.ends_with(&format!("{}.zip", chromium_triple())),
             "本平台三元组收尾：{n}"
         );
+    }
+
+    /// update 内核三态：已装最新只切 pin（不触镜像）、幂等重跑、previousPin 回填
+    /// （未装走镜像腿，不入单测；那是 install_from_mirror 与本内核的组合）。
+    #[test]
+    fn update_switches_pin_when_installed() {
+        let root = tmp_root("upd");
+        let base = tmp_root("upd-src");
+        let a = fake_deploy(&base);
+        let b = fake_deploy(&base);
+
+        install_from_dir(&root, "1.0.0.0", &a).unwrap();
+        install_from_dir(&root, "2.0.0.0", &b).unwrap();
+        use_version(&root, "1.0.0.0").unwrap();
+
+        let brief = update_with(&root, "2.0.0.0").unwrap();
+        assert_eq!(brief["version"], json!("2.0.0.0"));
+        assert_eq!(
+            brief["installedNow"],
+            json!(false),
+            "已装版本不得再触镜像腿"
+        );
+        assert_eq!(brief["previousPin"], json!("1.0.0.0"));
+        assert_eq!(brief["pinned"], json!("2.0.0.0"));
+        assert_eq!(read_manifest(&root).pinned.as_deref(), Some("2.0.0.0"));
+
+        // 幂等：再 update 同版本，previousPin 即当前 pin
+        let again = update_with(&root, "2.0.0.0").unwrap();
+        assert_eq!(again["previousPin"], json!("2.0.0.0"));
+
+        std::fs::remove_dir_all(&root).ok();
+        std::fs::remove_dir_all(&base).ok();
     }
 }
