@@ -317,3 +317,10 @@
 - README 部署节补 r2 特殊说明：152.0.7977.84-r2 是补丁族重发版（同 152 基线，-r2 后缀即补丁形版本号），51 锚 webdriver 源码级恒 false 修 Google 登录一票否决；r1 保留可回退（use 切回，remove 清理）。
 - 五端四机默认实例滚动（browse 0.6.0 二进制加引擎 r2）[实证: wsl 与 win（产物交叉件入 C:\Users\ray\bin）与 mac 与 lan-ubuntu（rsync 同树重建）与 lan-linux（产物直拷，该端无工具链）五端 chrome update 全 installedNow:true 加 pin r2；win/mac 默认实例另证 webdriver false 加 length 3；win/mac/lan-linux 旧 r1 保留 prevPin 回填]。
 - herdr 回执 omc 总台工位（wR:p1 原子投递，总台 working 态消化中）。
+
+## 评审闸门补过三轮闭环（2026-09-18）
+
+- 补闸单（1d7ec65..d613bcd 十六笔 wave 令直推链）经 browse-codex-review 常驻格三轮：一轮 3F（chrome 子命令 CTA 未随迁、remove 残留态死结、release.ps1 自引用漏迁）加 10G 全收口（d999344）；二轮抓一轮 G6 修法引入的真回归 F1′（登记在册目录已失 update 假绿切空位 pin）加 6G′ 定点收口（3b43db8）；三轮终审放行。守卫面显著硬化：派发守卫改调用形真派发、帮助面行首精确匹配加 Commands/Options 行数对称断言加旗标双向反查守卫、部署在位闸入 use_version。
+- 评审格 browse-codex-review（wY:p4 右侧）常驻建立（codex YOLO 加本仓 cwd，信任屏替答在档）；后续新批恢复先闸后推。
+- 余量清单在档：G7′ manifest 读改写竞态（候锁文件或写前重读）、评审员提 G1″/G2″。
+- 夹带用户令：README 部署节补 GitHub Releases 通道（四通道形）加特性列表命令清单补 update/remove。
