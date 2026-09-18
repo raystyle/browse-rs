@@ -944,7 +944,7 @@ pub fn render_help() -> String {
     }
 
     out.push_str(
-        "\n片段方言：\n  await session.connect({port:9222})\n  const tabs = await listPageTargets()\n  await session.use(tabs[0].targetId)\n  await session.Page.navigate({url:\"https://example.com\"})\n  await session.waitFor(\"Page.loadEventFired\", undefined, 15000)\n  支持：字面量/对象/数组/成员/下标/await/const-let-var/return。\n  不支持：函数字面量、if/for、模板字符串；页面逻辑放 Runtime.evaluate 的 expression。\n",
+        "\n片段方言：\n  await session.connect({port:9222})\n  const tabs = await listPageTargets()\n  await session.use(tabs[0].targetId)\n  await session.Page.navigate({url:\"https://example.com\"})\n  await session.waitFor(\"Page.loadEventFired\", undefined, 15000)\n  支持：字面量/对象/数组/成员/下标/await/const-let-var/return。\n  模板字符串（反引号）raw 语义：内容逐字保留（只有 \\\\` 与 \\\\${ 是转义，模板内 \\\\${ 降格为 ${），可多行，页面代码原样内嵌 expression。\n  普通字符串只转义 \\\\n/\\\\t/\\\\\\\\/引号，其余保留反斜杠（与 JS 不同）。\n  不支持：函数字面量、if/for；页面逻辑放 Runtime.evaluate 的 expression。\n",
     );
     out.push_str(
         "\nEnvironment Variables:\n  BROWSE_PORT          daemon 端口（default: 9880）\n  BROWSE_NAME          命名实例：状态目录加派生端口 9900-9999 隔离，多实例并行\n  BROWSE_CHROME        chrome 路径（default: 走发现序：显式、托管 pin、祖先部署、常规路径）\n  BROWSE_PROFILE       spawn 引擎 user-data-dir（default: 固定 engine-profile，down 不删）\n  BROWSE_CDP_WS        钉死连接的 WS URL\n  BROWSE_NO_ATTACH=1   跳过附着探测，强制 spawn 隔离实例\n  BROWSE_EVAL_TIMEOUT  单次求值超时秒数（default: 300）\n",

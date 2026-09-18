@@ -155,7 +155,7 @@
     {
       "path": "browse_core::parser",
       "kind": "module",
-      "docs": "browser-harness-js 片段方言的语法分析器（纯函数）。\n\n移植自 browser-harness-rs `src/js_host.rs` 的解析半边，独立成模块便于单测。\n方言支持：字面量、对象、数组、成员、下标、`await`、`const/let/var`、\n`return`、`//` 注释。不支持：函数字面量、`if/for/while`、模板字符串；\n这些在解析期就报错并提示「页面逻辑放 `Runtime.evaluate` 的 expression」。"
+      "docs": "browser-harness-js 片段方言的语法分析器（纯函数）。\n\n移植自 browser-harness-rs `src/js_host.rs` 的解析半边，独立成模块便于单测。\n方言支持：字面量、对象、数组、成员、下标、`await`、`const/let/var`、\n`return`、`//` 注释、反引号模板字符串（raw 语义，#18）。不支持：函数\n字面量、`if/for/while`；这些在解析期就报错并提示「页面逻辑放\n`Runtime.evaluate` 的 expression」。"
     },
     {
       "path": "browse_core::parser::Expr",
@@ -175,7 +175,7 @@
     {
       "path": "browse_core::parser::parse_script",
       "kind": "function",
-      "docs": "把整段片段解析成语句列表（先剥 `//` 注释）。\n\n# Errors\n\n- 含方言外语法（if/for/while/函数/模板字符串，报错带下一步 CTA）。\n- token 残缺（未闭合字符串、缺 `=` / `]` / `,` 等），错误信息带停住的位置。\n- 末尾有解析不掉的余量。\n\n# Examples\n\n```\nuse browse_core::parser::{parse_script, Stmt};\n\nlet stmts = parse_script(\"const n = 1\").unwrap();\nassert!(matches!(stmts[0], Stmt::Let { .. }));\nassert!(parse_script(\"if (x) { y() }\").is_err()); // 方言外\n```"
+      "docs": "把整段片段解析成语句列表（先剥 `//` 注释）。\n\n# Errors\n\n- 含方言外语法（if/for/while/函数，报错带下一步 CTA）。\n- token 残缺（未闭合字符串、缺 `=` / `]` / `,` 等），错误信息带停住的位置。\n- 末尾有解析不掉的余量。\n\n# Examples\n\n```\nuse browse_core::parser::{parse_script, Stmt};\n\nlet stmts = parse_script(\"const n = 1\").unwrap();\nassert!(matches!(stmts[0], Stmt::Let { .. }));\nassert!(parse_script(\"if (x) { y() }\").is_err()); // 方言外\n```"
     },
     {
       "path": "browse_core::parser::render",
@@ -190,7 +190,7 @@
     {
       "path": "browse_core::parser::strip_comments",
       "kind": "function",
-      "docs": "把 `//` 行注释剥掉，保留字符串字面量里的 `//`。\n\n# Examples\n\n```\nassert_eq!(browse_core::parser::strip_comments(\"a // 尾注\\nb\"), \"a \\nb\");\nassert_eq!(browse_core::parser::strip_comments(r#\"\"http://x\"\"#), r#\"\"http://x\"\"#);\n```"
+      "docs": "把 `//` 行注释剥掉，保留字符串字面量里的 `//`；反引号模板（raw 语义）\n整段是内容，其中的 `//` 也不剥（#18）。\n\n# Examples\n\n```\nassert_eq!(browse_core::parser::strip_comments(\"a // 尾注\\nb\"), \"a \\nb\");\nassert_eq!(browse_core::parser::strip_comments(r#\"\"http://x\"\"#), r#\"\"http://x\"\"#);\nassert_eq!(browse_core::parser::strip_comments(\"`a // b`\"), \"`a // b`\");\n```"
     },
     {
       "path": "browse_core::paths",

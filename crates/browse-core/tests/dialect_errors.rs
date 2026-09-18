@@ -19,7 +19,6 @@ async fn syntax_errors_carry_location_and_next_step() {
     let bad = [
         ("if (x) { y() }", "Runtime.evaluate"),
         ("const f = (x) => x", "Runtime.evaluate"),
-        ("const s = `tpl`", "Runtime.evaluate"),
         ("40 + 2", "Runtime.evaluate"),
         ("const x = ", "Runtime.evaluate"),
         ("await session.use(tabs[0]", "逗号"),

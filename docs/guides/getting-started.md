@@ -92,7 +92,7 @@ browse chrome doctor                 # 部署体检（在位/文件基线/pin）
 
 ## 常见坑
 
-- 方言没有 `if/for/函数/模板字符串`：页面逻辑写进 `Runtime.evaluate` 的 `expression` 字符串（页内是真 V8）。
+- 方言没有 `if/for/函数`：页面逻辑写进 `Runtime.evaluate` 的 `expression` 字符串（页内是真 V8）。模板字符串有：反引号 raw 语义，`\n`、`\d` 等逐字保留、可多行，页面代码直接内嵌。
 - 多语句片段要 `return` 才有输出（与样例一致）。
 - 大结果（>32KB）自动落盘：stdout 回 `{"__dropped":true,"path":…,"preview":…}`，按 path 取全量。
 - E2E 测试共享 profile 会撞 chrome 单实例锁；测试已内置串行（跑法带 `BROWSE_NO_ATTACH=1`，防误附着你的浏览器）。

@@ -1673,6 +1673,48 @@ mod tests {
         }
     }
 
+    /// 集成（#18 严格测试令）：模板字符串与值方法面、JSON 命名空间、
+    /// 变量表的组合流——页面代码模板在宿主侧小加工的典型链路。
+    #[tokio::test]
+    async fn template_composes_with_value_face_and_json() {
+        let host = JsHost::new(cdp::Session::new());
+        // 模板产 JSON 文本 -> JSON.parse -> 值方法加工 -> stringify 回传
+        let v = host
+            .eval_snippet(
+                r#"const raw = `{"items": ["a", "b"]}`
+return JSON.stringify(JSON.parse(raw).items.slice(0, 1))"#,
+            )
+            .await
+            .unwrap();
+        assert_eq!(v, json!(r#"["a"]"#));
+        // 多行模板 + split/join 往返（模板真换行、普通串 \n 转义两口径并存）
+        let v = host
+            .eval_snippet("const t = `l1\nl2\nl3`\nreturn t.split(\"\\n\").join(\"-\")")
+            .await
+            .unwrap();
+        assert_eq!(v, json!("l1-l2-l3"));
+        // 模板内 ${} 字面量与反斜杠原样，length 按 UTF-16 单元
+        let v = host
+            .eval_snippet(r#"return `a${b}\nc`.length"#)
+            .await
+            .unwrap();
+        assert_eq!(v, json!(8));
+    }
+
+    /// 模板字符串求值（#18）：raw 语义直出，反斜杠与真换行原样。
+    #[tokio::test]
+    async fn template_string_evals_raw() {
+        let host = JsHost::new(cdp::Session::new());
+        let v = host
+            .eval_snippet("return `line1\nline2 \\d`")
+            .await
+            .unwrap();
+        assert_eq!(v, json!("line1\nline2 \\d"));
+        // 评审 F 复现件：偶数反斜杠后照常闭合，尾注释照剥不炸 token
+        let v = host.eval_snippet("return `a\\\\` // 注").await.unwrap();
+        assert_eq!(v, json!("a\\\\"));
+    }
+
     /// length 成员访问：字符串（UTF-16 单元）与数组（元素数）求值不静默（#15 回归锁）。
     #[tokio::test]
     async fn length_member_returns_value() {

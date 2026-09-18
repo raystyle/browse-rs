@@ -148,6 +148,19 @@ async fn exercise(engine: &Engine, host: &JsHost, expect_channel: &str) {
         .expect("waitJs");
     assert_eq!(waited, json!(42), "waitJs 应返回真值本身");
 
+    // #18 验收：模板字符串 raw 语义经真 V8 往返——内层正则含 \n 与 \d、
+    // 页面侧模板 ${} 插值、多行模板（真换行进 expression）
+    let tpl_probe = r#"return (await session.Runtime.evaluate({expression: `[/\n/.test("a\nb"), /\d/.test("x7"), \`a${1+1}c\` === "a2c", \`m
+l\`.length === 3].join("|")`, returnByValue:true})).result.value"#;
+    let via_tpl = host.eval_snippet(tpl_probe).await.expect("模板面 evaluate");
+    assert_eq!(via_tpl, json!("true|true|true|true"));
+    // A/B：同载荷的旧式手工转义双引号形，两形必须同值（行为等价锁）。
+    // 反引号在方言双引号串里本就是普通字符，旧式无需转义它
+    let esc_probe = r#"return (await session.Runtime.evaluate({expression: "[/\\n/.test(\"a\\nb\"), /\\d/.test(\"x7\"), `a${1+1}c` === \"a2c\", `m
+l`.length === 3].join(\"|\")", returnByValue:true})).result.value"#;
+    let via_esc = host.eval_snippet(esc_probe).await.expect("转义面 evaluate");
+    assert_eq!(via_esc, via_tpl, "A/B：模板形与手工转义形必须同值");
+
     // snapshot：AX 树精简节点，含按钮
     host.eval_snippet(
         r#"await session.Page.navigate({url:"data:text/html,<title>ax</title><button onclick='window.go=5'>GoGo</button><input value=\"hi\">"})"#,

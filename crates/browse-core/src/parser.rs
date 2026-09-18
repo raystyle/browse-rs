@@ -2,8 +2,9 @@
 //!
 //! 移植自 browser-harness-rs `src/js_host.rs` 的解析半边，独立成模块便于单测。
 //! 方言支持：字面量、对象、数组、成员、下标、`await`、`const/let/var`、
-//! `return`、`//` 注释。不支持：函数字面量、`if/for/while`、模板字符串；
-//! 这些在解析期就报错并提示「页面逻辑放 `Runtime.evaluate` 的 expression」。
+//! `return`、`//` 注释、反引号模板字符串（raw 语义，#18）。不支持：函数
+//! 字面量、`if/for/while`；这些在解析期就报错并提示「页面逻辑放
+//! `Runtime.evaluate` 的 expression」。
 
 use anyhow::{Result, anyhow, bail};
 use serde_json::{Value, json};
@@ -69,7 +70,7 @@ pub enum Expr {
 /// 不支持语式的统一报错（CTA：诊断 + 下一步）。
 ///
 /// 保留关键字 `Runtime.evaluate`，契约测试锁它。
-const UNSUPPORTED_HINT: &str = "方言不支持该语法（if/for/while/函数/模板字符串）；下一步：页面逻辑放 Runtime.evaluate 的 expression 字符串，宿主侧只留 CDP 调用与取值";
+const UNSUPPORTED_HINT: &str = "方言不支持该语法（if/for/while/函数）；下一步：页面逻辑放 Runtime.evaluate 的 expression 字符串，宿主侧只留 CDP 调用与取值";
 
 /// 把字节偏移换算成「行L:列C」（错误定位用，CTA 的一半是位置）。
 ///
@@ -97,7 +98,7 @@ pub fn loc(src: &str, pos: usize) -> String {
 ///
 /// # Errors
 ///
-/// - 含方言外语法（if/for/while/函数/模板字符串，报错带下一步 CTA）。
+/// - 含方言外语法（if/for/while/函数，报错带下一步 CTA）。
 /// - token 残缺（未闭合字符串、缺 `=` / `]` / `,` 等），错误信息带停住的位置。
 /// - 末尾有解析不掉的余量。
 ///
@@ -145,25 +146,57 @@ pub fn snippet_complete(src: &str) -> bool {
     depth_ok(s)
 }
 
+/// 扫 raw 模板的闭合反引号（#18）：反引号只有在前面连续反斜杠为偶数个
+/// （零个）时才闭合——`` \\ `` 是两个字面量，奇偶判定的单一真相，
+/// `parse_string` 与两追踪器共用，防三份手写扫描器漂移。返回闭合反引号
+/// 的下标；未闭合返回 `None`。
+fn scan_raw_close(chars: &[char], from: usize) -> Option<usize> {
+    let mut backslashes = 0usize;
+    let mut i = from;
+    while i < chars.len() {
+        match chars[i] {
+            '\\' => backslashes += 1,
+            '`' if backslashes.is_multiple_of(2) => return Some(i),
+            _ => backslashes = 0,
+        }
+        i += 1;
+    }
+    None
+}
+
 fn depth_ok(s: &str) -> bool {
     let mut par = 0i32;
     let mut br = 0i32;
     let mut sq = 0i32;
     let mut quote: Option<char> = None;
     let mut esc = false;
-    for c in s.chars() {
+    let chars: Vec<char> = s.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        if c == '`' && quote.is_none() {
+            // raw 模板整段跳过（#18）：内容不计深度；未闭合视为不完整
+            match scan_raw_close(&chars, i + 1) {
+                Some(close) => i = close + 1,
+                None => return false,
+            }
+            continue;
+        }
         if let Some(q) = quote {
             if esc {
                 esc = false;
+                i += 1;
                 continue;
             }
             if c == '\\' {
                 esc = true;
+                i += 1;
                 continue;
             }
             if c == q {
                 quote = None;
             }
+            i += 1;
             continue;
         }
         match c {
@@ -176,17 +209,20 @@ fn depth_ok(s: &str) -> bool {
             ']' => sq -= 1,
             _ => {}
         }
+        i += 1;
     }
     quote.is_none() && par <= 0 && br <= 0 && sq <= 0
 }
 
-/// 把 `//` 行注释剥掉，保留字符串字面量里的 `//`。
+/// 把 `//` 行注释剥掉，保留字符串字面量里的 `//`；反引号模板（raw 语义）
+/// 整段是内容，其中的 `//` 也不剥（#18）。
 ///
 /// # Examples
 ///
 /// ```
 /// assert_eq!(browse_core::parser::strip_comments("a // 尾注\nb"), "a \nb");
 /// assert_eq!(browse_core::parser::strip_comments(r#""http://x""#), r#""http://x""#);
+/// assert_eq!(browse_core::parser::strip_comments("`a // b`"), "`a // b`");
 /// ```
 pub fn strip_comments(s: &str) -> String {
     let mut out = String::new();
@@ -196,6 +232,21 @@ pub fn strip_comments(s: &str) -> String {
     let mut i = 0;
     while i < chars.len() {
         let c = chars[i];
+        if c == '`' && quote.is_none() {
+            // raw 模板整段保留（#18）：闭合判定共用 scan_raw_close，
+            // 其中的 // 不当注释剥
+            match scan_raw_close(&chars, i + 1) {
+                Some(close) => {
+                    out.extend(chars[i..=close].iter());
+                    i = close + 1;
+                }
+                None => {
+                    out.extend(chars[i..].iter());
+                    i = chars.len();
+                }
+            }
+            continue;
+        }
         if let Some(q) = quote {
             out.push(c);
             if esc {
@@ -330,9 +381,6 @@ impl<'a> Parser<'a> {
 
     fn parse_stmt(&mut self) -> Result<Stmt> {
         self.skip_ws();
-        if self.peek() == Some('`') {
-            bail!("{UNSUPPORTED_HINT}（模板字符串，{}）", self.here());
-        }
         if let Some(kw) = self.peek_keyword()
             && matches!(kw, "if" | "for" | "while" | "function" | "class")
         {
@@ -463,7 +511,7 @@ impl<'a> Parser<'a> {
             return Ok(Expr::Lit(Value::Null));
         }
         if self.peek() == Some('`') {
-            bail!("{UNSUPPORTED_HINT}（模板字符串，{}）", self.here());
+            return self.parse_string().map(|s| Expr::Lit(json!(s)));
         }
         if self.eat("{") {
             return self.parse_object();
@@ -564,21 +612,65 @@ impl<'a> Parser<'a> {
         Ok(self.src[start..self.pos].to_string())
     }
 
+    /// 解析字符串字面量：单双引号走常规转义，反引号走 raw 模板语义
+    /// （#18）——只有 `\`` 与 `` \${ `` 是转义，其余含反斜杠序列逐字保留，
+    /// 真换行合法；闭合判定共用 [`scan_raw_close`]（奇偶单一真相）。
     fn parse_string(&mut self) -> Result<String> {
         self.skip_ws();
         let q = self.peek().ok_or_else(|| {
             anyhow!(
-                "期望字符串（{}）；下一步：字符串用成对单/双引号",
+                "期望字符串（{}）；下一步：字符串用成对单/双引号或反引号模板",
                 self.here()
             )
         })?;
-        if q != '"' && q != '\'' {
+        if q != '"' && q != '\'' && q != '`' {
             bail!(
-                "期望字符串（{}）；下一步：字符串用成对单/双引号",
+                "期望字符串（{}）；下一步：字符串用成对单/双引号或反引号模板",
                 self.here()
             );
         }
         self.pos += 1;
+        if q == '`' {
+            let chars: Vec<char> = self.src[self.pos..].chars().collect();
+            let close = scan_raw_close(&chars, 0).ok_or_else(|| {
+                anyhow!(
+                    "未闭合模板字符串（{}）；下一步：补上结尾反引号",
+                    self.here()
+                )
+            })?;
+            let mut out = String::new();
+            let mut run = 0usize;
+            let mut j = 0;
+            while j < close {
+                let c = chars[j];
+                if c == '\\' {
+                    // 连续反斜杠先逐字保留，奇偶在见到后继字符时结算
+                    // （与 scan_raw_close 的闭合判定同口径）
+                    run += 1;
+                    out.push(c);
+                    j += 1;
+                    continue;
+                }
+                if c == '`' && run % 2 == 1 {
+                    // 被转义的反引号：削掉一个反斜杠
+                    out.pop();
+                } else if c == '$' && run % 2 == 1 && chars.get(j + 1) == Some(&'{') {
+                    // \${ 降格为 ${
+                    out.pop();
+                    out.push_str("${");
+                    j += 2;
+                    run = 0;
+                    continue;
+                }
+                out.push(c);
+                run = 0;
+                j += 1;
+            }
+            self.pos += chars[..close].iter().map(|c| c.len_utf8()).sum::<usize>() + 1;
+            return Ok(out);
+        }
+        // 普通字符串（单双引号）：\n\t、引号与反斜杠照常转义；其余序列
+        // 保留反斜杠原样（#18 丢字修：\d 不再被吞成 d）
         let mut out = String::new();
         loop {
             let c = self
@@ -588,18 +680,22 @@ impl<'a> Parser<'a> {
             if c == q {
                 break;
             }
-            if c == '\\' {
-                let n = self.peek().ok_or_else(|| {
-                    anyhow!("未闭合字符串（{}）；下一步：补上结尾引号", self.here())
-                })?;
-                self.pos += n.len_utf8();
-                out.push(match n {
-                    'n' => '\n',
-                    't' => '\t',
-                    other => other,
-                });
-            } else {
+            if c != '\\' {
                 out.push(c);
+                continue;
+            }
+            let n = self
+                .peek()
+                .ok_or_else(|| anyhow!("未闭合字符串（{}）；下一步：补上结尾引号", self.here()))?;
+            self.pos += n.len_utf8();
+            match n {
+                'n' => out.push('\n'),
+                't' => out.push('\t'),
+                _ if n == '\\' || n == q => out.push(n),
+                other => {
+                    out.push('\\');
+                    out.push(other);
+                }
             }
         }
         Ok(out)
