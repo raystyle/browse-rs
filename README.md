@@ -59,9 +59,11 @@ daemon。
 升到最新版并默认切用（发现源 `latest`，`BROWSE_CHROME_LATEST` 可钉）。
 
 版本说明：`152.0.7977.84-r2` 是补丁族重发版（同 152 基线，`-r2` 后缀即
-补丁形版本号），clean-chrome 补丁版（上游主张 51 锚恒 false）：本仓三端
-实测 spawn 与 flat 附着态 `navigator.webdriver` 全 false（pipe 态未验），
-修复自起引擎被 Google 登录一票否决的问题；旧版 `152.0.7977.84`
+补丁形版本号），clean-chrome 补丁版（上游主张 51 锚恒 false）：本仓实测
+`navigator.webdriver` 全 false（spawn headless 的 port 与 pipe 通道进
+e2e 断言，见 `tests/e2e.rs`，#29 验收补格；flat 附着态三端实测，录
+docs/diary/2026-09-16-doc-system.md），修复自起引擎被 Google 登录
+一票否决的问题；旧版 `152.0.7977.84`
 （r1）保留可回退（`browse chrome use` 切回，`browse chrome remove` 清理）。
 
 ## 配置

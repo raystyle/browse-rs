@@ -19,7 +19,7 @@
 - `browse chrome update`：发现镜像最新版（桶根 `latest` 纯文本指针，`BROWSE_CHROME_LATEST` 可钉）加未装则镜像安装（sha256 锚校验链）加 pin 切最新；幂等，回执带 previousPin
 - `browse chrome remove <版本>`：删已装版本（目录与登记一起清，回执带释放文件数与字节数；pin 指向的拒删保「pin 永远指向在位版本」不变量）
 - 修 #15：方言 `.length` 成员访问不再静默丢（数组元素数；字符串按 UTF-16 单元同 JS），回归锁三态
-- r2 补丁形资产全链（152.0.7977.84-r2，clean-chrome 补丁版；上游主张 51 锚源码级恒 false，本仓实测口径为三端 spawn 与 flat 附着态全 false，pipe 态未验）：版本号收连字符后缀（兼容锁在册）；三端真桶实测 update 拉新、Google 登录面进 v3/signin 表单页。stealth 注入按用户裁定撤批不自带，r2 即终态
+- r2 补丁形资产全链（152.0.7977.84-r2，clean-chrome 补丁版；上游主张 51 锚源码级恒 false，本仓实测口径为三端 spawn 与 flat 附着态全 false，pipe 态未验）：版本号收连字符后缀（兼容锁在册）；三端真桶实测 update 拉新、Google 登录面进 v3/signin 表单页。stealth 注入按用户裁定撤批不自带，r2 即终态。追正 2026-09-19：pipe 态后补进本仓 e2e 断言（tests/e2e.rs 通道参数化），spawn 的 port 与 pipe 两通道口径闭合（both 态未接，属 clean-chrome 侧矩阵）
 
 ## 0.5.1 - 2026-09-18
 

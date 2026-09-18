@@ -1,7 +1,8 @@
 //! 真 chrome 端到端（本机 clean-chrome）。门控：`BROWSE_E2E=1`，CI 无浏览器跳过。
 //!
 //! 覆盖：spawn headless 引擎（端口态与管道态各一）-> 方言 navigate data: URL
-//! -> Runtime.evaluate 读 title -> down 只杀自起实例。
+//! -> Runtime.evaluate 读 title 与 `navigator.webdriver` 恒 false -> down 只杀
+//! 自起实例。
 
 use browse_core::{Engine, EngineSpec, JsHost};
 use serde_json::{Value, json};
@@ -71,6 +72,17 @@ async fn exercise(engine: &Engine, host: &JsHost, expect_channel: &str) {
         .await
         .expect("evaluate");
     assert_eq!(title, json!("browse-e2e"));
+
+    // navigator.webdriver 恒 false（clean-chrome 补丁族主张，#29 三态验收矩阵）：
+    // 本断言随 exercise 跑齐 spawn 的 port 与 pipe 两通道，flat 附着态另测。
+    // 判据是锚生效：未打锚的 stock 引擎在此（headless/pipe 均为真值态）应红
+    let webdriver = host
+        .eval_snippet(
+            r#"return (await session.Runtime.evaluate({expression:"navigator.webdriver", returnByValue:true})).result.value"#,
+        )
+        .await
+        .expect("evaluate webdriver");
+    assert_eq!(webdriver, json!(false), "navigator.webdriver 应恒 false");
 
     // peekEvents 非破坏：frameStartedLoading 一定先于 frameNavigated 落缓冲，
     // 等到后者时前者必在；peek 它不消费，waitFor 仍取得到
