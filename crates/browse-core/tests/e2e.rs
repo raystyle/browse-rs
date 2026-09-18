@@ -136,6 +136,21 @@ async fn exercise(engine: &Engine, host: &JsHost, expect_channel: &str) {
         .expect("waitJs");
     assert_eq!(waited, json!(42), "waitJs 应返回真值本身");
 
+    // #16 stealth：watcher 已对活动 session 注入 webdriver 覆写，注入后加载的
+    // 新文档里页面脚本应读到 false（此刻距引擎附着已远超 300ms 补开窗）
+    host.eval_snippet(
+        r#"await session.Page.navigate({url:"data:text/html,<title>stealth</title>"})"#,
+    )
+    .await
+    .expect("stealth 验证导航");
+    let wd = host
+        .eval_snippet(
+            r#"return (await session.Runtime.evaluate({expression:"navigator.webdriver", returnByValue:true})).result.value"#,
+        )
+        .await
+        .expect("webdriver 读值");
+    assert_eq!(wd, json!(false), "stealth 覆写后页面脚本应读到 false: {wd}");
+
     // snapshot：AX 树精简节点，含按钮
     host.eval_snippet(
         r#"await session.Page.navigate({url:"data:text/html,<title>ax</title><button onclick='window.go=5'>GoGo</button><input value=\"hi\">"})"#,

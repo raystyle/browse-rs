@@ -60,6 +60,7 @@ daemon。
 | `BROWSE_CDP_WS` | 钉死连接的 WS URL |
 | `BROWSE_NO_ATTACH=1` | 跳过附着探测，强制 spawn 隔离实例 |
 | `BROWSE_NO_AUTO_DIALOG=1` | 关掉 alert 自动接受 |
+| `BROWSE_NO_STEALTH=1` | 关掉 `navigator.webdriver` 覆写（默认开：受远程调试控制的 Chrome 该标记恒为 true，Google 登录等站点会一票否决） |
 | `BROWSE_EVAL_TIMEOUT` | 单次求值超时秒数（默认 300） |
 | `BROWSE_DENY_DOMAINS` / `BROWSE_ALLOW_DOMAINS` | 域策略（后缀匹配，deny 优先） |
 | `BROWSE_CHROME_MIRROR` / `BROWSE_CHROME_ASSET` | 版本管理器镜像与资产名覆写 |

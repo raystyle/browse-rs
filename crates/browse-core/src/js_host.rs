@@ -217,6 +217,15 @@ impl JsHost {
                     if o.get("__host").and_then(|v| v.as_str()) == Some("session") {
                         return Ok(json!({"__host": "session", "__domain": prop}));
                     }
+                    // 内建 length：数组元素数与字符串长度（UTF-16 单元，同 JS）；
+                    // serde_json 的 get 只走对象键，字符串与数组在此显式补齐（#15）
+                    if prop == "length" {
+                        match &o {
+                            Value::Array(a) => return Ok(json!(a.len())),
+                            Value::String(s) => return Ok(json!(s.encode_utf16().count())),
+                            _ => {}
+                        }
+                    }
                     Ok(o.get(prop).cloned().unwrap_or(Value::Null))
                 }
                 Expr::Index { obj, index } => {
@@ -886,10 +895,17 @@ impl JsHost {
 /// `BROWSE_NO_AUTO_DIALOG=1` 关掉自动接受；`confirm`/`prompt` 留给显式
 /// `dialogAccept/dialogDismiss`。状态由 cdp `route()` 截获维护
 /// （[`cdp::Session::pending_dialog`]）。
+///
+/// 同一补域位顺带注入 webdriver 覆写（#16）：受远程调试控制的 Chrome 里
+/// `navigator.webdriver` 恒为 true（与 `--enable-automation` 无关），
+/// Google 登录等站点据此一票否决；`Page.addScriptToEvaluateOnNewDocument`
+/// 让每个新文档的页面脚本读到 false。默认开，`BROWSE_NO_STEALTH=1` 关。
 fn spawn_dialog_watcher(session: Arc<Session>) {
     tokio::spawn(async move {
         let auto =
             !std::env::var_os("BROWSE_NO_AUTO_DIALOG").is_some_and(|v| v == "1" || v == "true");
+        let stealth =
+            !std::env::var_os("BROWSE_NO_STEALTH").is_some_and(|v| v == "1" || v == "true");
         let mut enabled: HashSet<String> = HashSet::new();
         loop {
             tokio::time::sleep(std::time::Duration::from_millis(300)).await;
@@ -901,6 +917,18 @@ fn spawn_dialog_watcher(session: Arc<Session>) {
                     .await
                     .is_ok()
             {
+                if stealth {
+                    let _ = session
+                        .call_on(
+                            "Page.addScriptToEvaluateOnNewDocument",
+                            json!({
+                                "source":
+                                    "Object.defineProperty(navigator,'webdriver',{get:()=>false})"
+                            }),
+                            &sid,
+                        )
+                        .await;
+                }
                 enabled.insert(sid);
             }
             if !auto {
@@ -1188,5 +1216,27 @@ mod tests {
             let dec = base64_decode(&enc).unwrap();
             assert_eq!(dec, s.as_bytes(), "{s:?} 往返失败");
         }
+    }
+
+    /// length 成员访问：字符串（UTF-16 单元）与数组（元素数）求值不静默（#15 回归锁）。
+    #[tokio::test]
+    async fn length_member_returns_value() {
+        let host = JsHost::new(cdp::Session::new());
+        let v = host
+            .eval_snippet(r#"return "abc".length"#)
+            .await
+            .expect("求值应成功");
+        assert_eq!(v, json!(3));
+        let v = host
+            .eval_snippet(r#"const t = [1, 2]; return t.length"#)
+            .await
+            .expect("数组 length 应可求值");
+        assert_eq!(v, json!(2));
+        // JS 语义对齐：BMP 外字符按 UTF-16 单元计（一个 emoji 占 2）
+        let v = host
+            .eval_snippet("return \"😀\".length")
+            .await
+            .expect("emoji length 应可求值");
+        assert_eq!(v, json!(2));
     }
 }
