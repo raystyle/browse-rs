@@ -912,16 +912,13 @@ impl JsHost {
 /// `dialogAccept/dialogDismiss`。状态由 cdp `route()` 截获维护
 /// （[`cdp::Session::pending_dialog`]）。
 ///
-/// 同一补域位顺带注入 webdriver 覆写（#16）：受远程调试控制的 Chrome 里
-/// `navigator.webdriver` 恒为 true（与 `--enable-automation` 无关），
-/// Google 登录等站点据此一票否决；`Page.addScriptToEvaluateOnNewDocument`
-/// 让每个新文档的页面脚本读到 false。默认开，`BROWSE_NO_STEALTH=1` 关。
+/// webdriver 覆写不在此做（用户裁定 2026-09-18）：等 clean-chrome 源码级
+/// 恒 false（其 155 窗资产，四态免疫）；155 前需 Google 登录的场附着
+/// 正式版 Chrome。
 fn spawn_dialog_watcher(session: Arc<Session>) {
     tokio::spawn(async move {
         let auto =
             !std::env::var_os("BROWSE_NO_AUTO_DIALOG").is_some_and(|v| v == "1" || v == "true");
-        let stealth =
-            !std::env::var_os("BROWSE_NO_STEALTH").is_some_and(|v| v == "1" || v == "true");
         let mut enabled: HashSet<String> = HashSet::new();
         loop {
             tokio::time::sleep(std::time::Duration::from_millis(300)).await;
@@ -933,18 +930,6 @@ fn spawn_dialog_watcher(session: Arc<Session>) {
                     .await
                     .is_ok()
             {
-                if stealth {
-                    let _ = session
-                        .call_on(
-                            "Page.addScriptToEvaluateOnNewDocument",
-                            json!({
-                                "source":
-                                    "Object.defineProperty(navigator,'webdriver',{get:()=>false})"
-                            }),
-                            &sid,
-                        )
-                        .await;
-                }
                 enabled.insert(sid);
             }
             if !auto {

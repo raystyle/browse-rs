@@ -277,3 +277,10 @@
 - 实证 [实证: pin 拒删出先切 CTA；未装拒删带已装清单；帮助面两命令活树自带；单测 remove_version_three_states 三态绿]
 - 门禁：fmt、clippy -D warnings、test 12 组、doc test、rustdoc、aidoc check strict、PE 全绿。
 - 版本判定：能力新增取 minor，与 stealth 加 update 同卷 0.6.0，候 wave 令。
+
+## stealth 撤批（用户令，2026-09-18）
+
+- 用户裁定：#16 的 webdriver 覆写 browse 不自带，等 clean-chrome 源码级恒 false（其第 51 锚已落树，navigator.cc 函数体整体替换，四态免疫含 pipe 通道；Release 资产随 155 窗约 09-23）。撤注全面：watcher 注入代码加 BROWSE_NO_STEALTH 环境钉加 README 行加帮助面行加 e2e 断言；watcher 文档留裁定注（155 前需 Google 登录附着正式版 Chrome）。#15 length 修复不受影响（同批异件，保留）。
+- issue #16 处置路径改为上游解：155 资产上线后 chrome update 拉到即恒 false，本仓零代码；单保持 open 候验证后关。
+- 门禁：fmt、clippy -D warnings、test 12 组、e2e 双通道 2/2（撤断言后复跑）、aidoc check strict、PE 全绿。
+- 版本判定：撤回行为变化件后，0.6.0 卷内容改为 update 加 remove 两面（能力新增 minor），stealth 不再计卷。
