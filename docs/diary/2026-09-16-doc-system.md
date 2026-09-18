@@ -257,6 +257,6 @@
 - #15（.length 静默丢，i/15）：求值器 Expr::Member 走 serde_json 的 get(prop) 只查对象键，字符串与数组取 length 返 None 落 Null 被渲染层丢；补内建 length（数组元素数；字符串按 UTF-16 单元同 JS 语义），回归锁 length_member_returns_value 三态。[实证: 实弹 return "abc".length 得 3；数组 3；emoji 2]
 - #16（webdriver 硬拦截 Google 登录，i/16）：修形取诉求一（兼诉求二开关）：daemon 会话 watcher 在补 Page.enable 位顺带注入 Page.addScriptToEvaluateOnNewDocument 覆写 navigator.webdriver 为 false，每新文档生效，默认开，BROWSE_NO_STEALTH=1 关（与 BROWSE_NO_AUTO_DIALOG 家形对称）；环境变量入帮助面与 README 表；e2e 真引擎断言新文档读 false，端口与管道双通道绿。
 - 排障注记：验证 #15 时又踩旧 daemon 陷阱（daemon 持修复前映像，CLI 新而 daemon 旧），browse down 重拉即过；该陷阱今日封版批已入档。
-- 三方取证（clean-chrome 工位）：其「port 通道源码级 webdriver false」论断在本仓实产物上被反证——BROWSE_NO_STEALTH=1 实测本机 Linux 有头与无头加 port 两态均 true，加 issue 的 Windows 有头证词，两平台同象；已回执对方建议复核 152 实构建。脚本注入法四态（port/pipe、有头/无头）全覆盖，pipe 态源码级恒 true 场景注入是唯一解（对方同判）。
+- 三方取证（clean-chrome 工位）：其「port 通道源码级 webdriver false」论断在本仓实产物上被反证：BROWSE_NO_STEALTH=1 实测本机 Linux 有头与无头加 port 两态均 true，加 issue 的 Windows 有头证词，两平台同象；已回执对方建议复核 152 实构建。脚本注入法四态（port/pipe、有头/无头）全覆盖，pipe 态源码级恒 true 场景注入是唯一解（对方同判）。
 - 门禁：fmt、clippy -D warnings、test 12 组、doc test、aidoc check strict（无漂移）、PE、e2e 双通道 2/2 全绿。
 - 版本判定：#16 默认行为变化取 minor，下封 0.6.0；候 wave 令。悬置转呈：clean-chrome 补丁族工单（源码级恒 false）属对方锚面扩张，候用户裁定。
