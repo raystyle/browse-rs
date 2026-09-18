@@ -954,6 +954,20 @@ mod tests {
         std::fs::remove_dir_all(&base).ok();
     }
 
+    /// r2 后缀形版本（clean-chrome 补丁族重发资产，51 锚恒 false 版）：
+    /// 版本校验、资产名与目录名提取全兼容，防未来收紧 valid_version 误伤。
+    #[test]
+    fn r2_suffix_version_compatible() {
+        let v = "152.0.7977.84-r2";
+        assert!(valid_version(v).is_ok(), "连字符后缀形必须收");
+        assert_eq!(
+            asset_name(v),
+            format!("chromium-{v}-{}.zip", chromium_triple())
+        );
+        let d = std::path::Path::new("/x/chromium-152.0.7977.84-r2");
+        assert_eq!(version_from_dir_name(d), "152.0.7977.84-r2");
+    }
+
     /// remove 三态：删非 pin 版（目录加登记清、pin 不动、回释放量）、
     /// pin 指向的拒删、未装的拒删。
     #[test]

@@ -291,3 +291,9 @@
 - 发现端点对齐：latest_version 缺省读 <mirror>/latest 纯文本指针（clean-chrome 提案口径，桶根单行四段版本号，随 155 入册，物件候 omc 落），弃我自拟 latest.txt 名；端点返回非纯文本（SPA 兜底页）给专门 CTA。活面五处随迁（README、getting-started、REQ-003、目录双条描述）；本 diary 历史批记按当时事实保留。
 - 实证 [实证: browse chrome update 裸跑 CTA 指向 latest 指针缺位；aidoc 重生后 strict clean；test 12 组 0 败]
 - 门禁：fmt、clippy -D warnings、test 12 组、aidoc check strict、PE 全绿。
+
+## r2 资产就绪通报处置（clean-chrome 转达，2026-09-18）
+
+- 152.0.7977.84-r2 三平台资产产出（51 锚恒 false 版，三端双态验证全 false 含 linux 翻板平台），候 omc 上桶加 latest 指针；资产名形 chromium-152.0.7977.84-r2-<三元组>.zip 与我仓 asset_name 直出形一致，valid_version 收连字符后缀。
+- 处置：加 r2_suffix_version_compatible 回归锁（版本校验、资产名、目录名提取三面，防未来收紧 valid_version 误伤补丁形资产）；探桶确认尚未上（r2 边车与 latest 均 404 加 SPA 兜底）；上桶后动作链预定：BROWSE_CHROME_LATEST=152.0.7977.84-r2 或 latest 指针直跑 browse chrome update，拉新 spawn 验 webdriver false，#16 即终结闭单。
+- 门禁：fmt、clippy -D warnings、test 12 组 0 败、aidoc check strict、PE 全绿。
