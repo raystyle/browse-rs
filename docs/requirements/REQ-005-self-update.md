@@ -3,7 +3,7 @@ id: REQ-005
 title: browse update 自更新面（家族统一标准件）
 status: implemented
 priority: should
-trace: 单测五件（self_update tests：资产名形、semver 判新、解包唯一命中、自替换回滚、双通道三态）+ 实弹（upToDate 幂等真 API 链、ark 落痕拦 CTA、评审侧 0.6.0→0.6.1 双通道全链实测）
+trace: 单测五件（self_update tests：资产名形、semver 判新、解包唯一命中、自替换回滚、双通道三态）+ 实弹（upToDate 幂等真 API 链、管理方布局拦 CTA、评审侧 0.6.0→0.6.1 双通道全链实测、终验 0.6.1 版号旧件经镜像 stable 段自更新到 0.7.0 自证过零残件，diary 2026-09-18 终验节）
 ---
 
 # REQ-005：browse update 自更新面
