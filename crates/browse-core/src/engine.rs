@@ -363,7 +363,9 @@ impl Engine {
             Some(t) => t.target_id.clone(),
             None => self.session.create_target("about:blank").await?,
         };
-        self.session.use_target(&target).await?;
+        let sid = self.session.use_target(&target).await?;
+        // Page 域同步开（#19）：首用求值路径的立即 waitFor 不再竞开域时序
+        crate::js_host::ensure_page_enabled(&self.session, &sid).await;
         Ok(())
     }
 
@@ -379,7 +381,9 @@ impl Engine {
             ));
         }
         let id = self.session.create_target("about:blank").await?;
-        self.session.use_target(&id).await?;
+        let sid = self.session.use_target(&id).await?;
+        // Page 域同步开（#19）：--new-tab 后的立即 waitFor 不再竞开域时序
+        crate::js_host::ensure_page_enabled(&self.session, &sid).await;
         Ok(id)
     }
 

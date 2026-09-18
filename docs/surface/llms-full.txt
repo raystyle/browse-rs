@@ -63,6 +63,8 @@
 | `routeMock(pattern, body, opts?)` | 网络拦截：命中的请求本地应答（默认带 ACAO *）。 |
 | `routeClear()` | 清空全部拦截规则并 Fetch.disable。 |
 | `waitLoad(ms?)` | 等 document.readyState 到 complete（已加载立即返回）。 |
+| `waitForResponse(pattern, ms?)` | 等 URL 命中 glob（与 routeBlock/routeMock 同写法）的最近一个响应完成（#20）：回 {requestId,url,status,headers,body,json}；命中含历史（Network 域须在触发前已开，本函数幂等开收不到已发出的响应），方言无并发，可用形态是触发后等待；体等 loadingFinished 再取（5 秒窗），失败显式 bodyError；base64 自动解码，可解析时附 json。 |
+| `responseBody(requestId)` | 按 requestId 取响应体（#20）：peekEvents/findEvents 拿到的 id 皆可用，base64 自动解码。 |
 | `waitIdle(ms?)` | 等 network 静默（窗口语义：起点前挂着的请求不计）。 |
 | `recordStart(opts?)` | 开始录屏（Screencast 帧流落盘；everyNthFrame 源端抽帧、maxWidth/maxHeight 限宽高）。 |
 | `recordStop()` | 停止录制，回 {frames,bytes,dir}（PNG 已在盘上）。 |
@@ -645,6 +647,29 @@ await routeClear()
 
 ```js
 await waitLoad(8000)
+```
+
+## `waitForResponse(pattern, ms?)`
+
+等 URL 命中 glob（与 routeBlock/routeMock 同写法）的最近一个响应完成（#20）：回 {requestId,url,status,headers,body,json}；命中含历史（Network 域须在触发前已开，本函数幂等开收不到已发出的响应），方言无并发，可用形态是触发后等待；体等 loadingFinished 再取（5 秒窗），失败显式 bodyError；base64 自动解码，可解析时附 json。
+
+参数：
+- `pattern`（string），必填
+- `ms`（int）
+
+```js
+return await waitForResponse("https://x.test/api*")
+```
+
+## `responseBody(requestId)`
+
+按 requestId 取响应体（#20）：peekEvents/findEvents 拿到的 id 皆可用，base64 自动解码。
+
+参数：
+- `requestId`（string），必填
+
+```js
+return await responseBody(rid)
 ```
 
 ## `waitIdle(ms?)`

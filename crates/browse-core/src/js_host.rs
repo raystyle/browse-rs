@@ -119,6 +119,119 @@ impl JsHost {
         Ok(())
     }
 
+    /// 等 URL 命中 glob 的最近一个响应完成（#20）：窗口语义是「最近命中
+    /// （含历史，前提是 Network 域在触发前已开），没有则等到超时」；方言
+    /// 无并发，可用形态是触发后等待。命中响应头后等同一 requestId 的体
+    /// 完成信号（loadingFinished，体窗 5 秒）再取
+    /// `Network.getResponseBody`（base64 自动解码），可解析为 JSON 时附
+    /// `json` 字段；体取失败显式 `body: null` 加 `bodyError`，不静默省略。
+    ///
+    /// # Errors
+    ///
+    /// - `Network.enable` 失败（未连接引擎）。
+    /// - 超时窗内没有命中响应（错误带 pattern 与 glob 写法 CTA）。
+    async fn wait_for_response(&self, pattern: &str, ms: u64) -> Result<Value> {
+        // 开 Network 域（幂等）：不开收不到响应事件；全链错误保 CTA
+        self.session
+            .call("Network.enable", json!({}))
+            .await
+            .map_err(|e| anyhow!("Network.enable 失败：{e:#}"))?;
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_millis(ms);
+        let ev = loop {
+            let hits = self
+                .session
+                .peek_events("Network.responseReceived", 1000)
+                .await;
+            if let Some(e) = hits.into_iter().rev().find(|e| {
+                e.pointer("/params/response/url")
+                    .and_then(Value::as_str)
+                    .is_some_and(|u| glob_match(pattern, u))
+            }) {
+                break e;
+            }
+            if tokio::time::Instant::now() >= deadline {
+                let seen: Vec<String> = self
+                    .session
+                    .peek_events("Network.responseReceived", 1000)
+                    .await
+                    .iter()
+                    .filter_map(|e| {
+                        e.pointer("/params/response/url")
+                            .and_then(Value::as_str)
+                            .map(str::to_string)
+                    })
+                    .collect();
+                bail!(
+                    "waitForResponse 超时（{ms}ms 内没有 URL 命中 {pattern} 的响应；缓冲里 {} 条 responseReceived，URL 有 {seen:?}）；下一步：pattern 与 routeBlock/routeMock 同一套 glob 写法（* 通配），确认触发动作在超时窗内，必要时先 await session.Network.enable({{}})",
+                    seen.len()
+                );
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        };
+        let rid = ev
+            .pointer("/params/requestId")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        let mut out = json!({
+            "requestId": rid,
+            "url": ev.pointer("/params/response/url").cloned().unwrap_or(Value::Null),
+            "status": ev.pointer("/params/response/status").cloned().unwrap_or(Value::Null),
+            "headers": ev.pointer("/params/response/headers").cloned().unwrap_or(Value::Null),
+        });
+        if !rid.is_empty() {
+            // 体就绪等待（评审 F）：responseReceived 只到响应头，等同一
+            // requestId 的 loadingFinished/loadingFailed（体窗 5 秒）再取，
+            // 防头到体未就绪时静默丢 body
+            let rid_ref = rid.as_str();
+            let body_ready = |evs: &[Value]| {
+                evs.iter().any(|e| {
+                    e.pointer("/params/requestId").and_then(Value::as_str) == Some(rid_ref)
+                })
+            };
+            let body_deadline =
+                tokio::time::Instant::now() + std::time::Duration::from_millis(BODY_WAIT_MS);
+            loop {
+                let done = body_ready(
+                    &self
+                        .session
+                        .peek_events("Network.loadingFinished", 1000)
+                        .await,
+                ) || body_ready(
+                    &self
+                        .session
+                        .peek_events("Network.loadingFailed", 1000)
+                        .await,
+                );
+                if done || tokio::time::Instant::now() >= body_deadline {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            }
+            match self
+                .session
+                .call("Network.getResponseBody", json!({ "requestId": rid }))
+                .await
+            {
+                Ok(b) => {
+                    let decoded = decode_response_body(&b);
+                    if let Value::String(text) = &decoded["body"]
+                        && let Ok(parsed) = serde_json::from_str::<Value>(text)
+                    {
+                        out["json"] = parsed;
+                    }
+                    out["body"] = decoded["body"].clone();
+                }
+                Err(e) => {
+                    // 体失败显式化：body 为 null 加 bodyError 带因，不静默省略
+                    out["body"] = Value::Null;
+                    out["bodyError"] = json!(format!("{e:#}"));
+                }
+            }
+        }
+        Ok(out)
+    }
+
     /// 交互/求值族调用前的快失败：有未处理的 confirm/prompt 时 Input 与
     /// Runtime.evaluate 都会挂起，与其烧超时不如立刻给 CTA。
     async fn assert_no_dialog(&self) -> Result<()> {
@@ -595,6 +708,23 @@ impl JsHost {
                 let ms = argv.first().and_then(Value::as_u64).unwrap_or(10_000);
                 crate::semantic::wait_idle(&self.session, ms).await
             }
+            // ---- 网络响应面（#20）：URL glob 命中等响应完成 ----
+            "waitForResponse" => {
+                let pat = str_arg(argv, 0, "waitForResponse 的 pattern")?;
+                let ms = argv.get(1).and_then(Value::as_u64).unwrap_or(15_000);
+                self.wait_for_response(pat, ms).await
+            }
+            "responseBody" => {
+                let rid = str_arg(argv, 0, "responseBody 的 requestId")?;
+                let b = self
+                    .session
+                    .call("Network.getResponseBody", json!({ "requestId": rid }))
+                    .await
+                    .map_err(|e| anyhow!(
+                        "Network.getResponseBody({rid}) 失败：{e:#}；下一步：requestId 可能已过期释放（No resource with given identifier），findEvents 默认取最早一条，配本函数建议取最新（数组末尾）或直接用 waitForResponse"
+                    ))?;
+                Ok(decode_response_body(&b))
+            }
             // ---- 元素引用（D35-lite）：ref 来自最近一次 snapshot() ----
             "clickRef" => {
                 let r = argv.first().and_then(Value::as_str).ok_or_else(|| anyhow!(
@@ -731,7 +861,7 @@ impl JsHost {
                 crate::record::stop(&self.session, rec).await
             }
             other => bail!(
-                "未知函数 {other}；下一步：可用全局 listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/snapshot()/screenshot(path?, full?)/pdf(path?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/clickAt(x,y)/fillInput(sel,text)/clickRef(ref)/fillRef(ref,text)/selectOption(ref,value)/pressKey(key)/dialogStatus()/dialogAccept(text?)/dialogDismiss()/routeBlock(pattern)/routeMock(pattern,body,opts?)/routeClear()/waitLoad(ms?)/waitIdle(ms?)/recordStart(opts?)/recordStop()/chromeInstall(opts?)/chromeList()/chromeUse(version)/chromeUpdate()/chromeRemove(version)/chromeDoctor()/print(x)；CDP 走 session.<Domain>.<method>(params)"
+                "未知函数 {other}；下一步：可用全局 listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/snapshot()/screenshot(path?, full?)/pdf(path?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/clickAt(x,y)/fillInput(sel,text)/clickRef(ref)/fillRef(ref,text)/selectOption(ref,value)/pressKey(key)/dialogStatus()/dialogAccept(text?)/dialogDismiss()/routeBlock(pattern)/routeMock(pattern,body,opts?)/routeClear()/waitLoad(ms?)/waitIdle(ms?)/waitForResponse(pattern,ms?)/responseBody(requestId)/recordStart(opts?)/recordStop()/chromeInstall(opts?)/chromeList()/chromeUse(version)/chromeUpdate()/chromeRemove(version)/chromeDoctor()/print(x)；CDP 走 session.<Domain>.<method>(params)"
             ),
         }
     }
@@ -790,6 +920,7 @@ impl JsHost {
                         "session.use 需要 targetId 字符串；下一步：session.use(tabs[0].targetId)，先 const tabs = await listPageTargets()"
                     ))?;
                 let sid = self.session.use_target(id).await?;
+                ensure_page_enabled(&self.session, &sid).await;
                 Ok(json!(sid))
             }
             "waitFor" | "wait_for" => {
@@ -1151,6 +1282,44 @@ fn connect_opts(v: Option<&Value>) -> ConnectOptions {
 
 // ---- 值方法面与 JSON 命名空间（#21）：方言结果在宿主侧的小加工 ----
 // 纯函数、无控制流；页面内逻辑仍走 Runtime.evaluate（分工见 --llms 手册）。
+
+/// 把 `Network.getResponseBody` 的返回解码成 `{body, base64Encoded}`：
+/// base64 响应自动解码为 UTF-8 文本（#20）。
+///
+/// 体就绪等待窗（毫秒）：测试态收短防拖慢单测。
+#[cfg(test)]
+const BODY_WAIT_MS: u64 = 800;
+#[cfg(not(test))]
+const BODY_WAIT_MS: u64 = 5_000;
+
+fn decode_response_body(b: &Value) -> Value {
+    let body = b.get("body").and_then(Value::as_str).unwrap_or("");
+    let b64 = b
+        .get("base64Encoded")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let text = if b64 {
+        base64_decode(body)
+            .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+            .unwrap_or_else(|_| body.to_string())
+    } else {
+        body.to_string()
+    };
+    json!({ "body": text, "base64Encoded": b64 })
+}
+
+/// 换靶或开新靶后同步补开 Page 域（#19）：消灭「use 之后立即 waitFor」
+/// 的开域时序竞态——事件只在 Page 域已开时才投递，300ms 轮询 watcher
+/// 是兜底不是主路径。幂等；失败静默（非 Page 型 target），不阻断换靶。
+///
+/// 防漏口径（#19 评审留痕）：新增 `use_target` 调用点必须同步补挂本
+/// 函数，当前五处——js_host 的 `use` 臂、semantic 的 `new_tab` 与
+/// `switch_tab`、engine 的 `attach_first_page` 与 `new_tab`；高级路径
+/// （手写 `Target.attachToTarget` 加 `setActiveSession`）豁免，靠
+/// watcher 兜底。
+pub(crate) async fn ensure_page_enabled(session: &Session, sid: &str) {
+    let _ = session.call_on("Page.enable", json!({}), sid).await;
+}
 
 /// 字符串方法面清单（#21）：CTA 文案由此派生，surface 目录描述由测试绑定；
 /// 增删方法改这里（两边一起红才是同步）。
@@ -1699,6 +1868,132 @@ return JSON.stringify(JSON.parse(raw).items.slice(0, 1))"#,
             .await
             .unwrap();
         assert_eq!(v, json!(8));
+    }
+
+    /// waitForResponse 体就绪等待（#20 评审 F 回归锁）：内存管道假 CDP
+    /// 对端——responseReceived 先到（历史窗），getResponseBody 在
+    /// loadingFinished 前被拒（No resource），函数必须等体完成信号再取；
+    /// 永不完体的请求 5 秒体窗耗尽后显式 bodyError，不静默省略。
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn wait_for_response_waits_for_body_ready() {
+        use std::io::{Read, Write};
+        use std::os::unix::net::UnixStream;
+        use std::sync::Mutex;
+        let (sa, ba) = UnixStream::pair().unwrap();
+        let (sb, bb) = UnixStream::pair().unwrap();
+        let session = cdp::Session::new();
+        session.connect_pipes(sa, sb).await.expect("管道连接");
+        let host = JsHost::new(session.clone());
+
+        let released = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let peer_out = Arc::new(Mutex::new(ba));
+        let (released_p, peer_out_p) = (released.clone(), peer_out.clone());
+        std::thread::spawn(move || {
+            let mut bb = bb;
+            let mut buf = Vec::<u8>::new();
+            let mut chunk = [0u8; 4096];
+            loop {
+                let n = match bb.read(&mut chunk) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => n,
+                };
+                buf.extend_from_slice(&chunk[..n]);
+                while let Some(pos) = buf.iter().position(|&b| b == 0) {
+                    let frame: Vec<u8> = buf.drain(..=pos).collect();
+                    let Ok(v) = serde_json::from_slice::<Value>(&frame[..frame.len() - 1]) else {
+                        continue;
+                    };
+                    let Some(id) = v.get("id").cloned() else {
+                        continue;
+                    };
+                    let method = v.get("method").and_then(Value::as_str).unwrap_or("");
+                    let rid = v
+                        .pointer("/params/requestId")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string();
+                    // R2 永不放体；R1 在 released 前拒（模拟 chrome 的
+                    // No resource with given identifier）
+                    let resp = if method == "Network.getResponseBody"
+                        && (rid == "R2" || !released_p.load(Ordering::Relaxed))
+                    {
+                        json!({"id": id, "error": {"code": -32000, "message": "No resource with given identifier found"}})
+                    } else if method == "Network.getResponseBody" {
+                        json!({"id": id, "result": {"body": "{\"ok\":\"slow\"}", "base64Encoded": false}})
+                    } else {
+                        json!({"id": id, "result": {}})
+                    };
+                    if let Ok(mut out) = peer_out_p.lock() {
+                        let _ = out.write_all(serde_json::to_string(&resp).unwrap().as_bytes());
+                        let _ = out.write_all(&[0]);
+                    }
+                }
+            }
+        });
+        let send_event = |ev: Value| {
+            let mut out = peer_out.lock().unwrap();
+            let _ = out.write_all(serde_json::to_string(&ev).unwrap().as_bytes());
+            let _ = out.write_all(&[0]);
+        };
+        let rr = |rid: &str, url: &str| {
+            json!({
+                "method": "Network.responseReceived",
+                "params": {
+                    "requestId": rid,
+                    "response": {"url": url, "status": 200, "headers": {"Content-Type": "application/json"}}
+                },
+                "sessionId": "S1"
+            })
+        };
+        send_event(rr("R1", "http://slow.test/x"));
+        send_event(rr("R2", "http://stuck.test/y"));
+
+        // R1：400ms 后放体（loadingFinished 到），函数等到体完成再取
+        let releaser = {
+            let peer_out = peer_out.clone();
+            let released = released.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+                released.store(true, Ordering::Relaxed);
+                if let Ok(mut out) = peer_out.lock() {
+                    let ev = json!({"method": "Network.loadingFinished", "params": {"requestId": "R1"}, "sessionId": "S1"});
+                    let _ = out.write_all(serde_json::to_string(&ev).unwrap().as_bytes());
+                    let _ = out.write_all(&[0]);
+                }
+            })
+        };
+        let wr = tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            host.eval_snippet(r#"return await waitForResponse("http://slow.test/*", 3000)"#),
+        )
+        .await
+        .expect("不应整体超时")
+        .expect("waitForResponse R1");
+        assert_eq!(
+            wr.pointer("/body"),
+            Some(&json!("{\"ok\":\"slow\"}")),
+            "{wr}"
+        );
+        assert_eq!(wr.pointer("/json/ok"), Some(&json!("slow")), "{wr}");
+        releaser.await.unwrap();
+
+        // R2：体永不完，体窗耗尽后 body 为 null 加 bodyError，不静默省略
+        let stuck = tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            host.eval_snippet(r#"return await waitForResponse("http://stuck.test/*", 1000)"#),
+        )
+        .await
+        .expect("不应整体超时")
+        .expect("waitForResponse R2");
+        assert_eq!(stuck.pointer("/body"), Some(&Value::Null), "{stuck}");
+        assert!(
+            stuck
+                .pointer("/bodyError")
+                .and_then(Value::as_str)
+                .is_some_and(|e| e.contains("No resource")),
+            "bodyError 应带因: {stuck}"
+        );
     }
 
     /// 模板字符串求值（#18）：raw 语义直出，反斜杠与真换行原样。

@@ -22,7 +22,9 @@ use std::time::Duration;
 /// 未连接、createTarget/navigate 失败（域策略拦截同 `Page.navigate`）。
 pub async fn new_tab(s: &Session, url: Option<&str>) -> Result<Value> {
     let id = s.create_target("about:blank").await?;
-    s.use_target(&id).await?;
+    let sid = s.use_target(&id).await?;
+    // Page 域同步补开（#19）：导航后立即 waitFor 事件不再竞开域时序
+    crate::js_host::ensure_page_enabled(s, &sid).await;
     if let Some(u) = url {
         s.call("Page.navigate", json!({ "url": u })).await?;
         // target 列表的 title/url 在 load 前是滞后的 about:blank，等完再取简表
@@ -37,7 +39,8 @@ pub async fn new_tab(s: &Session, url: Option<&str>) -> Result<Value> {
 ///
 /// 未连接或 attach 失败（targetId 不存在）。
 pub async fn switch_tab(s: &Session, target_id: &str) -> Result<Value> {
-    s.use_target(target_id).await?;
+    let sid = s.use_target(target_id).await?;
+    crate::js_host::ensure_page_enabled(s, &sid).await;
     tab_brief(s, target_id).await
 }
 

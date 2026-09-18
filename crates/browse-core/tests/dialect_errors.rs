@@ -85,6 +85,15 @@ async fn eval_errors_carry_next_step() {
     let e = err_of("return -").await;
     assert!(e.contains("形态不对"), "{e}");
     assert!(e.contains("下一步："), "{e}");
+
+    // waitForResponse 未连接（#20）：开 Network 域即失败，错误指连接路径
+    let e = err_of(r#"await waitForResponse("http://x.test/*")"#).await;
+    assert!(e.contains("Network.enable") || e.contains("connect"), "{e}");
+
+    // waitForResponse 缺 pattern（#20）：形态化 CTA
+    let e = err_of("await waitForResponse()").await;
+    assert!(e.contains("pattern"), "{e}");
+    assert!(e.contains("下一步："), "{e}");
 }
 
 #[tokio::test]

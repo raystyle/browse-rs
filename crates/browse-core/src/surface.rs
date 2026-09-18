@@ -538,6 +538,22 @@ pub const COMMANDS: &[CmdSpec] = &[
         example: "await waitLoad(8000)",
     },
     CmdSpec {
+        name: "waitForResponse",
+        kind: CmdKind::Global,
+        signature: "waitForResponse(pattern, ms?)",
+        args: &[arg!("pattern", "string", true), arg!("ms", "int", false)],
+        description: "等 URL 命中 glob（与 routeBlock/routeMock 同写法）的最近一个响应完成（#20）：回 {requestId,url,status,headers,body,json}；命中含历史（Network 域须在触发前已开，本函数幂等开收不到已发出的响应），方言无并发，可用形态是触发后等待；体等 loadingFinished 再取（5 秒窗），失败显式 bodyError；base64 自动解码，可解析时附 json。",
+        example: r#"return await waitForResponse("https://x.test/api*")"#,
+    },
+    CmdSpec {
+        name: "responseBody",
+        kind: CmdKind::Global,
+        signature: "responseBody(requestId)",
+        args: &[arg!("requestId", "string", true)],
+        description: "按 requestId 取响应体（#20）：peekEvents/findEvents 拿到的 id 皆可用，base64 自动解码。",
+        example: r#"return await responseBody(rid)"#,
+    },
+    CmdSpec {
         name: "waitIdle",
         kind: CmdKind::Global,
         signature: "waitIdle(ms?)",

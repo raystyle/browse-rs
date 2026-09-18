@@ -403,6 +403,11 @@ l`.length === 3].join(\"|\")", returnByValue:true})).result.value"#;
     assert_eq!(st2.pointer("/open"), Some(&json!(false)), "{st2}");
 
     eprintln!("[e2e] network route 开始");
+    // 先开 Network 域再触发请求：响应事件只在域已开时投递（waitForResponse
+    // 的幂等开域在未开时会错过已完成的响应）
+    host.eval_snippet("await session.Network.enable({})")
+        .await
+        .expect("Network.enable");
     // mock：拦截即本地应答（假域名也行，请求根本不出门）
     host.eval_snippet(
         r#"await routeMock("http://mock.test/api*", "{\"ok\":1}", {contentType: "application/json"})"#,
@@ -419,6 +424,83 @@ l`.length === 3].join(\"|\")", returnByValue:true})).result.value"#;
         .await
         .expect("mock 应答应到达");
     assert_eq!(got, json!("{\"ok\":1}"), "mock body 应原样到达: {got}");
+
+    // #20 验收：waitForResponse 取最近命中（mock 应答已在缓冲），四件齐
+    let wr = host
+        .eval_snippet(r#"return await waitForResponse("http://mock.test/api*")"#)
+        .await
+        .expect("waitForResponse");
+    assert_eq!(wr.pointer("/status"), Some(&json!(200)), "{wr}");
+    assert_eq!(wr.pointer("/body"), Some(&json!("{\"ok\":1}")), "{wr}");
+    assert_eq!(wr.pointer("/json/ok"), Some(&json!(1)), "{wr}");
+    assert!(
+        wr.pointer("/url")
+            .and_then(Value::as_str)
+            .is_some_and(|u| u.contains("mock.test/api")),
+        "{wr}"
+    );
+    // #20 超时路径：不命中的 pattern 短窗报可读错误
+    let miss = host
+        .eval_snippet(r#"await waitForResponse("http://never.test/*", 200)"#)
+        .await;
+    let miss_msg = format!("{miss:#?}");
+    assert!(
+        miss.is_err() && miss_msg.contains("超时") && miss_msg.contains("下一步"),
+        "未命中应报超时加 CTA: {miss_msg}"
+    );
+    // #20 A/B：便捷函数与手工路线（findEvents 加 responseBody）取同值
+    let manual = host
+        .eval_snippet(
+            r#"const evs = await session.findEvents("Network.responseReceived", "params.response.url", "http://mock.test/api/data", 1)
+return await responseBody(evs[0].params.requestId)"#,
+        )
+        .await
+        .expect("手工路线");
+    assert_eq!(
+        manual.pointer("/body"),
+        wr.pointer("/body"),
+        "A/B：两路 body 必须同值: manual={manual} wr={wr}"
+    );
+    // #20 慢体路径的体就绪等待与 bodyError 显式化在 js_host 单测锁
+    // （connect_pipes 假 CDP 对端，确定性时序）；真网慢体依赖 WSL 到
+    // Windows 引擎的回环边界，此处不重复
+    // #19 验收：use 换靶同步开 Page 域——不显式 enable，立即导航后增量
+    // 游标等到新事件（旧路径 300ms 轮询开域会丢换靶后的首批事件）
+    let ct = host
+        .eval_snippet("return await currentTab()")
+        .await
+        .expect("currentTab");
+    let tid = ct
+        .get("targetId")
+        .and_then(Value::as_str)
+        .expect("targetId")
+        .to_string();
+    let cur = host
+        .eval_snippet(r#"return await session.peekEvents("Page.frameStartedLoading", 1)"#)
+        .await
+        .expect("游标取样");
+    let cursor = cur
+        .as_array()
+        .and_then(|a| a.last())
+        .and_then(|e| e.get("seq"))
+        .and_then(Value::as_u64)
+        .expect("seq");
+    host.eval_snippet(&format!(r#"await session.use("{tid}")"#))
+        .await
+        .expect("use 换靶");
+    host.eval_snippet(r#"await session.Page.navigate({url:"data:text/html,<title>r19</title>"})"#)
+        .await
+        .expect("导航 r19");
+    let since = host
+        .eval_snippet(&format!(
+            r#"return await session.peekEventsSince("Page.frameStartedLoading", {cursor}, 3)"#
+        ))
+        .await
+        .expect("增量等事件");
+    assert!(
+        since.as_array().is_some_and(|a| !a.is_empty()),
+        "#19 换靶后应立即有事件: {since}"
+    );
     // block：命中的请求直接失败
     host.eval_snippet(r#"await routeBlock("http://block.test/*")"#)
         .await

@@ -670,7 +670,9 @@ impl Session {
                 }
             }
             if tokio::time::Instant::now() >= deadline {
-                return Err(anyhow!("Timeout waiting for {method}"));
+                return Err(anyhow!(
+                    "等待 {method} 超时；下一步：确认所在域已开（Page 事件先 await session.Page.enable，Network 先 await session.Network.enable），或 peekEvents 看缓冲里已有什么"
+                ));
             }
             tokio::time::sleep(Duration::from_millis(25)).await;
         }

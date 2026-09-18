@@ -812,6 +812,24 @@
       "output": "runtime JSON（回值随页面与 CDP 而定）",
       "type": "object"
     },
+    "responseBody": {
+      "description": "responseBody(requestId) 按 requestId 取响应体（#20）：peekEvents/findEvents 拿到的 id 皆可用，base64 自动解码。",
+      "example": "return await responseBody(rid)",
+      "input": {
+        "properties": {
+          "requestId": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "requestId"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
     "routeBlock": {
       "description": "routeBlock(pattern) 网络拦截：glob 命中的请求直接失败（BlockedByClient）。作用于当前活动 tab。",
       "example": "await routeBlock(\"*://ads.example.com/*\")",
@@ -1176,6 +1194,28 @@
       "input": {
         "properties": {},
         "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "waitForResponse": {
+      "description": "waitForResponse(pattern, ms?) 等 URL 命中 glob（与 routeBlock/routeMock 同写法）的最近一个响应完成（#20）：回 {requestId,url,status,headers,body,json}；命中含历史（Network 域须在触发前已开，本函数幂等开收不到已发出的响应），方言无并发，可用形态是触发后等待；体等 loadingFinished 再取（5 秒窗），失败显式 bodyError；base64 自动解码，可解析时附 json。",
+      "example": "return await waitForResponse(\"https://x.test/api*\")",
+      "input": {
+        "properties": {
+          "ms": {
+            "description": "",
+            "type": "int"
+          },
+          "pattern": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pattern"
+        ],
         "type": "object"
       },
       "output": "runtime JSON（回值随页面与 CDP 而定）",
