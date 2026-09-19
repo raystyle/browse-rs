@@ -585,7 +585,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("ref", "string", true),
             arg!("label", "string", false, "徽标文本（annotate 形态）"),
         ],
-        description: "持久高亮覆盖层（#41）：2px 橙框不挡点击（pointer-events none），label 给定叠编号徽标；幂等（同元素刷新框位）；清场走 highlightClear()。人看 agent 在操作哪个元素。",
+        description: "持久高亮覆盖层（#41）：2px 橙框不挡点击（pointer-events none），页面坐标绝对定位滚动跟随；label 给定叠编号徽标；幂等（同元素刷新框位）；清场走 highlightClear()。人看 agent 在操作哪个元素。",
         example: "await highlight(\"e3\", {label: \"e3\"})",
     },
     CmdSpec {
@@ -601,7 +601,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "annotate(refs)",
         args: &[arg!("refs", "array", true, "ref 字符串数组")],
-        description: "批量画框加编号徽标（#24 残余）：对一批 ref 各画框并以 ref 本身为徽标文本（与 snapshot 编号天然对齐）；配合 screenshot() 取证后 highlightClear() 收场。",
+        description: "批量画框加编号徽标（#24 残余）：对一批 ref 各画框并以 ref 本身为徽标文本（与 snapshot 编号天然对齐）；任一项失败先清场再报错（不留半批框）；配合 screenshot() 取证后 highlightClear() 收场。",
         example: "await annotate([\"e1\", \"e3\"])",
     },
     CmdSpec {

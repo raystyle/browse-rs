@@ -665,20 +665,23 @@ pub async fn highlight(s: &Session, backend_node_id: i64, label: Option<&str>) -
                     if (!box) {
                         box = document.createElement('div');
                         box.id = key; box.dataset.browseHl = '1';
-                        box.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483647;border:2px solid #ff8c00;background:rgba(255,140,0,.12)';
+                        // 页面坐标绝对定位（评审 F1）：滚动后框跟随目标；
+                        // fixed 加调用时刻写死坐标会漂移误导人眼
+                        box.style.cssText = 'position:absolute;pointer-events:none;z-index:2147483647;border:2px solid #ff8c00;background:rgba(255,140,0,.12)';
                         document.documentElement.appendChild(box);
                     }
-                    box.style.left = r.x + 'px'; box.style.top = r.y + 'px';
+                    const px = r.x + window.scrollX, py = r.y + window.scrollY;
+                    box.style.left = px + 'px'; box.style.top = py + 'px';
                     box.style.width = r.width + 'px'; box.style.height = r.height + 'px';
                     if (label) {
                         let tag = document.getElementById(key + '-tag') || (() => {
                             const t = document.createElement('div');
                             t.id = key + '-tag'; t.dataset.browseHl = '1';
-                            t.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483647;background:#ff8c00;color:#fff;font:bold 12px monospace;padding:1px 4px;border-radius:3px';
+                            t.style.cssText = 'position:absolute;pointer-events:none;z-index:2147483647;background:#ff8c00;color:#fff;font:bold 12px monospace;padding:1px 4px;border-radius:3px';
                             document.documentElement.appendChild(t); return t;
                         })();
                         tag.textContent = label;
-                        tag.style.left = r.x + 'px'; tag.style.top = (r.y - 16) + 'px';
+                        tag.style.left = px + 'px'; tag.style.top = (py - 16) + 'px';
                     }
                     return true;
                 }"#,

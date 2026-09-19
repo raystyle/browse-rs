@@ -268,6 +268,21 @@ impl JsHost {
     /// # Errors
     ///
     /// 同 [`Session::call`]（含提交窗重试耗尽）。
+    /// annotate 失败路径的静默清场（#41 评审 F2）：不留半批框污染页面，
+    /// 清场自身的失败也不掩盖主错误。
+    async fn highlight_clear_quiet(&self) {
+        let _ = self
+            .session
+            .call(
+                "Runtime.evaluate",
+                json!({
+                    "expression": "(() => { document.querySelectorAll('[data-browse-hl]').forEach(n => n.remove()); return true })()",
+                    "returnByValue": true
+                }),
+            )
+            .await;
+    }
+
     async fn ax_projected(&self) -> Result<(Vec<Value>, HashMap<i64, i64>)> {
         let r = self
             .call_commit_retry("Accessibility.getFullAXTree", json!({}))
@@ -1751,15 +1766,38 @@ impl JsHost {
                 }
                 let mut drawn = 0usize;
                 for (i, rv) in refs.iter().enumerate() {
-                    let r = rv.as_str().ok_or_else(|| {
-                        anyhow!(
-                            "annotate 的第 {} 项应是 ref 字符串（当前：{}）",
+                    let r = match rv.as_str() {
+                        Some(r) => r,
+                        None => {
+                            // 失败先清场（评审 F2）：不留半批框污染页面
+                            self.highlight_clear_quiet().await;
+                            bail!(
+                                "annotate 的第 {} 项应是 ref 字符串（当前：{}）；已画 {} 项已清场",
+                                i + 1,
+                                preview(rv),
+                                drawn
+                            );
+                        }
+                    };
+                    let bn = match self.lookup_ref(r).await {
+                        Ok(bn) => bn,
+                        Err(e) => {
+                            self.highlight_clear_quiet().await;
+                            bail!(
+                                "annotate 第 {} 项 {r} 取节点失败：{e:#}；已画 {} 项已清场；下一步：重新 snapshot() 核对 ref",
+                                i + 1,
+                                drawn
+                            );
+                        }
+                    };
+                    if let Err(e) = crate::semantic::highlight(&self.session, bn, Some(r)).await {
+                        self.highlight_clear_quiet().await;
+                        bail!(
+                            "annotate 第 {} 项 {r} 画框失败：{e:#}；已画 {} 项已清场",
                             i + 1,
-                            preview(rv)
-                        )
-                    })?;
-                    let bn = self.lookup_ref(r).await?;
-                    crate::semantic::highlight(&self.session, bn, Some(r)).await?;
+                            drawn
+                        );
+                    }
                     drawn += 1;
                 }
                 Ok(json!({ "drawn": drawn }))
