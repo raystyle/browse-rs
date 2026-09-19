@@ -514,7 +514,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("ref", "string", true),
             arg!("opts", "object", false, "{waitNav:false,timeout:10}"),
         ],
-        description: "按 snapshot 短 ref 点击：滚动可见、量中心、遮挡命中测试（被盖即拒绝并报遮挡物）、trusted 派发；opts.waitNav 链接型点击后自动等导航稳定（#19，同文档锚点与 JS 按钮立即返回），timeout 秒口径。",
+        description: "按 snapshot 短 ref 点击：滚动可见、量中心、遮挡命中测试（被盖即拒绝并报遮挡物）、trusted 派发；opts.waitNav 链接型点击后走有界提交等待（#19）：grace 窗（2 秒或 timeout 较小者）内探到导航即等加载收尾（waitLoad.settled=nav），无导航迹象即返回（waitLoad.settled=no-nav，同文档锚点与 JS 按钮不再误等全窗），timeout 秒口径。",
         example: "await clickRef(\"e3\", {waitNav: true})",
     },
     CmdSpec {
@@ -628,7 +628,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "waitLoad(s?)",
         args: &[arg!("s", "number", false, "10")],
-        description: "等 document.readyState 到 complete（已加载立即返回）。timeout 秒口径（#51）：大于 3600 视为毫秒误写，告警并按毫秒换算（封顶 600 秒）；1000 至 3600 按秒直解不告警（2000 即 33 分钟），子分钟等待直写个位数秒；1000 至 3600 按秒直解不告警（2000 即 33 分钟），子分钟等待直写个位数秒，旧毫秒习惯值等价迁移。",
+        description: "等 document.readyState 到 complete（已加载立即返回）。timeout 秒口径（#51）：大于 3600 视为毫秒误写，告警并按毫秒换算（封顶 600 秒）；1000 至 3600 按秒直解不告警（2000 即 33 分钟），子分钟等待直写个位数秒；旧毫秒习惯值等价迁移。",
         example: "await waitLoad(8)",
     },
     CmdSpec {

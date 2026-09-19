@@ -970,10 +970,17 @@ impl JsHost {
                         anyhow!("goto 的 timeout 应是整秒数（当前：{}）", preview(v))
                     })?,
                 };
+                // waitIdle 同 G4 律（评审二轮 G9）：类型不符报错不静默，
+                // 数值过 secs_to_ms 拿封顶与溢出防护
                 let idle_ms = match opts.get("waitIdle") {
-                    Some(Value::Number(n)) => n.as_u64().map(|s| s * 1000),
+                    None | Some(Value::Null) | Some(Value::Bool(false)) => None,
                     Some(Value::Bool(true)) => Some(20_000),
-                    _ => None,
+                    Some(v) => Some(v.as_u64().map(|n| secs_to_ms(n).0).ok_or_else(|| {
+                        anyhow!(
+                            "goto 的 waitIdle 应是 true、秒数或省略（当前：{}）",
+                            preview(v)
+                        )
+                    })?),
                 };
                 let r = crate::semantic::goto(&self.session, url, tmo_ms, idle_ms).await?;
                 Ok(attach_warning(r, warn))

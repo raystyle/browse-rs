@@ -206,6 +206,7 @@ pub async fn reload(s: &Session, ignore_cache: bool) -> Result<Value> {
 ///
 /// 在途路径下 wait_load 预算内未到 complete。
 pub async fn wait_settled(s: &Session, since: u64, grace_ms: u64, budget_ms: u64) -> Result<Value> {
+    let t0 = std::time::Instant::now();
     let grace_deadline = tokio::time::Instant::now() + Duration::from_millis(grace_ms);
     loop {
         let started = s
@@ -238,7 +239,12 @@ pub async fn wait_settled(s: &Session, since: u64, grace_ms: u64, budget_ms: u64
                         .map(str::to_string)
                 })
                 .unwrap_or_default();
-            return Ok(json!({ "readyState": rs, "settled": "no-nav" }));
+            // 两态同形（评审三轮新 G）：no-nav 也带 elapsedMs
+            return Ok(json!({
+                "readyState": rs,
+                "settled": "no-nav",
+                "elapsedMs": t0.elapsed().as_millis() as u64,
+            }));
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
