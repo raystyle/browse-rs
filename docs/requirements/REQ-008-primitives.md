@@ -15,7 +15,7 @@ trace: null
 ## Criteria
 
 - [x] #42 storage 颗粒度：cookies/cookieGet/cookieSet/cookieDelete/cookiesClear 加 local/session 四对 CRUD（键值 JSON 序列化内嵌防注入；e2e 覆盖中文往返、sessionClear 不动 local、http 源 setCookie 回读）
-- [ ] #35 鼠标原语：mouseMove/mouseDown/mouseWheel、button 与 clickCount、dropFiles
+- [x] #35 鼠标原语：mouseMove/mouseDown/mouseUp/mouseWheel（手势合成，首发吞没实测定谳）、clickAt/clickRef 的 button 与 clickCount、dropFiles、hoverAt 既有（e2e：hover 副作用、右键 contextmenu、双击 dblclick、wheel 路径、双文件灌入）
 - [x] #40 a11y 媒质仿真族：emulateMedia({colorScheme, reducedMotion, forcedColors, prefersContrast, media}) 加清除（e2e：dark 加 print matchMedia 双证加 clear 还原）
 - [ ] #38 文件上传与下载捕获：setFileInput 与 downloads 落盘
 - [ ] #41 加 #24 残余：highlight 持久高亮、元素级截图、hires、annotate

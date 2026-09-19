@@ -595,10 +595,18 @@
       "type": "object"
     },
     "clickAt": {
-      "description": "clickAt(x, y) 视口坐标 trusted 点击（点当前可见物，不做遮挡检查）。",
+      "description": "clickAt(x, y, opts?) 视口坐标 trusted 点击（点当前可见物，不做遮挡检查）；opts（#35）button 换键、clickCount 双击。",
       "example": "await clickAt(120, 40)",
       "input": {
         "properties": {
+          "button": {
+            "description": "缺省 left（right/middle/back/forward）",
+            "type": "string"
+          },
+          "clickCount": {
+            "description": "缺省 1（2 即双击语义）",
+            "type": "number"
+          },
           "x": {
             "description": "",
             "type": "number"
@@ -618,12 +626,12 @@
       "type": "object"
     },
     "clickRef": {
-      "description": "clickRef(ref, opts?) 按 snapshot 短 ref 点击：滚动可见、量中心、遮挡命中测试（被盖即拒绝并报遮挡物）、trusted 派发；opts.waitNav 链接型点击后走有界提交等待（#19）：grace 窗（2 秒或 timeout 较小者）内探到导航即等加载收尾（waitLoad.settled=nav），无导航迹象即返回（waitLoad.settled=no-nav，同文档锚点与 JS 按钮不再误等全窗），timeout 秒口径。",
+      "description": "clickRef(ref, opts?) 按 snapshot 短 ref 点击：滚动可见、量中心、遮挡命中测试（被盖即拒绝并报遮挡物）、trusted 派发；opts（#35）button/clickCount 与 waitNav 可同给；opts.waitNav 链接型点击后走有界提交等待（#19）：grace 窗（2 秒或 timeout 较小者）内探到导航即等加载收尾（waitLoad.settled=nav），无导航迹象即返回（waitLoad.settled=no-nav，同文档锚点与 JS 按钮不再误等全窗），timeout 秒口径。",
       "example": "await clickRef(\"e3\", {waitNav: true})",
       "input": {
         "properties": {
           "opts": {
-            "description": "缺省 {waitNav:false,timeout:10}",
+            "description": "缺省 {button:left,clickCount:1,waitNav:false,timeout:10}",
             "type": "object"
           },
           "ref": {
@@ -887,6 +895,29 @@
         "required": [
           "srcRef",
           "dstRef"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "dropFiles": {
+      "description": "dropFiles(ref, paths) 文件灌入 input[type=file]（#35）：DOM.setFileInputFiles 直灌（可靠面，multiple 支持）；拖拽事件序列用 mouseDown/Move/Up 手拼。",
+      "example": "await dropFiles(\"e3\", [\"/tmp/a.png\"])",
+      "input": {
+        "properties": {
+          "paths": {
+            "description": "缺省 daemon 侧绝对路径",
+            "type": "array"
+          },
+          "ref": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "paths"
         ],
         "type": "object"
       },
@@ -1296,6 +1327,84 @@
         "required": [
           "key",
           "value"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "mouseDown": {
+      "description": "mouseDown(button?) 按下不释放（#35）：拖拽与长按语义的半边，与 mouseUp 配对。",
+      "example": "await mouseDown()",
+      "input": {
+        "properties": {
+          "button": {
+            "description": "缺省 left",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "mouseMove": {
+      "description": "mouseMove(x, y) 移动鼠标（#35）：触发 CSS :hover 与 mouseenter/leave 路径；hoverAt 是同义坐标版。",
+      "example": "await mouseMove(120, 40)",
+      "input": {
+        "properties": {
+          "x": {
+            "description": "",
+            "type": "number"
+          },
+          "y": {
+            "description": "",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "mouseUp": {
+      "description": "mouseUp(button?) 释放按键（#35）：与 mouseDown 配对。",
+      "example": "await mouseUp()",
+      "input": {
+        "properties": {
+          "button": {
+            "description": "缺省 left",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "mouseWheel": {
+      "description": "mouseWheel(dx, dy) 滚轮（#35）：像素量（向下滚 dy 正），走 wheel 事件路径——SPA 懒加载监听 wheel 时 JS scrollBy 不可替代。",
+      "example": "await mouseWheel(0, 600)",
+      "input": {
+        "properties": {
+          "dx": {
+            "description": "",
+            "type": "number"
+          },
+          "dy": {
+            "description": "",
+            "type": "number"
+          }
+        },
+        "required": [
+          "dx",
+          "dy"
         ],
         "type": "object"
       },

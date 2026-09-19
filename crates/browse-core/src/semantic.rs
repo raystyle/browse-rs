@@ -573,12 +573,91 @@ pub async fn set_checked(s: &Session, backend_node_id: i64, checked: bool) -> Re
 /// 未连接或派发失败。从未激活的后台 tab 可能挂起（30s 超时），届时按错误
 /// CTA 先 `session.Target.activateTarget({targetId})`。
 pub async fn click_at(s: &Session, x: i64, y: i64) -> Result<Value> {
+    click_at_opts(s, x, y, "left", 1).await
+}
+
+/// clickAt 的参数化半边（#35）：button（left/right/middle/back/forward）
+/// 与 clickCount（2 即双击语义）。
+///
+/// # Errors
+///
+/// 同 [`click_at`]。
+pub async fn click_at_opts(
+    s: &Session,
+    x: i64,
+    y: i64,
+    button: &str,
+    click_count: i64,
+) -> Result<Value> {
     dispatch_input_seq(
         s,
         vec![
-            ("Input.dispatchMouseEvent", json!({ "type": "mousePressed", "x": x, "y": y, "button": "left", "clickCount": 1 })),
-            ("Input.dispatchMouseEvent", json!({ "type": "mouseReleased", "x": x, "y": y, "button": "left", "clickCount": 1 })),
+            ("Input.dispatchMouseEvent", json!({ "type": "mousePressed", "x": x, "y": y, "button": button, "clickCount": click_count })),
+            ("Input.dispatchMouseEvent", json!({ "type": "mouseReleased", "x": x, "y": y, "button": button, "clickCount": click_count })),
         ],
+    )
+    .await?;
+    Ok(json!(true))
+}
+
+/// 鼠标原语族（#35）：move、按下/释放分离、滚轮、按钮与次数参数化。
+/// `button` 取 left/right/middle/back/forward；clickCount 给 2 即双击
+/// 语义（dblclick）。全部走 `Input.dispatchMouseEvent` trusted 派发。
+///
+/// # Errors
+///
+/// 未连接或派发失败（后台 tab 挂起口径同 clickAt）。
+pub async fn mouse_move(s: &Session, x: i64, y: i64) -> Result<Value> {
+    s.call(
+        "Input.dispatchMouseEvent",
+        json!({ "type": "mouseMoved", "x": x, "y": y }),
+    )
+    .await?;
+    Ok(json!(true))
+}
+
+/// 按下不释放（#35）：拖拽与长按语义的半边。
+///
+/// # Errors
+///
+/// 同 [`mouse_move`]。
+pub async fn mouse_down(s: &Session, button: &str) -> Result<Value> {
+    s.call(
+        "Input.dispatchMouseEvent",
+        json!({ "type": "mousePressed", "button": button, "clickCount": 1 }),
+    )
+    .await?;
+    Ok(json!(true))
+}
+
+/// 释放（#35）：与 [`mouse_down`] 配对。
+///
+/// # Errors
+///
+/// 同 [`mouse_move`]。
+pub async fn mouse_up(s: &Session, button: &str) -> Result<Value> {
+    s.call(
+        "Input.dispatchMouseEvent",
+        json!({ "type": "mouseReleased", "button": button, "clickCount": 1 }),
+    )
+    .await?;
+    Ok(json!(true))
+}
+
+/// 滚轮（#35）：deltaX/deltaY 是像素量（向下滚正 deltaY）；触发 wheel
+/// 事件路径（SPA 懒加载监听 wheel 时 JS scrollBy 不可替代）。
+///
+/// # Errors
+///
+/// 同 [`mouse_move`]。
+pub async fn mouse_wheel(s: &Session, dx: i64, dy: i64) -> Result<Value> {
+    // 走 synthesizeScrollGesture（#35 实测定谳）：dispatchMouseEvent 的
+    // mouseWheel 在导航后有首发吞没（首个被渲染器当监听注册握手消耗，
+    // 第二发起才触发，w1=0/w2=1/w3=2 三连实测）；手势合成连续 wheel 流
+    // 首次即触发。要精确单 wheel 事件就裸调 dispatchMouseEvent（自双发）
+    s.call(
+        "Input.synthesizeScrollGesture",
+        json!({ "x": 50, "y": 50, "xDistance": -dx, "yDistance": -dy, "speed": 800 }),
     )
     .await?;
     Ok(json!(true))
@@ -1221,7 +1300,25 @@ async fn resolve_node_object(s: &Session, backend_node_id: i64) -> Result<String
 ///
 /// ref 失效（节点没了）、取不到中心（不可见）、被遮挡（错误附遮挡元素）、
 /// 派发失败。
+/// 按 snapshot 短 ref trusted 点击（原口径）：左键单击，参数化走
+/// [`click_ref_opts`]。
 pub async fn click_ref(s: &Session, backend_node_id: i64) -> Result<Value> {
+    click_ref_opts(s, backend_node_id, "left", 1).await
+}
+
+/// 按 snapshot 短 ref 参数化点击（#35）：button（left/right/middle/
+/// back/forward）与 clickCount（2 即双击语义）；遮挡命中测试与 trusted
+/// 派发同 [`click_ref`] 口径。
+///
+/// # Errors
+///
+/// 同 [`click_ref`]。
+pub async fn click_ref_opts(
+    s: &Session,
+    backend_node_id: i64,
+    button: &str,
+    click_count: i64,
+) -> Result<Value> {
     let object_id = resolve_node_object(s, backend_node_id).await?;
     let r = s
         .call(
@@ -1288,7 +1385,7 @@ pub async fn click_ref(s: &Session, backend_node_id: i64) -> Result<Value> {
     }
     let x = probe.get("x").and_then(Value::as_f64).unwrap_or(0.0);
     let y = probe.get("y").and_then(Value::as_f64).unwrap_or(0.0);
-    click_at(s, x.round() as i64, y.round() as i64).await
+    click_at_opts(s, x.round() as i64, y.round() as i64, button, click_count).await
 }
 
 /// 按短 ref 填输入框：objectId 上 focus -> 探测控件（SELECT/readOnly 拒收

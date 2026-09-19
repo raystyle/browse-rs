@@ -75,9 +75,14 @@
 | `goBack(delta?)` | 历史回退 delta 步（#39，越界钳到最早），等加载收尾，回 {steps,url,title}。 |
 | `goForward(delta?)` | 历史前进 delta 步（#39，越界钳到最新），等加载收尾，回 {steps,url,title}。 |
 | `reload(opts?)` | 刷新当前页（#39）：opts.ignoreCache 走强制刷新；等加载收尾，回 {ignoredCache,url,title,elapsedMs}。 |
-| `clickAt(x, y)` | 视口坐标 trusted 点击（点当前可见物，不做遮挡检查）。 |
+| `mouseMove(x, y)` | 移动鼠标（#35）：触发 CSS :hover 与 mouseenter/leave 路径；hoverAt 是同义坐标版。 |
+| `mouseDown(button?)` | 按下不释放（#35）：拖拽与长按语义的半边，与 mouseUp 配对。 |
+| `mouseUp(button?)` | 释放按键（#35）：与 mouseDown 配对。 |
+| `mouseWheel(dx, dy)` | 滚轮（#35）：像素量（向下滚 dy 正），走 wheel 事件路径——SPA 懒加载监听 wheel 时 JS scrollBy 不可替代。 |
+| `dropFiles(ref, paths)` | 文件灌入 input[type=file]（#35）：DOM.setFileInputFiles 直灌（可靠面，multiple 支持）；拖拽事件序列用 mouseDown/Move/Up 手拼。 |
+| `clickAt(x, y, opts?)` | 视口坐标 trusted 点击（点当前可见物，不做遮挡检查）；opts（#35）button 换键、clickCount 双击。 |
 | `fillInput(selector, text, submit?)` | 按 CSS 选择器填输入框（SelectAll 不发 Ctrl+A，回读严格验证；select 走 selectOption；submit 填完顺带 Enter（#39）；提交若触发导航或对话框，后续用 goto()/waitLoad() 收尾或先 dialogStatus()。 |
-| `clickRef(ref, opts?)` | 按 snapshot 短 ref 点击：滚动可见、量中心、遮挡命中测试（被盖即拒绝并报遮挡物）、trusted 派发；opts.waitNav 链接型点击后走有界提交等待（#19）：grace 窗（2 秒或 timeout 较小者）内探到导航即等加载收尾（waitLoad.settled=nav），无导航迹象即返回（waitLoad.settled=no-nav，同文档锚点与 JS 按钮不再误等全窗），timeout 秒口径。 |
+| `clickRef(ref, opts?)` | 按 snapshot 短 ref 点击：滚动可见、量中心、遮挡命中测试（被盖即拒绝并报遮挡物）、trusted 派发；opts（#35）button/clickCount 与 waitNav 可同给；opts.waitNav 链接型点击后走有界提交等待（#19）：grace 窗（2 秒或 timeout 较小者）内探到导航即等加载收尾（waitLoad.settled=nav），无导航迹象即返回（waitLoad.settled=no-nav，同文档锚点与 JS 按钮不再误等全窗），timeout 秒口径。 |
 | `fillRef(ref, text, submit?)` | 按 ref 填输入框：objectId focus、SelectAll+insertText、同节点回读严格验证；submit 填完顺带 Enter（#39）；提交若触发导航或对话框，后续用 goto()/waitLoad() 收尾或先 dialogStatus()。 |
 | `selectOption(ref, value)` | 下拉框选择（value 或可见 label；设值+派发 input/change；未命中报全部可选值）。 |
 | `checkRef(ref)` | 勾选 checkbox/radio（#39）：读实态不一致才点击，幂等（checkRef 后必 true）；radio 已选中再 uncheck 无意义不点击；非 checkbox/radio 报错指 clickRef。 |

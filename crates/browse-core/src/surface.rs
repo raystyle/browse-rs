@@ -665,11 +665,64 @@ pub const COMMANDS: &[CmdSpec] = &[
         example: "return await reload({ignoreCache: true})",
     },
     CmdSpec {
+        name: "mouseMove",
+        kind: CmdKind::Global,
+        signature: "mouseMove(x, y)",
+        args: &[arg!("x", "number", true), arg!("y", "number", true)],
+        description: "移动鼠标（#35）：触发 CSS :hover 与 mouseenter/leave 路径；hoverAt 是同义坐标版。",
+        example: "await mouseMove(120, 40)",
+    },
+    CmdSpec {
+        name: "mouseDown",
+        kind: CmdKind::Global,
+        signature: "mouseDown(button?)",
+        args: &[arg!("button", "string", false, "left")],
+        description: "按下不释放（#35）：拖拽与长按语义的半边，与 mouseUp 配对。",
+        example: "await mouseDown()",
+    },
+    CmdSpec {
+        name: "mouseUp",
+        kind: CmdKind::Global,
+        signature: "mouseUp(button?)",
+        args: &[arg!("button", "string", false, "left")],
+        description: "释放按键（#35）：与 mouseDown 配对。",
+        example: "await mouseUp()",
+    },
+    CmdSpec {
+        name: "mouseWheel",
+        kind: CmdKind::Global,
+        signature: "mouseWheel(dx, dy)",
+        args: &[arg!("dx", "number", true), arg!("dy", "number", true)],
+        description: "滚轮（#35）：像素量（向下滚 dy 正），走 wheel 事件路径——SPA 懒加载监听 wheel 时 JS scrollBy 不可替代。",
+        example: "await mouseWheel(0, 600)",
+    },
+    CmdSpec {
+        name: "dropFiles",
+        kind: CmdKind::Global,
+        signature: "dropFiles(ref, paths)",
+        args: &[
+            arg!("ref", "string", true),
+            arg!("paths", "array", true, "daemon 侧绝对路径"),
+        ],
+        description: "文件灌入 input[type=file]（#35）：DOM.setFileInputFiles 直灌（可靠面，multiple 支持）；拖拽事件序列用 mouseDown/Move/Up 手拼。",
+        example: "await dropFiles(\"e3\", [\"/tmp/a.png\"])",
+    },
+    CmdSpec {
         name: "clickAt",
         kind: CmdKind::Global,
-        signature: "clickAt(x, y)",
-        args: &[arg!("x", "number", true), arg!("y", "number", true)],
-        description: "视口坐标 trusted 点击（点当前可见物，不做遮挡检查）。",
+        signature: "clickAt(x, y, opts?)",
+        args: &[
+            arg!("x", "number", true),
+            arg!("y", "number", true),
+            arg!(
+                "button",
+                "string",
+                false,
+                "left（right/middle/back/forward）"
+            ),
+            arg!("clickCount", "number", false, "1（2 即双击语义）"),
+        ],
+        description: "视口坐标 trusted 点击（点当前可见物，不做遮挡检查）；opts（#35）button 换键、clickCount 双击。",
         example: "await clickAt(120, 40)",
     },
     CmdSpec {
@@ -695,9 +748,14 @@ pub const COMMANDS: &[CmdSpec] = &[
         signature: "clickRef(ref, opts?)",
         args: &[
             arg!("ref", "string", true),
-            arg!("opts", "object", false, "{waitNav:false,timeout:10}"),
+            arg!(
+                "opts",
+                "object",
+                false,
+                "{button:left,clickCount:1,waitNav:false,timeout:10}"
+            ),
         ],
-        description: "按 snapshot 短 ref 点击：滚动可见、量中心、遮挡命中测试（被盖即拒绝并报遮挡物）、trusted 派发；opts.waitNav 链接型点击后走有界提交等待（#19）：grace 窗（2 秒或 timeout 较小者）内探到导航即等加载收尾（waitLoad.settled=nav），无导航迹象即返回（waitLoad.settled=no-nav，同文档锚点与 JS 按钮不再误等全窗），timeout 秒口径。",
+        description: "按 snapshot 短 ref 点击：滚动可见、量中心、遮挡命中测试（被盖即拒绝并报遮挡物）、trusted 派发；opts（#35）button/clickCount 与 waitNav 可同给；opts.waitNav 链接型点击后走有界提交等待（#19）：grace 窗（2 秒或 timeout 较小者）内探到导航即等加载收尾（waitLoad.settled=nav），无导航迹象即返回（waitLoad.settled=no-nav，同文档锚点与 JS 按钮不再误等全窗），timeout 秒口径。",
         example: "await clickRef(\"e3\", {waitNav: true})",
     },
     CmdSpec {

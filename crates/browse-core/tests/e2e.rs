@@ -787,6 +787,149 @@ l`.length === 3].join(\"|\")", returnByValue:true})).result.value"#;
         .expect("读还原后 matchMedia");
     assert_eq!(mq2, json!(false), "clear 后应回 stock: {mq2}");
 
+    // ---- #35 鼠标原语族 ----
+    host.eval_snippet(
+        r#"await routeMock("http://mouse.test/*", "<div id=h style='width:50px;height:50px'>HOVER</div><button id=w>wheel</button><input id=f type=file multiple>", {contentType: "text/html"}); await goto("http://mouse.test/x", {timeout: 10})"#,
+    )
+    .await
+    .expect("goto 鼠标页");
+    // mouseMove 触发 :hover 菜单显隐
+    let box_h = host
+        .eval_snippet(
+            r#"return (await session.Runtime.evaluate({expression:"(() => { const d = document.getElementById('h'); d.onmouseenter = () => d.dataset.h = '1'; const r = d.getBoundingClientRect(); return JSON.stringify({x: r.x + r.width/2, y: r.y + r.height/2}) })()", returnByValue:true})).result.value"#,
+        )
+        .await
+        .expect("量 hover 坐标");
+    let hv: (i64, i64) = {
+        let v: serde_json::Value =
+            serde_json::from_str(box_h.as_str().unwrap_or("{\"x\":5,\"y\":5}"))
+                .unwrap_or(json!({"x": 5, "y": 5}));
+        (
+            v.get("x").and_then(Value::as_f64).unwrap_or(5.0) as i64,
+            v.get("y").and_then(Value::as_f64).unwrap_or(5.0) as i64,
+        )
+    };
+    host.eval_snippet(&format!(r#"await mouseMove({}, {})"#, hv.0, hv.1))
+        .await
+        .expect("mouseMove");
+    let hval = host
+        .eval_snippet(
+            r#"return (await session.Runtime.evaluate({expression:"document.getElementById('h').dataset.h || ''", returnByValue:true})).result.value"#,
+        )
+        .await
+        .expect("读 hover 副作用");
+    assert_eq!(hval, json!("1"), "mouseMove 应触发 mouseenter: {hval}");
+    // 右键 contextmenu（clickAt opts.button）
+    host.eval_snippet(
+        r#"await pageEval("document.body.oncontextmenu = () => { window.ctx = 7; return false }")"#,
+    )
+    .await
+    .expect("挂 contextmenu");
+    host.eval_snippet(r#"await clickAt(10, 10, {button: "right"})"#)
+        .await
+        .expect("右键");
+    let ctx = host
+        .eval_snippet(
+            r#"return (await session.Runtime.evaluate({expression:"window.ctx", returnByValue:true})).result.value"#,
+        )
+        .await
+        .expect("读 ctx");
+    assert_eq!(ctx, json!(7), "右键应触发 contextmenu: {ctx}");
+    // 双击（clickCount 2，ref 面）
+    host.eval_snippet(
+        r#"await pageEval("document.getElementById('w').ondblclick = () => { window.dbl = 9 }")"#,
+    )
+    .await
+    .expect("挂 dblclick");
+    let snp = host
+        .eval_snippet("return await snapshot()")
+        .await
+        .expect("snapshot");
+    let w_ref = snp
+        .get("nodes")
+        .and_then(Value::as_array)
+        .and_then(|a| {
+            a.iter()
+                .find(|n| n.get("name") == Some(&json!("wheel")))
+                .and_then(|n| n.get("ref"))
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .expect("wheel 节点 ref");
+    host.eval_snippet(&format!(r#"await clickRef("{w_ref}", {{clickCount: 2}})"#))
+        .await
+        .expect("双击");
+    let dbl = host
+        .eval_snippet(
+            r#"return (await session.Runtime.evaluate({expression:"window.dbl", returnByValue:true})).result.value"#,
+        )
+        .await
+        .expect("读 dbl");
+    assert_eq!(dbl, json!(9), "clickCount 2 应触发 dblclick: {dbl}");
+    // 滚轮 wheel 事件路径
+    host.eval_snippet(
+        r#"await pageEval("window.wheelGot = 0; addEventListener('wheel', () => { window.wheelGot = 3 }, {passive: true})")"#,
+    )
+    .await
+    .expect("挂 wheel");
+    host.eval_snippet("await mouseWheel(0, 300)")
+        .await
+        .expect("滚轮");
+    let wg = host
+        .eval_snippet(
+            r#"return (await session.Runtime.evaluate({expression:"window.wheelGot", returnByValue:true})).result.value"#,
+        )
+        .await
+        .expect("读 wheelGot");
+    assert_eq!(wg, json!(3), "mouseWheel 应走 wheel 事件路径: {wg}");
+    // dropFiles：临时两文件灌 multiple input，FileList 长度 2
+    let d = std::env::temp_dir().join("browse-e2e-drop");
+    let _ = std::fs::create_dir_all(&d);
+    std::fs::write(d.join("a.txt"), b"a").unwrap();
+    std::fs::write(d.join("b.txt"), b"b").unwrap();
+    let snp2 = host
+        .eval_snippet("return await snapshot()")
+        .await
+        .expect("snapshot 2");
+    let f_ref = snp2
+        .get("nodes")
+        .and_then(Value::as_array)
+        .and_then(|a| {
+            a.iter()
+                .find(|n| {
+                    n.get("role") == Some(&json!("button"))
+                        && n.get("name") == Some(&json!("Choose Files"))
+                })
+                .and_then(|n| n.get("ref"))
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .or_else(|| {
+            snp2.get("nodes").and_then(Value::as_array).and_then(|a| {
+                a.iter()
+                    .find(|n| n.get("role") == Some(&json!("button")))
+                    .and_then(|n| n.get("ref"))
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            })
+        })
+        .expect("file input ref");
+    host.eval_snippet(&format!(
+        r#"await dropFiles("{f_ref}", [{}, {}])"#,
+        serde_json::to_string(d.join("a.txt").to_str().unwrap_or_default()).unwrap(),
+        serde_json::to_string(d.join("b.txt").to_str().unwrap_or_default()).unwrap()
+    ))
+    .await
+    .expect("dropFiles");
+    let fl = host
+        .eval_snippet(
+            r#"return (await session.Runtime.evaluate({expression:"document.getElementById('f').files.length", returnByValue:true})).result.value"#,
+        )
+        .await
+        .expect("读 FileList");
+    assert_eq!(fl, json!(2), "dropFiles 应灌两文件: {fl}");
+    let _ = std::fs::remove_dir_all(&d);
+
     // screenshot：存文件、字节数为正、清场
     let shot = host
         .eval_snippet("return await screenshot()")

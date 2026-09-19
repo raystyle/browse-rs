@@ -323,9 +323,19 @@
       "docs": "用 `Input.dispatchMouseEvent` pressed+released 在视口坐标 (x,y) 派发\ntrusted 的真点击。\n\n坐标命中的是当前可见物；不自动激活 tab（人机共存）。\n\n# Errors\n\n未连接或派发失败。从未激活的后台 tab 可能挂起（30s 超时），届时按错误\nCTA 先 `session.Target.activateTarget({targetId})`。"
     },
     {
+      "path": "browse_core::semantic::click_at_opts",
+      "kind": "function",
+      "docs": "clickAt 的参数化半边（#35）：button（left/right/middle/back/forward）\n与 clickCount（2 即双击语义）。\n\n# Errors\n\n同 [`click_at`]。"
+    },
+    {
       "path": "browse_core::semantic::click_ref",
       "kind": "function",
-      "docs": "按短 ref 点击：滚动可见 -> 量视口中心 -> **遮挡命中测试** -> 复用\n[`click_at`] 的 trusted 鼠标事件。\n\n命中测试（吸收 agent-browser 的 blocker 思路）：`elementFromPoint` 看\n点击点实际落谁头上，落点与目标无祖孙/label 关联即判被遮挡（consent\nbanner、modal 场景），报遮挡元素描述并拒绝点击：绝不静默点错位置。\n`clickAt` 是显式「点可见物」，不做此检查。\n\n# Errors\n\nref 失效（节点没了）、取不到中心（不可见）、被遮挡（错误附遮挡元素）、\n派发失败。"
+      "docs": "按短 ref 点击：滚动可见 -> 量视口中心 -> **遮挡命中测试** -> 复用\n[`click_at`] 的 trusted 鼠标事件。\n\n命中测试（吸收 agent-browser 的 blocker 思路）：`elementFromPoint` 看\n点击点实际落谁头上，落点与目标无祖孙/label 关联即判被遮挡（consent\nbanner、modal 场景），报遮挡元素描述并拒绝点击：绝不静默点错位置。\n`clickAt` 是显式「点可见物」，不做此检查。\n\n# Errors\n\nref 失效（节点没了）、取不到中心（不可见）、被遮挡（错误附遮挡元素）、\n派发失败。\n按 snapshot 短 ref trusted 点击（原口径）：左键单击，参数化走\n[`click_ref_opts`]。"
+    },
+    {
+      "path": "browse_core::semantic::click_ref_opts",
+      "kind": "function",
+      "docs": "按 snapshot 短 ref 参数化点击（#35）：button（left/right/middle/\nback/forward）与 clickCount（2 即双击语义）；遮挡命中测试与 trusted\n派发同 [`click_ref`] 口径。\n\n# Errors\n\n同 [`click_ref`]。"
     },
     {
       "path": "browse_core::semantic::close_tab",
@@ -431,6 +441,26 @@
       "path": "browse_core::semantic::key_raw",
       "kind": "function",
       "docs": "裸按键事件（#23）：keydown / keyup 按住语义（无 text，不发组合成键）。\n\n`down` 为 true 发 `keyDown`，否则 `keyUp`；组合写法同 [`press_key`]。\n\n# Errors\n\n未连接、修饰键名不合法或派发失败。"
+    },
+    {
+      "path": "browse_core::semantic::mouse_down",
+      "kind": "function",
+      "docs": "按下不释放（#35）：拖拽与长按语义的半边。\n\n# Errors\n\n同 [`mouse_move`]。"
+    },
+    {
+      "path": "browse_core::semantic::mouse_move",
+      "kind": "function",
+      "docs": "鼠标原语族（#35）：move、按下/释放分离、滚轮、按钮与次数参数化。\n`button` 取 left/right/middle/back/forward；clickCount 给 2 即双击\n语义（dblclick）。全部走 `Input.dispatchMouseEvent` trusted 派发。\n\n# Errors\n\n未连接或派发失败（后台 tab 挂起口径同 clickAt）。"
+    },
+    {
+      "path": "browse_core::semantic::mouse_up",
+      "kind": "function",
+      "docs": "释放（#35）：与 [`mouse_down`] 配对。\n\n# Errors\n\n同 [`mouse_move`]。"
+    },
+    {
+      "path": "browse_core::semantic::mouse_wheel",
+      "kind": "function",
+      "docs": "滚轮（#35）：deltaX/deltaY 是像素量（向下滚正 deltaY）；触发 wheel\n事件路径（SPA 懒加载监听 wheel 时 JS scrollBy 不可替代）。\n\n# Errors\n\n同 [`mouse_move`]。"
     },
     {
       "path": "browse_core::semantic::new_tab",

@@ -14,7 +14,9 @@
 ## Functions
 
 - `click_at` — 用 `Input.dispatchMouseEvent` pressed+released 在视口坐标 (x,y) 派发
+- `click_at_opts` — clickAt 的参数化半边（#35）：button（left/right/middle/back/forward）
 - `click_ref` — 按短 ref 点击：滚动可见 -> 量视口中心 -> **遮挡命中测试** -> 复用
+- `click_ref_opts` — 按 snapshot 短 ref 参数化点击（#35）：button（left/right/middle/
 - `close_tab` — 关 tab（缺省关当前活动 tab）；守卫层只放行本会话自建 tab，用户 tab 一律拒绝。
 - `cookie_delete` — 删单条 cookie（#42）：`Network.deleteCookies`（CDP 无单数形，按 name 加域删全部匹配），缺省
 - `cookie_set` — 写单条 cookie（#42）：`Network.setCookie`。`opts` 可带 domain（缺省用
@@ -36,6 +38,10 @@
 - `hover_ref` — 悬停到短 ref 元素中心（#23）：触发 CSS `:hover` 与悬停菜单。
 - `import_storage_state` — 导入会话态（#25.3）：吃 [`export_storage_state`] 的返回值或其落盘
 - `key_raw` — 裸按键事件（#23）：keydown / keyup 按住语义（无 text，不发组合成键）。
+- `mouse_down` — 按下不释放（#35）：拖拽与长按语义的半边。
+- `mouse_move` — 鼠标原语族（#35）：move、按下/释放分离、滚轮、按钮与次数参数化。
+- `mouse_up` — 释放（#35）：与 [`mouse_down`] 配对。
+- `mouse_wheel` — 滚轮（#35）：deltaX/deltaY 是像素量（向下滚正 deltaY）；触发 wheel
 - `new_tab` — 新开 tab 并设为活动路由。给了 `url` 则先建 about:blank 附着后再导航
 - `pdf` — 当前页存 PDF（`Page.printToPDF`，`printBackground`+`preferCSSPageSize`），
 - `press_key` — 用 `Input.dispatchKeyEvent` keyDown(+text)+keyUp 按一个键；Enter 的

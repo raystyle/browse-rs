@@ -1150,8 +1150,16 @@ impl JsHost {
                     "clickAt 缺坐标；下一步：clickAt(x, y)（视口坐标，snapshot+DOM.getBoxModel 量中心）"
                 ))?;
                 let y = argv.get(1).and_then(Value::as_i64).unwrap_or(0);
+                // opts（#35）：button 与 clickCount（2 即双击语义）
+                let opts = argv.get(2).cloned().unwrap_or(json!({}));
+                let button = opts
+                    .get("button")
+                    .and_then(Value::as_str)
+                    .unwrap_or("left")
+                    .to_string();
+                let click_count = opts.get("clickCount").and_then(Value::as_i64).unwrap_or(1);
                 self.assert_no_dialog().await?;
-                crate::semantic::click_at(&self.session, x, y).await
+                crate::semantic::click_at_opts(&self.session, x, y, &button, click_count).await
             }
             "fillInput" => {
                 let sel = argv.first().and_then(Value::as_str).ok_or_else(|| anyhow!(
@@ -1494,6 +1502,63 @@ impl JsHost {
                     "bytes": resp.get("encodedDataLength"),
                     "bodyHint": "body 走 responseBody(requestId)",
                 }))
+            }
+            // ---- 鼠标原语族（#35）----
+            "mouseMove" => {
+                let x = argv
+                    .first()
+                    .and_then(Value::as_i64)
+                    .ok_or_else(|| anyhow!("mouseMove 缺坐标；下一步：mouseMove(x, y)"))?;
+                let y = argv.get(1).and_then(Value::as_i64).unwrap_or(0);
+                self.assert_no_dialog().await?;
+                crate::semantic::mouse_move(&self.session, x, y).await
+            }
+            "mouseDown" => {
+                let b = argv
+                    .first()
+                    .and_then(Value::as_str)
+                    .unwrap_or("left")
+                    .to_string();
+                self.assert_no_dialog().await?;
+                crate::semantic::mouse_down(&self.session, &b).await
+            }
+            "mouseUp" => {
+                let b = argv
+                    .first()
+                    .and_then(Value::as_str)
+                    .unwrap_or("left")
+                    .to_string();
+                self.assert_no_dialog().await?;
+                crate::semantic::mouse_up(&self.session, &b).await
+            }
+            "mouseWheel" => {
+                let dx = argv.first().and_then(Value::as_i64).unwrap_or(0);
+                let dy = argv.get(1).and_then(Value::as_i64).unwrap_or(0);
+                self.assert_no_dialog().await?;
+                crate::semantic::mouse_wheel(&self.session, dx, dy).await
+            }
+            // 文件拖放（#35）：DOM.setFileInputFiles 直灌（可靠面），拖拽
+            // 事件序列留给 mouseDown/Move/Up 原语手拼
+            "dropFiles" => {
+                let r = argv.first().and_then(Value::as_str).ok_or_else(|| anyhow!(
+                    "dropFiles 缺 ref；下一步：dropFiles(\"e3\", [\"/abs/a.png\", \"/abs/b.txt\"])"
+                ))?;
+                let files = argv
+                    .get(1)
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default();
+                if files.is_empty() {
+                    bail!("dropFiles 缺文件路径数组；下一步：第二参给绝对路径数组");
+                }
+                let bn = self.lookup_ref(r).await?;
+                self.session
+                    .call(
+                        "DOM.setFileInputFiles",
+                        json!({ "files": files, "backendNodeId": bn }),
+                    )
+                    .await?;
+                Ok(json!(true))
             }
             // ---- a11y 媒质仿真族（#40）----
             "emulateMedia" => {
@@ -1849,7 +1914,15 @@ impl JsHost {
                 // 点击可能触发用户侧导航（无提交屏障背书）：点前记事件水位
                 // 供 waitNav 的有界提交等待（评审二轮 F4）
                 let nav_since = self.session.last_seq().await;
-                let mut out = crate::semantic::click_ref(&self.session, bn).await?;
+                let button = opts
+                    .get("button")
+                    .and_then(Value::as_str)
+                    .unwrap_or("left")
+                    .to_string();
+                let click_count = opts.get("clickCount").and_then(Value::as_i64).unwrap_or(1);
+                let mut out =
+                    crate::semantic::click_ref_opts(&self.session, bn, &button, click_count)
+                        .await?;
                 // waitNav（#19）：链接型点击后自动等导航稳定，免点击加
                 // waitLoad 两步；同文档锚点与纯 JS 按钮等已加载页 grace 窗
                 // 后返回。clickRef 基础回执是裸 true（布尔面），waitNav 在位
@@ -2900,7 +2973,7 @@ const PREVIEW_HEAD_ITEMS: usize = 8;
 /// 全局函数 CTA 清单（#33 G6 单一真相）：「未知函数」提示由此派生，
 /// `global_cta_covers_catalog` 测试把它与 surface 目录的 Global 条目绑死；
 /// 增删全局必须同步这里（value-methods 是方法面族条目，不在此列）。
-const GLOBALS_CTA: &str = "listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/hostFunctions()/snapshot(opts?)/findRefs(q,opts?)/console(opts?)/jsErrors(since?)/requests(opts?)/requestDetail(idxOrId,opts?)/detect()/cookies(domain?)/cookieGet(name)/cookieSet(name,value,opts?)/cookieDelete(name,domain?)/cookiesClear()/localGet(k)/localSet(k,v)/localDelete(k)/localClear()/sessionGet(k)/sessionSet(k,v)/sessionDelete(k)/sessionClear()/emulateMedia(opts?)/emulateMediaClear()/screenshot(path?, full?)/pdf(path?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/goto(url,opts?)/goBack(delta?)/goForward(delta?)/reload(opts?)/clickAt(x,y)/fillInput(sel,text,submit?)/clickRef(ref,opts?)/checkRef(ref)/uncheckRef(ref)/fillRef(ref,text,submit?)/selectOption(ref,value)/pressKey(key)/dialogStatus()/dialogAccept(text?)/dialogDismiss()/routeBlock(pattern)/routeMock(pattern,body,opts?)/routeClear()/waitLoad(s?)/waitIdle(s?)/waitForResponse(pattern,s?)/responseBody(requestId)/pageEval(js)/hoverRef(ref)/hoverAt(x,y)/dblclickRef(ref)/dragRef(src,dst)/keydown(key)/keyup(key)/typeRef(ref,text)/emulate(opts)/setInitScript(code)/exportStorageState()/importStorageState(state)/JSON.parse(string)/JSON.stringify(value,indent?)/recordStart(opts?)/recordStop()/chromeInstall(opts?)/chromeList()/chromeUse(version)/chromeUpdate()/chromeRemove(version)/chromeDoctor()/print(x)";
+const GLOBALS_CTA: &str = "listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/hostFunctions()/snapshot(opts?)/findRefs(q,opts?)/console(opts?)/jsErrors(since?)/requests(opts?)/requestDetail(idxOrId,opts?)/detect()/cookies(domain?)/cookieGet(name)/cookieSet(name,value,opts?)/cookieDelete(name,domain?)/cookiesClear()/localGet(k)/localSet(k,v)/localDelete(k)/localClear()/sessionGet(k)/sessionSet(k,v)/sessionDelete(k)/sessionClear()/mouseMove(x,y)/mouseDown(button?)/mouseUp(button?)/mouseWheel(dx,dy)/hoverAt(x,y)/dropFiles(ref,paths)/emulateMedia(opts?)/emulateMediaClear()/screenshot(path?, full?)/pdf(path?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/goto(url,opts?)/goBack(delta?)/goForward(delta?)/reload(opts?)/clickAt(x,y,opts?)/fillInput(sel,text,submit?)/clickRef(ref,opts?)/checkRef(ref)/uncheckRef(ref)/fillRef(ref,text,submit?)/selectOption(ref,value)/pressKey(key)/dialogStatus()/dialogAccept(text?)/dialogDismiss()/routeBlock(pattern)/routeMock(pattern,body,opts?)/routeClear()/waitLoad(s?)/waitIdle(s?)/waitForResponse(pattern,s?)/responseBody(requestId)/pageEval(js)/hoverRef(ref)/hoverAt(x,y)/dblclickRef(ref)/dragRef(src,dst)/keydown(key)/keyup(key)/typeRef(ref,text)/emulate(opts)/setInitScript(code)/exportStorageState()/importStorageState(state)/JSON.parse(string)/JSON.stringify(value,indent?)/recordStart(opts?)/recordStop()/chromeInstall(opts?)/chromeList()/chromeUse(version)/chromeUpdate()/chromeRemove(version)/chromeDoctor()/print(x)";
 
 /// 容器预览：头部 JSON 截断（留尾注位），超帽尾注总项数；小容器输出
 /// 与全量形一致。不与 [`trunc_preview`] 叠用（双省略号）。
