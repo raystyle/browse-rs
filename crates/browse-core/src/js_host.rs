@@ -2394,7 +2394,7 @@ impl JsHost {
                         .call(
                             "Runtime.evaluate",
                             json!({
-                                "expression": "(() => { addEventListener('click', (e) => { const f = document.createElement('div'); f.style.cssText = 'position:absolute;left:' + (e.pageX - 22) + 'px;top:' + (e.pageY - 22) + 'px;width:44px;height:44px;border-radius:50%;border:3px solid #ff8c00;z-index:2147483647;pointer-events:none;transition:transform .5s,opacity .5s'; document.documentElement.appendChild(f); requestAnimationFrame(() => { f.style.transform = 'scale(2.2)'; f.style.opacity = '0'; }); setTimeout(() => f.remove(), 600); }, true); return true })()",
+                                "expression": "(() => { if (window.__browseShowActions) return true; const h = (e) => { const f = document.createElement('div'); f.style.cssText = 'position:absolute;left:' + (e.pageX - 22) + 'px;top:' + (e.pageY - 22) + 'px;width:44px;height:44px;border-radius:50%;border:3px solid #ff8c00;z-index:2147483647;pointer-events:none;transition:transform .5s,opacity .5s'; document.documentElement.appendChild(f); requestAnimationFrame(() => { f.style.transform = 'scale(2.2)'; f.style.opacity = '0'; }); setTimeout(() => f.remove(), 600); }; window.__browseShowActions = h; addEventListener('click', h, true); return true })()",
                                 "returnByValue": true
                             }),
                         )
@@ -2431,7 +2431,7 @@ impl JsHost {
                     .call(
                         "Runtime.evaluate",
                         json!({
-                            "expression": "(() => { document.getElementById('browse-rec-cursor')?.remove(); return true })()",
+                            "expression": "(() => { document.getElementById('browse-rec-cursor')?.remove(); if (window.__browseShowActions) { removeEventListener('click', window.__browseShowActions, true); delete window.__browseShowActions; } return true })()",
                             "returnByValue": true
                         }),
                     )

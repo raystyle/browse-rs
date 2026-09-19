@@ -723,6 +723,19 @@ pub async fn mouse_move(s: &Session, x: i64, y: i64) -> Result<Value> {
     if let Ok(mut m) = LAST_MOUSE.lock() {
         *m = Some((x, y));
     }
+    // #43 录制光标跟随：元素在位才动（页面坐标口径同高亮；不在录时该
+    // evaluate 是廉价 no-op）。坐标内嵌走数字字面量（i64 无注入面）
+    let _ = s
+        .call(
+            "Runtime.evaluate",
+            json!({
+                "expression": format!(
+                    "(() => {{ const c = document.getElementById('browse-rec-cursor'); if (c) {{ c.style.left = (window.scrollX + {x}) + 'px'; c.style.top = (window.scrollY + {y}) + 'px'; }} return true }})()"
+                ),
+                "returnByValue": true
+            }),
+        )
+        .await;
     Ok(json!(true))
 }
 

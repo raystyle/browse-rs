@@ -1130,7 +1130,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "recordChapter(title)",
         args: &[arg!("title", "string", true)],
-        description: "录制中插章节标记（#43）：按当前帧计数追加到录制目录 chapters.jsonl；回放器可跳章。",
+        description: "录制中插章节标记（#43）：按当前帧计数追加到录制目录 chapters.jsonl（文件格式已冻结：每行 {atFrames,title}；消费方回放工具二期，当前仓内只写不读）。",
         example: "await recordChapter(\"登录流程\")",
     },
     CmdSpec {
