@@ -1086,12 +1086,35 @@ async fn node_center(s: &Session, backend_node_id: i64) -> Result<(f64, f64)> {
                     this.scrollIntoView({block:'center'});
                     const r = this.getBoundingClientRect();
                     if (!this.isConnected || (!r.width && !r.height)) return null;
-                    return JSON.stringify({x: r.x + r.width/2, y: r.y + r.height/2});
+                    const x = r.x + r.width/2, y = r.y + r.height/2;
+                    // #47 跨 frame 坐标提升：同 clickRef 口径（缩放边界
+                    // 同步检测）
+                    let vx = x, vy = y, w = window;
+                    while (w !== w.parent) {
+                        const fe = w.frameElement;
+                        if (!fe) break;
+                        const frr = fe.getBoundingClientRect();
+                        if (frr.width > 0 && Math.abs(frr.width - fe.offsetWidth) > 1) {
+                            return JSON.stringify({err: 'scaled-frame'});
+                        }
+                        vx += frr.x; vy += frr.y;
+                        w = w.parent;
+                    }
+                    return JSON.stringify({x: vx, y: vy});
                 }"#,
                 "returnByValue": true
             }),
         )
         .await?;
+    // 缩放 iframe 检测（#47 评审 F2）：transform scale 的 frame 坐标
+    // 提升会静默错位，报错不猜
+    if let Some(v) = r.pointer("/result/value").and_then(Value::as_str)
+        && v.contains("scaled-frame")
+    {
+        bail!(
+            "目标所在 iframe 被 CSS transform 缩放，坐标提升不做缩放换算（会静默错位）；下一步：去掉该 iframe 的 scale 或用 clickAt 手点顶层坐标"
+        );
+    }
     let p = r
         .pointer("/result/value")
         .and_then(Value::as_str)
@@ -1537,6 +1560,9 @@ pub async fn click_ref_opts(
                         const fe = w.frameElement;
                         if (!fe) break;
                         const frr = fe.getBoundingClientRect();
+                        if (frr.width > 0 && Math.abs(frr.width - fe.offsetWidth) > 1) {
+                            return JSON.stringify({x: -1, y: -1, blocker: 'scaled-frame'});
+                        }
                         vx += frr.x; vy += frr.y;
                         w = w.parent;
                     }

@@ -427,7 +427,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("ref", "string", false, "单元素子树（部分展开）"),
             arg!("depth", "number", false, "限深层数（可见树根为第 1 层）"),
         ],
-        description: "AX 树快照：nodes 带 role/name/value/childIds/短 ref（e1、e2…），引用表的唯一来源；url/title 走 CDP 查询面，页面主世界零写入（无注入痕）。opts（#36 捕获与检索分离）：ref 取该元素子树（snapshot(e34) 部分展开），depth 限深（大页先浅扫再部分展开省 token）；ref 只盖过滤后的可见集；pierce（#47）：同源 iframe 与 shadow DOM 内容穿透（DOM.getDocument pierce，AX 树不含它们），节点带 ref 可直接 clickRef/fillRef（跨 frame 坐标已提升）；OOPIF 跨域不覆盖（需子 session attach）。",
+        description: "AX 树快照：nodes 带 role/name/value/childIds/短 ref（e1、e2…），引用表的唯一来源；url/title 走 CDP 查询面，页面主世界零写入（无注入痕）。opts（#36 捕获与检索分离）：ref 取该元素子树（snapshot(e34) 部分展开），depth 限深（大页先浅扫再部分展开省 token）；ref 只盖过滤后的可见集；pierce（#47）：同源 iframe 与 shadow DOM 内容穿透（DOM.getDocument pierce，AX 树不含它们），节点带 ref 可直接 clickRef/fillRef（跨 frame 坐标已提升）；OOPIF 跨域不覆盖（需子 session attach）；pierce 清单与 AX 投影有结构节点重复（html/body 双份，ref 各自唯一同 backendNodeId），pierce 节点的 name 取 aria-label 或 id（非可见文本），pierce 与 ref 子树组合受限（pierce 节点无 childIds）。",
         example: "const s = await snapshot({depth: 2})",
     },
     CmdSpec {
@@ -439,7 +439,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("insensitive", "boolean", false, "false"),
             arg!("context", "number", false, "2（祖先链层数）"),
         ],
-        description: "服务端检索 AX 树（#36）：daemon 侧按 name/value 子串匹配（insensitive 开大小写不敏感，不引正则依赖），只回命中节点加 context 层祖先链（grep -C 式），节点带新 ref 可直接 clickRef/fillRef——比全量 snapshot 省一个量级 token；有命中才整表替换引用表（同 snapshot 语义），零命中保留旧表并标 kept_refs:true。",
+        description: "服务端检索 AX 树（#36）：daemon 侧按 name/value 子串匹配（insensitive 开大小写不敏感，不引正则依赖），只回命中节点加 context 层祖先链（grep -C 式），节点带新 ref 可直接 clickRef/fillRef——比全量 snapshot 省一个量级 token；有命中才整表替换引用表（同 snapshot 语义），零命中保留旧表并标 kept_refs:true。检索范围是顶层 AX 树：iframe/shadow 内节点不在其中（#47 实弹），要穿透先 snapshot({pierce: true}) 再按 role/name 取 ref。",
         example: "const f = await findRefs(\"Sign in\", {context: 1})",
     },
     CmdSpec {
