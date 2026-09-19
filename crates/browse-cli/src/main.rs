@@ -487,7 +487,27 @@ async fn main() -> Result<()> {
             Ok(())
         }
         Mode::SnippetsShow(rel) => {
-            let path = browse_core::paths::state_dir().join("snippets").join(&rel);
+            let root = browse_core::paths::state_dir().join("snippets");
+            let path = root.join(&rel);
+            // 越界守卫（#44 评审 F2）：canonicalize 后必须仍在库内，挡
+            // 绝对路径、../ 与符号链接出库
+            let Ok(canon) = path.canonicalize() else {
+                bail!(
+                    "片段 {rel} 不存在（{}）；下一步：browse snippets list 看在册片段",
+                    path.display()
+                );
+            };
+            let Ok(root_canon) = root.canonicalize() else {
+                bail!(
+                    "片段库目录不存在（{}）；下一步：browse snippets list 看在册片段",
+                    root.display()
+                );
+            };
+            if !canon.starts_with(&root_canon) {
+                bail!(
+                    "片段 {rel} 越出片段库（只许库内相对路径）；下一步：browse snippets list 看在册片段"
+                );
+            }
             match std::fs::read_to_string(&path) {
                 Ok(text) => {
                     println!("{text}");
@@ -866,7 +886,7 @@ fn visit_snippets(
                 .and_then(|r| r.to_str())
                 .unwrap_or_else(|| p.to_str().unwrap_or("?"));
             if let Some(site) = site
-                && !rel.split('/').nth(0).is_some_and(|seg| seg.contains(site))
+                && !rel.split('/').next().is_some_and(|seg| seg.contains(site))
                 && !rel.contains(site)
             {
                 continue;
