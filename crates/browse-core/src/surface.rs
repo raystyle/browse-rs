@@ -638,6 +638,22 @@ pub const COMMANDS: &[CmdSpec] = &[
         example: "await annotate([\"e1\", \"e3\"])",
     },
     CmdSpec {
+        name: "grantPermissions",
+        kind: CmdKind::Global,
+        signature: "grantPermissions(perms, origin?)",
+        args: &[
+            arg!(
+                "perms",
+                "array",
+                true,
+                "CDP 枚举数组（geolocation/notifications/microphone/camera/…）"
+            ),
+            arg!("origin", "string", false, "缺省当前页 origin"),
+        ],
+        description: "开关级权限自动授予（#28）：Browser.grantPermissions 浏览器级授予权限，弹窗不再出；非法枚举（如 clipboard-read）CDP 当场报错透传；回 {granted, origin}。permissions API 查询即 granted。",
+        example: r#"await grantPermissions(["geolocation", "notifications"])"#,
+    },
+    CmdSpec {
         name: "cloneCookies",
         kind: CmdKind::Global,
         signature: "cloneCookies(domains)",
@@ -1090,7 +1106,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "emulate(opts)",
         args: &[arg!("opts", "object", true)],
-        description: "视口与 UA 仿真（#24）：viewport 加 mobile 加 userAgent 全可省；mobile 档同站更省 token；userAgent 只覆写 UA 字符串，UA-CH 高熵字段未动（引擎级覆写是 #28 范围）。",
+        description: "视口与 UA 仿真（#24）：viewport 加 mobile 加 userAgent 全可省；mobile 档同站更省 token；userAgent 只覆写 UA 字符串，UA-CH 高熵字段未动（引擎级覆写是 #28 范围）；userAgentMetadata（#28）随 userAgent 直传 setUserAgentOverride，UA-CH 高熵字段（brands/platform/model 等，architecture 与 platformVersion 为 CDP 必填）原生覆写非 JS 注入。",
         example: "return await emulate({viewport:{width:390,height:844}, mobile:true})",
     },
     CmdSpec {

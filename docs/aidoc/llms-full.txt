@@ -399,6 +399,7 @@ ark 管理的安装拦自更新走 ark 单通道（判据：exe 同目录 `ark-m
 - `go_back` — 历史回退（#39）：`Page.getNavigationHistory` 取 currentIndex，回退 delta
 - `go_forward` — 历史前进（#39）：同 [`go_back`] 方向相反，钳到最新条目。
 - `goto` — 一步导航（#19）：`Page.navigate` 加 waitLoad 一体收尾，可选再等网络静默，
+- `grant_permissions` — 开关级权限自动授予（#28）：`Browser.grantPermissions`，permissions 是
 - `highlight` — 持久高亮覆盖层（#41）：给元素画 2px 橙框加可选编号徽标（label），不
 - `hover_at` — 移动鼠标到视口坐标（#23）：触发 `:hover` 与悬停菜单的 mouseMoved。
 - `hover_ref` — 悬停到短 ref 元素中心（#23）：触发 CSS `:hover` 与悬停菜单。

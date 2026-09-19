@@ -252,6 +252,45 @@ pub async fn wait_settled(s: &Session, since: u64, grace_ms: u64, budget_ms: u64
     }
 }
 
+/// 开关级权限自动授予（#28）：`Browser.grantPermissions`，permissions 是
+/// CDP 枚举（geolocation/notifications/clipboard-read/clipboard-write/
+/// microphone/camera 等），origin 缺省当前页。浏览器级调用，弹窗不再出。
+///
+/// # Errors
+///
+/// 未连接或 CDP 拒绝（非法枚举原样透传，守卫 CTA 指路）。
+pub async fn grant_permissions(
+    s: &Session,
+    permissions: &[String],
+    origin: Option<&str>,
+) -> Result<Value> {
+    let mut params = json!({ "permissions": permissions });
+    if let Some(o) = origin {
+        params["origin"] = json!(o);
+    } else {
+        let url = s
+            .call(
+                "Runtime.evaluate",
+                json!({
+                    "expression": "location.origin", "returnByValue": true
+                }),
+            )
+            .await
+            .ok()
+            .and_then(|v| {
+                v.pointer("/result/value")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            });
+        if let Some(u) = url {
+            params["origin"] = json!(u);
+        }
+    }
+    let origin_out = params.get("origin").cloned();
+    s.call("Browser.grantPermissions", params).await?;
+    Ok(json!({ "granted": permissions, "origin": origin_out }))
+}
+
 /// a11y 媒质仿真族（#40）：`Emulation.setEmulatedMedia` 的 features 面。
 /// `opts` 任给其一：`colorScheme`（dark/light）、`reducedMotion`
 /// （reduce/no-preference）、`forcedColors`（active/none）、`prefersContrast`
@@ -1312,8 +1351,14 @@ fn url_origin(url: &str) -> Option<String> {
 /// 未连接或 CDP 覆写失败。
 pub async fn emulate(s: &Session, opts: &Value) -> Result<Value> {
     if let Some(ua) = opts.get("userAgent").and_then(Value::as_str) {
-        s.call("Emulation.setUserAgentOverride", json!({ "userAgent": ua }))
-            .await?;
+        // UA-CH 高熵字段原生覆写（#28）：userAgentMetadata 直传
+        // Emulation.setUserAgentOverride（brands/model/platform 等随 UA 一并
+        // 覆写，JS 注入式伪装会被高熵字段戳穿的问题不存在）
+        let mut p = json!({ "userAgent": ua });
+        if let Some(m) = opts.get("userAgentMetadata") {
+            p["userAgentMetadata"] = m.clone();
+        }
+        s.call("Emulation.setUserAgentOverride", p).await?;
     }
     if let Some(v) = opts.get("viewport").and_then(Value::as_object) {
         let mobile = opts.get("mobile").and_then(Value::as_bool).unwrap_or(false);

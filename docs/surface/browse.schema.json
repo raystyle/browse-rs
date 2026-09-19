@@ -1059,7 +1059,7 @@
       "type": "object"
     },
     "emulate": {
-      "description": "emulate(opts) 视口与 UA 仿真（#24）：viewport 加 mobile 加 userAgent 全可省；mobile 档同站更省 token；userAgent 只覆写 UA 字符串，UA-CH 高熵字段未动（引擎级覆写是 #28 范围）。",
+      "description": "emulate(opts) 视口与 UA 仿真（#24）：viewport 加 mobile 加 userAgent 全可省；mobile 档同站更省 token；userAgent 只覆写 UA 字符串，UA-CH 高熵字段未动（引擎级覆写是 #28 范围）；userAgentMetadata（#28）随 userAgent 直传 setUserAgentOverride，UA-CH 高熵字段（brands/platform/model 等，architecture 与 platformVersion 为 CDP 必填）原生覆写非 JS 注入。",
       "example": "return await emulate({viewport:{width:390,height:844}, mobile:true})",
       "input": {
         "properties": {
@@ -1258,6 +1258,28 @@
         },
         "required": [
           "url"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "grantPermissions": {
+      "description": "grantPermissions(perms, origin?) 开关级权限自动授予（#28）：Browser.grantPermissions 浏览器级授予权限，弹窗不再出；非法枚举（如 clipboard-read）CDP 当场报错透传；回 {granted, origin}。permissions API 查询即 granted。",
+      "example": "await grantPermissions([\"geolocation\", \"notifications\"])",
+      "input": {
+        "properties": {
+          "origin": {
+            "description": "缺省 缺省当前页 origin",
+            "type": "string"
+          },
+          "perms": {
+            "description": "缺省 CDP 枚举数组（geolocation/notifications/microphone/camera/…）",
+            "type": "array"
+          }
+        },
+        "required": [
+          "perms"
         ],
         "type": "object"
       },

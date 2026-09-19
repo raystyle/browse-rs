@@ -443,6 +443,11 @@
       "docs": "一步导航（#19）：`Page.navigate` 加 waitLoad 一体收尾，可选再等网络静默，\n返回提交后世界的 url/title/elapsedMs。用于「去这个页且等它可用」，替代\n手写 navigate 加 waitLoad 两步；也替代 navigate 加 waitFor(loadEventFired)\n组合——后者事件已发再注册即假超时（#19 竞速），本函数走 readyState 轮询\n无此窗。\n\n`timeout_ms` 是导航加载合计预算；`idle_ms` 为 Some 时再等网络静默。\nurl/title 取自目标元数据（Target.getTargets 面），瞬时提交窗内可能\n滞后；权威读取用 `location.href` / `document.title`（评审 G7）。\n\n# Errors\n\nnavigate 回执带 errorText；预算内 readyState 未到 complete；idle 档\n未静默。"
     },
     {
+      "path": "browse_core::semantic::grant_permissions",
+      "kind": "function",
+      "docs": "开关级权限自动授予（#28）：`Browser.grantPermissions`，permissions 是\nCDP 枚举（geolocation/notifications/clipboard-read/clipboard-write/\nmicrophone/camera 等），origin 缺省当前页。浏览器级调用，弹窗不再出。\n\n# Errors\n\n未连接或 CDP 拒绝（非法枚举原样透传，守卫 CTA 指路）。"
+    },
+    {
       "path": "browse_core::semantic::highlight",
       "kind": "function",
       "docs": "持久高亮覆盖层（#41）：给元素画 2px 橙框加可选编号徽标（label），不\n挡点击（pointer-events: none）；幂等（同元素重复高亮刷新框位）。清场\n走上层 highlightClear（按 data-browse-hl 属性移除）。\n\n# Errors\n\n元素不可见（量不到 rect）或求值失败。"

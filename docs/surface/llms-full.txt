@@ -71,6 +71,7 @@
 | `highlight(ref, {label}?)` | 持久高亮覆盖层（#41）：2px 橙框不挡点击（pointer-events none），页面坐标绝对定位滚动跟随；label 给定叠编号徽标；幂等（同元素刷新框位）；清场走 highlightClear()。人看 agent 在操作哪个元素。 |
 | `highlightClear()` | 移除全部高亮框与徽标（#41，按 data-browse-hl 属性）。 |
 | `annotate(refs)` | 批量画框加编号徽标（#24 残余）：对一批 ref 各画框并以 ref 本身为徽标文本（与 snapshot 编号天然对齐）；任一项失败先清场再报错（不留半批框）；配合 screenshot() 取证后 highlightClear() 收场。 |
+| `grantPermissions(perms, origin?)` | 开关级权限自动授予（#28）：Browser.grantPermissions 浏览器级授予权限，弹窗不再出；非法枚举（如 clipboard-read）CDP 当场报错透传；回 {granted, origin}。permissions API 查询即 granted。 |
 | `cloneCookies(domains)` | 登录态按域热迁（#48）：从附着浏览器（probe_default 发现）只读取指定域 cookie 后缀匹配，Network.setCookies 灌入当前引擎；源零写回铁律；回 {cloned,matched,domains}。无附着源（probe_default 只探 9222 与默认 profile 的 DevToolsActivePort，其他端口的附着态取不到）报错指 exportStorageState 整包往返；域匹配不区分大小写、输入前导点剥掉；cloned 小于 matched 时回 failed 与 firstError。 |
 | `downloads(since?)` | 下载列表（#38）：Browser.downloadWillBegin 行情加同 guid 最新 downloadProgress（state/receivedBytes/totalBytes）；落盘目录是状态目录 downloads/，捕获随 tab 入口自动开（Browser 域事件不做活动 tab 过滤）。 |
 | `downloadPath(guid, timeoutS?)` | 等下载完成后回落盘路径（#38）：completed 给 named 路径（改名未落时给 guid 原始名候选），canceled 报错，超时带当前态 CTA；guid 来自 downloads()。 |
@@ -116,7 +117,7 @@
 | `typeRef(ref, text)` | 真实按键序列输入（#23）：focus 后逐字符 keyDown+keyUp，contenteditable/ProseMirror 类编辑器用；普通输入框用 fillRef（insertText）。 |
 | `emulateMedia(opts)` | a11y 媒质仿真族（#40）：Emulation.setEmulatedMedia features 面，五参任给其一以上（非法枚举当场报错列合法值）；页内 matchMedia 感知。单次调用是全量替换：多特征同一次 opts 里给；仿真挂在 target 上跨导航保留，goto 后要 stock 视图记得 emulateMediaClear()。与 emulate({viewport,mobile,userAgent}) 并列成族。 |
 | `emulateMediaClear()` | 还原媒质仿真（#40）：五特征与媒质全部回 stock。 |
-| `emulate(opts)` | 视口与 UA 仿真（#24）：viewport 加 mobile 加 userAgent 全可省；mobile 档同站更省 token；userAgent 只覆写 UA 字符串，UA-CH 高熵字段未动（引擎级覆写是 #28 范围）。 |
+| `emulate(opts)` | 视口与 UA 仿真（#24）：viewport 加 mobile 加 userAgent 全可省；mobile 档同站更省 token；userAgent 只覆写 UA 字符串，UA-CH 高熵字段未动（引擎级覆写是 #28 范围）；userAgentMetadata（#28）随 userAgent 直传 setUserAgentOverride，UA-CH 高熵字段（brands/platform/model 等，architecture 与 platformVersion 为 CDP 必填）原生覆写非 JS 注入。 |
 | `setInitScript(code)` | 每新文档前注入脚本（#25.2）：反检测补丁、杀 cookie 横幅；SPA 路由不重跑（只对新文档生效），空串清除。 |
 | `exportStorageState()` | 导出会话态（#25.3）：cookies 全量加当前页 origin 的 localStorage；多 origin 逐个切 tab 再导。 |
 | `importStorageState(state 或 path)` | 导入会话态（#25.3）：吃 exportStorageState 的返回值或其落盘文件路径，回两边计数。 |
@@ -809,6 +810,18 @@ await highlightClear()
 await annotate(["e1", "e3"])
 ```
 
+## `grantPermissions(perms, origin?)`
+
+开关级权限自动授予（#28）：Browser.grantPermissions 浏览器级授予权限，弹窗不再出；非法枚举（如 clipboard-read）CDP 当场报错透传；回 {granted, origin}。permissions API 查询即 granted。
+
+参数：
+- `perms`（array，缺省 CDP 枚举数组（geolocation/notifications/microphone/camera/…）），必填
+- `origin`（string，缺省 缺省当前页 origin）
+
+```js
+await grantPermissions(["geolocation", "notifications"])
+```
+
 ## `cloneCookies(domains)`
 
 登录态按域热迁（#48）：从附着浏览器（probe_default 发现）只读取指定域 cookie 后缀匹配，Network.setCookies 灌入当前引擎；源零写回铁律；回 {cloned,matched,domains}。无附着源（probe_default 只探 9222 与默认 profile 的 DevToolsActivePort，其他端口的附着态取不到）报错指 exportStorageState 整包往返；域匹配不区分大小写、输入前导点剥掉；cloned 小于 matched 时回 failed 与 firstError。
@@ -1326,7 +1339,7 @@ await emulateMediaClear()
 
 ## `emulate(opts)`
 
-视口与 UA 仿真（#24）：viewport 加 mobile 加 userAgent 全可省；mobile 档同站更省 token；userAgent 只覆写 UA 字符串，UA-CH 高熵字段未动（引擎级覆写是 #28 范围）。
+视口与 UA 仿真（#24）：viewport 加 mobile 加 userAgent 全可省；mobile 档同站更省 token；userAgent 只覆写 UA 字符串，UA-CH 高熵字段未动（引擎级覆写是 #28 范围）；userAgentMetadata（#28）随 userAgent 直传 setUserAgentOverride，UA-CH 高熵字段（brands/platform/model 等，architecture 与 platformVersion 为 CDP 必填）原生覆写非 JS 注入。
 
 参数：
 - `opts`（object），必填
