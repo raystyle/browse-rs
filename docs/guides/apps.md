@@ -5,10 +5,10 @@
 ## 契约
 
 1. **载体与路由**：`apps/<name>`（pwsh 脚本或可执行）；参数即子命令（`apps/<name> <sub> [args]`）。`browse <name>` 同款路由留给家族 ark 统一管理，apps/ 目录是仓内样例与约定的权威。
-2. **ctx 安全面**：应用只用 browse 的只读与求值面（fetch/snapshot/status/POST /eval）；写操作与引擎生命周期（up/down/engine）不暴露给应用——应用不拥有引擎。
+2. **ctx 安全面**：应用只用 browse 的只读与求值面（fetch/snapshot/status/POST /eval）；写操作与引擎生命周期（up/down/engine）不暴露给应用：应用不拥有引擎。
 3. **helper 覆盖**：站点级 helper 走 #44 片段库的命名覆盖约定（`snippets/<site>/<task>.js`，`browse snippets list/show` 查读）；应用自带 helper 就存自己的 snippets 命名空间。
-4. **实例隔离**：应用需要专属实例时设 `BROWSE_NAME=<app>-<name>`（派生端口与状态目录隔离）；空闲自退沿用 `BROWSE_IDLE_TIMEOUT`。
-5. **崩溃边界**：应用是独立进程，崩溃只死自己；daemon 与其他应用不受影响（不共享进程状态）。
+4. **实例隔离**：应用需要专属实例时设 `BROWSE_NAME=<app>-<name>`（派生端口与状态目录隔离）；前置：专属实例需先自起该命名的 daemon（`BROWSE_NAME=<app>-<name> browse up`，应用自管生命周期即退出前 down），与第 2 条的「应用不拥有默认引擎」并存不悖（专属实例就是应用自己的）；空闲自退沿用 `BROWSE_IDLE_TIMEOUT`。
+5. **崩溃边界**：应用是独立进程，崩溃只死自己；daemon 与其他应用不受影响（不共享进程状态）。分发面：apps/ 是仓内样例与约定权威，安装分发走家族 ark（应用仓注册后 ark 统一放行进入 PATH）；本仓不做独立安装器。
 
 ## 样例
 
