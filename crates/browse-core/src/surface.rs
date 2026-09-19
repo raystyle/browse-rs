@@ -578,6 +578,25 @@ pub const COMMANDS: &[CmdSpec] = &[
         example: "await sessionClear()",
     },
     CmdSpec {
+        name: "downloads",
+        kind: CmdKind::Global,
+        signature: "downloads(since?)",
+        args: &[arg!("since", "number", false, "0（seq 游标）")],
+        description: "下载列表（#38）：Browser.downloadWillBegin 行情加同 guid 最新 downloadProgress（state/receivedBytes/totalBytes）；落盘目录是状态目录 downloads/，捕获随 tab 入口自动开（Browser 域事件不做活动 tab 过滤）。",
+        example: "return await downloads()",
+    },
+    CmdSpec {
+        name: "downloadPath",
+        kind: CmdKind::Global,
+        signature: "downloadPath(guid, timeoutS?)",
+        args: &[
+            arg!("guid", "string", true),
+            arg!("timeoutS", "number", false, "20"),
+        ],
+        description: "等下载完成后回落盘路径（#38）：completed 给 named 路径（改名未落时给 guid 原始名候选），canceled 报错，超时带当前态 CTA；guid 来自 downloads()。",
+        example: "return await downloadPath(\"<guid>\")",
+    },
+    CmdSpec {
         name: "screenshot",
         kind: CmdKind::Global,
         signature: "screenshot(path?, full?, opts?)",
@@ -866,7 +885,7 @@ pub const COMMANDS: &[CmdSpec] = &[
                 "{status:200, contentType:\"text/html\"}"
             ),
         ],
-        description: "网络拦截：命中的请求本地应答（默认带 ACAO *）。",
+        description: "网络拦截：命中的请求本地应答（默认带 ACAO *）；opts.headers（#38）加额外响应头（如 Content-Disposition 触发下载）。",
         example: "await routeMock(\"http://mock.test/api*\", \"{\\\"ok\\\":1}\", {contentType: \"application/json\"})",
     },
     CmdSpec {

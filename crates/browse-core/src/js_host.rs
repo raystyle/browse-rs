@@ -181,6 +181,8 @@ pub(crate) enum RouteAction {
         status: i64,
         /// Content-Type（缺省 text/html）。
         content_type: String,
+        /// 额外响应头（#38：Content-Disposition 触发下载等）。
+        headers: Vec<(String, String)>,
     },
 }
 
@@ -1578,6 +1580,111 @@ impl JsHost {
                     .await?;
                 Ok(json!(true))
             }
+            // ---- 下载捕获（#38）----
+            "downloads" => {
+                // Browser 域事件（无 sessionId），不做活动 tab 过滤；
+                // 行情自 downloadWillBegin，进度取同 guid 的最新
+                // downloadProgress
+                let since = argv
+                    .first()
+                    .and_then(|v| v.get("since"))
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0);
+                let begins = self
+                    .session
+                    .peek_events_since("Browser.downloadWillBegin", since, 200)
+                    .await;
+                let progresses = self
+                    .session
+                    .peek_events_since("Browser.downloadProgress", 0, 1000)
+                    .await;
+                let rows: Vec<Value> = begins
+                    .iter()
+                    .map(|b| {
+                        let guid = b.pointer("/params/guid").cloned().unwrap_or(Value::Null);
+                        let latest = progresses
+                            .iter()
+                            .rev()
+                            .find(|p| p.pointer("/params/guid") == Some(&guid));
+                        json!({
+                            "guid": guid,
+                            "url": b.pointer("/params/url"),
+                            "filename": b.pointer("/params/suggestedFilename"),
+                            "state": latest
+                                .and_then(|p| p.pointer("/params/state"))
+                                .cloned()
+                                .unwrap_or(json!("inProgress")),
+                            "receivedBytes": latest
+                                .and_then(|p| p.pointer("/params/receivedBytes"))
+                                .cloned()
+                                .unwrap_or(json!(0)),
+                            "totalBytes": latest
+                                .and_then(|p| p.pointer("/params/totalBytes"))
+                                .cloned()
+                                .unwrap_or(json!(0)),
+                        })
+                    })
+                    .collect();
+                Ok(json!({ "count": rows.len(), "downloads": rows }))
+            }
+            "downloadPath" => {
+                // 等 completed 后给落盘路径（drops/downloads 目录）；至多
+                // 20 秒，超时报当前态与已知路径候选
+                let guid = str_arg(argv, 0, "downloadPath 的 guid")?;
+                let timeout_s = argv.get(1).and_then(Value::as_u64).unwrap_or(20);
+                let deadline =
+                    tokio::time::Instant::now() + std::time::Duration::from_secs(timeout_s);
+                let dir = crate::paths::state_dir().join("downloads");
+                loop {
+                    let progresses = self
+                        .session
+                        .peek_events_since("Browser.downloadProgress", 0, 1000)
+                        .await;
+                    let done = progresses
+                        .iter()
+                        .rev()
+                        .find(|p| p.pointer("/params/guid") == Some(&json!(guid)));
+                    let state = done
+                        .and_then(|p| p.pointer("/params/state"))
+                        .and_then(Value::as_str)
+                        .unwrap_or("");
+                    let begins = self
+                        .session
+                        .peek_events_since("Browser.downloadWillBegin", 0, 200)
+                        .await;
+                    let suggested = begins
+                        .iter()
+                        .find(|b| b.pointer("/params/guid") == Some(&json!(guid)))
+                        .and_then(|b| b.pointer("/params/suggestedFilename"))
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string();
+                    if state == "completed" {
+                        let named = dir.join(&suggested);
+                        if named.is_file() {
+                            return Ok(json!({
+                                "path": named.display().to_string(),
+                                "state": "completed",
+                            }));
+                        }
+                        // 完成但改名未落：给 guid 原始名候选
+                        return Ok(json!({
+                            "path": dir.join(guid).display().to_string(),
+                            "named": named.display().to_string(),
+                            "state": "completed",
+                        }));
+                    }
+                    if state == "canceled" {
+                        bail!("下载 {guid} 已取消");
+                    }
+                    if tokio::time::Instant::now() >= deadline {
+                        bail!(
+                            "downloadPath 等待 {timeout_s} 秒未完成（当前态 {state:?}）；下一步：downloads() 看进度，或加大等待秒数"
+                        );
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                }
+            }
             // ---- a11y 媒质仿真族（#40）----
             "emulateMedia" => {
                 let opts = argv.first().cloned().unwrap_or(json!({}));
@@ -2070,6 +2177,15 @@ impl JsHost {
                         .and_then(Value::as_str)
                         .unwrap_or("text/html")
                         .to_string(),
+                    headers: opts
+                        .and_then(|o| o.get("headers"))
+                        .and_then(Value::as_object)
+                        .map(|h| {
+                            h.iter()
+                                .filter_map(|(k, v)| v.as_str().map(|v| (k.clone(), v.to_string())))
+                                .collect::<Vec<_>>()
+                        })
+                        .unwrap_or_default(),
                 };
                 self.routes.lock().await.push(RouteRule {
                     pattern: pattern.to_string(),
@@ -2521,8 +2637,16 @@ fn spawn_route_watcher(
                         body,
                         status,
                         content_type,
+                        headers,
                     }) => {
                         // mock 是测试原语：默认带 ACAO，跨源页（data: 测试页）也读得到
+                        let mut rh = vec![
+                            json!({ "name": "Content-Type", "value": content_type }),
+                            json!({ "name": "Access-Control-Allow-Origin", "value": "*" }),
+                        ];
+                        for (k, v) in headers {
+                            rh.push(json!({ "name": k, "value": v }));
+                        }
                         let _ = session
                             .call_on(
                                 "Fetch.fulfillRequest",
@@ -2530,10 +2654,7 @@ fn spawn_route_watcher(
                                     "requestId": rid,
                                     "responseCode": status,
                                     "body": base64_encode(body.as_bytes()),
-                                    "responseHeaders": [
-                                        { "name": "Content-Type", "value": content_type },
-                                        { "name": "Access-Control-Allow-Origin", "value": "*" },
-                                    ],
+                                    "responseHeaders": rh,
                                 }),
                                 sid,
                             )
@@ -2689,6 +2810,18 @@ pub(crate) async fn ensure_page_enabled(session: &Session, sid: &str) {
     // Network。幂等；晚开域之前的旧事件收不到（自开域后起算）
     let _ = session.call_on("Runtime.enable", json!({}), sid).await;
     let _ = session.call_on("Network.enable", json!({}), sid).await;
+    // #38 下载捕获：落盘到状态目录 downloads 子目录并开事件（browser 级
+    // 幂等）
+    let _ = session
+        .call(
+            "Browser.setDownloadBehavior",
+            json!({
+                "behavior": "allow",
+                "downloadPath": crate::paths::state_dir().join("downloads"),
+                "eventsEnabled": true,
+            }),
+        )
+        .await;
 }
 
 /// 字符串方法面清单（#21）：CTA 文案由此派生，surface 目录描述由测试绑定；
@@ -2991,7 +3124,7 @@ const PREVIEW_HEAD_ITEMS: usize = 8;
 /// 全局函数 CTA 清单（#33 G6 单一真相）：「未知函数」提示由此派生，
 /// `global_cta_covers_catalog` 测试把它与 surface 目录的 Global 条目绑死；
 /// 增删全局必须同步这里（value-methods 是方法面族条目，不在此列）。
-const GLOBALS_CTA: &str = "listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/hostFunctions()/snapshot(opts?)/findRefs(q,opts?)/console(opts?)/jsErrors(since?)/requests(opts?)/requestDetail(idxOrId,opts?)/detect()/cookies(domain?)/cookieGet(name)/cookieSet(name,value,opts?)/cookieDelete(name,domain?)/cookiesClear()/localGet(k)/localSet(k,v)/localDelete(k)/localClear()/sessionGet(k)/sessionSet(k,v)/sessionDelete(k)/sessionClear()/mouseMove(x,y)/mouseDown(button?)/mouseUp(button?)/mouseWheel(dx,dy)/hoverAt(x,y)/dropFiles(ref,paths)/emulateMedia(opts?)/emulateMediaClear()/screenshot(path?, full?)/pdf(path?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/goto(url,opts?)/goBack(delta?)/goForward(delta?)/reload(opts?)/clickAt(x,y,opts?)/fillInput(sel,text,submit?)/clickRef(ref,opts?)/checkRef(ref)/uncheckRef(ref)/fillRef(ref,text,submit?)/selectOption(ref,value)/pressKey(key)/dialogStatus()/dialogAccept(text?)/dialogDismiss()/routeBlock(pattern)/routeMock(pattern,body,opts?)/routeClear()/waitLoad(s?)/waitIdle(s?)/waitForResponse(pattern,s?)/responseBody(requestId)/pageEval(js)/hoverRef(ref)/hoverAt(x,y)/dblclickRef(ref)/dragRef(src,dst)/keydown(key)/keyup(key)/typeRef(ref,text)/emulate(opts)/setInitScript(code)/exportStorageState()/importStorageState(state)/JSON.parse(string)/JSON.stringify(value,indent?)/recordStart(opts?)/recordStop()/chromeInstall(opts?)/chromeList()/chromeUse(version)/chromeUpdate()/chromeRemove(version)/chromeDoctor()/print(x)";
+const GLOBALS_CTA: &str = "listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/hostFunctions()/snapshot(opts?)/findRefs(q,opts?)/console(opts?)/jsErrors(since?)/requests(opts?)/requestDetail(idxOrId,opts?)/detect()/cookies(domain?)/cookieGet(name)/cookieSet(name,value,opts?)/cookieDelete(name,domain?)/cookiesClear()/localGet(k)/localSet(k,v)/localDelete(k)/localClear()/sessionGet(k)/sessionSet(k,v)/sessionDelete(k)/sessionClear()/mouseMove(x,y)/mouseDown(button?)/mouseUp(button?)/mouseWheel(dx,dy)/hoverAt(x,y)/dropFiles(ref,paths)/downloads(since?)/downloadPath(guid,s?)/emulateMedia(opts?)/emulateMediaClear()/screenshot(path?, full?)/pdf(path?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/goto(url,opts?)/goBack(delta?)/goForward(delta?)/reload(opts?)/clickAt(x,y,opts?)/fillInput(sel,text,submit?)/clickRef(ref,opts?)/checkRef(ref)/uncheckRef(ref)/fillRef(ref,text,submit?)/selectOption(ref,value)/pressKey(key)/dialogStatus()/dialogAccept(text?)/dialogDismiss()/routeBlock(pattern)/routeMock(pattern,body,opts?)/routeClear()/waitLoad(s?)/waitIdle(s?)/waitForResponse(pattern,s?)/responseBody(requestId)/pageEval(js)/hoverRef(ref)/hoverAt(x,y)/dblclickRef(ref)/dragRef(src,dst)/keydown(key)/keyup(key)/typeRef(ref,text)/emulate(opts)/setInitScript(code)/exportStorageState()/importStorageState(state)/JSON.parse(string)/JSON.stringify(value,indent?)/recordStart(opts?)/recordStop()/chromeInstall(opts?)/chromeList()/chromeUse(version)/chromeUpdate()/chromeRemove(version)/chromeDoctor()/print(x)";
 
 /// 容器预览：头部 JSON 截断（留尾注位），超帽尾注总项数；小容器输出
 /// 与全量形一致。不与 [`trunc_preview`] 叠用（双省略号）。

@@ -967,6 +967,52 @@ l`.length === 3].join(\"|\")", returnByValue:true})).result.value"#;
     );
     let _ = std::fs::remove_dir_all(&d);
 
+    // ---- #38 下载捕获 ----
+    // routeMock 加 Content-Disposition 触发真下载；downloads 行情 +
+    // downloadPath 落盘回读
+    host.eval_snippet(
+        r#"await routeMock("http://dl.test/*", "e2e-download-body", {contentType: "text/plain", headers: {"Content-Disposition": "attachment; filename=e2e-dl.txt"}})"#,
+    )
+    .await
+    .expect("挂下载 mock");
+    // 下载型导航回执是 net::ERR_ABORTED（导航让位下载的正常信号），
+    // 裸调 navigate 不等加载
+    host.eval_snippet(r#"await session.Page.navigate({url: "http://dl.test/f"})"#)
+        .await
+        .expect("触发下载导航");
+    // begin 事件与导航回执竞速，垫一拍轮询
+    host.eval_snippet(r#"await session.waitJs("true", 2)"#)
+        .await
+        .ok();
+    let dl = host
+        .eval_snippet(r#"return await downloads()"#)
+        .await
+        .expect("downloads");
+    let rows = dl
+        .get("downloads")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let guid = rows
+        .iter()
+        .find(|r| r.pointer("/filename") == Some(&json!("e2e-dl.txt")))
+        .and_then(|r| r.get("guid"))
+        .and_then(Value::as_str)
+        .expect("下载行应带 guid")
+        .to_string();
+    let dp = host
+        .eval_snippet(&format!(r#"return await downloadPath("{guid}", 20)"#))
+        .await
+        .expect("downloadPath");
+    let dpath = dp
+        .get("path")
+        .and_then(Value::as_str)
+        .expect("path")
+        .to_string();
+    let body = tokio::fs::read_to_string(&dpath).await.expect("落盘内容");
+    assert_eq!(body, "e2e-download-body", "下载落盘内容应一致: {body}");
+    let _ = tokio::fs::remove_file(&dpath).await;
+
     // screenshot：存文件、字节数为正、清场
     let shot = host
         .eval_snippet("return await screenshot()")

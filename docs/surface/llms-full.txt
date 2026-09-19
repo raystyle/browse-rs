@@ -65,6 +65,8 @@
 | `sessionSet(key, value)` | 写 sessionStorage 单键（#42）：回写后回读值。 |
 | `sessionDelete(key)` | 删 sessionStorage 单键（#42）。 |
 | `sessionClear()` | 清空当前域 sessionStorage（#42，不动 localStorage）。 |
+| `downloads(since?)` | 下载列表（#38）：Browser.downloadWillBegin 行情加同 guid 最新 downloadProgress（state/receivedBytes/totalBytes）；落盘目录是状态目录 downloads/，捕获随 tab 入口自动开（Browser 域事件不做活动 tab 过滤）。 |
+| `downloadPath(guid, timeoutS?)` | 等下载完成后回落盘路径（#38）：completed 给 named 路径（改名未落时给 guid 原始名候选），canceled 报错，超时带当前态 CTA；guid 来自 downloads()。 |
 | `screenshot(path?, full?, opts?)` | 页内截图存文件；opts（#24）：format png/jpeg、quality（jpeg 1-100 缺省 80）、ifChanged（与既有文件逐字节相同即 skipped，省读回不省拍摄；字节可比性限同一引擎二进制）。回 {path,bytes,skipped}。同片段 navigate 后的提交窗竞速由 host 层统一等提交（#34 根因级，页面级调用闸到主框架 frameNavigated），本函数另内建 Not attached 有界重试兜底。 |
 | `pdf(path?)` | 当前页存 PDF（仅无头 chrome），回 {path,bytes}。 |
 | `newTab(url?)` | 开新 tab 并设为活动路由（先 about:blank 再 goto，防竞速假完成）；带 url 时内部等加载预算 15 秒与 goto 缺省对齐（#57 G3）。 |
@@ -92,7 +94,7 @@
 | `dialogAccept(text?)` | 接受当前对话框（prompt 可带应答文本）。 |
 | `dialogDismiss()` | 拒绝当前对话框。alert/beforeunload 会被自动接受，无需手动。 |
 | `routeBlock(pattern)` | 网络拦截：glob 命中的请求直接失败（BlockedByClient）。作用于当前活动 tab。 |
-| `routeMock(pattern, body, opts?)` | 网络拦截：命中的请求本地应答（默认带 ACAO *）。 |
+| `routeMock(pattern, body, opts?)` | 网络拦截：命中的请求本地应答（默认带 ACAO *）；opts.headers（#38）加额外响应头（如 Content-Disposition 触发下载）。 |
 | `routeClear()` | 清空全部拦截规则并 Fetch.disable。 |
 | `waitLoad(s?)` | 等 document.readyState 到 complete（已加载立即返回）。timeout 秒口径（#51）：不小于 1000 视为毫秒误写，换算并告警，封顶 600 秒（#57 F1 判据收紧，1000 至 3600 不再静默秒直解）；秒直写三位数内（上界 999 秒）；旧毫秒习惯值等价迁移。 |
 | `waitForResponse(pattern, s?)` | 等 URL 命中 glob（与 routeBlock/routeMock 同写法）的最近一个响应完成（#20，只认活动 tab）：回 {requestId,url,status,headers,body,base64Encoded,json}；命中含历史（Network 域须在触发前已开，本函数幂等开收不到已发出的响应），方言无并发，可用形态是触发后等待；体等 loadingFinished 再取（5 秒窗），失败显式 bodyError；base64 自动解码，可解析时附 json。timeout 秒口径（#51：不小于 1000 按毫秒误写换算并告警，封顶 600 秒；秒直写三位数内（上界 999 秒））。 |
@@ -732,6 +734,29 @@ await sessionDelete("tmp")
 await sessionClear()
 ```
 
+## `downloads(since?)`
+
+下载列表（#38）：Browser.downloadWillBegin 行情加同 guid 最新 downloadProgress（state/receivedBytes/totalBytes）；落盘目录是状态目录 downloads/，捕获随 tab 入口自动开（Browser 域事件不做活动 tab 过滤）。
+
+参数：
+- `since`（number，缺省 0（seq 游标））
+
+```js
+return await downloads()
+```
+
+## `downloadPath(guid, timeoutS?)`
+
+等下载完成后回落盘路径（#38）：completed 给 named 路径（改名未落时给 guid 原始名候选），canceled 报错，超时带当前态 CTA；guid 来自 downloads()。
+
+参数：
+- `guid`（string），必填
+- `timeoutS`（number，缺省 20）
+
+```js
+return await downloadPath("<guid>")
+```
+
 ## `screenshot(path?, full?, opts?)`
 
 页内截图存文件；opts（#24）：format png/jpeg、quality（jpeg 1-100 缺省 80）、ifChanged（与既有文件逐字节相同即 skipped，省读回不省拍摄；字节可比性限同一引擎二进制）。回 {path,bytes,skipped}。同片段 navigate 后的提交窗竞速由 host 层统一等提交（#34 根因级，页面级调用闸到主框架 frameNavigated），本函数另内建 Not attached 有界重试兜底。
@@ -1044,7 +1069,7 @@ await routeBlock("*://ads.example.com/*")
 
 ## `routeMock(pattern, body, opts?)`
 
-网络拦截：命中的请求本地应答（默认带 ACAO *）。
+网络拦截：命中的请求本地应答（默认带 ACAO *）；opts.headers（#38）加额外响应头（如 Content-Disposition 触发下载）。
 
 参数：
 - `pattern`（string），必填

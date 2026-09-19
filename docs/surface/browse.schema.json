@@ -878,6 +878,44 @@
       "output": "runtime JSON（回值随页面与 CDP 而定）",
       "type": "object"
     },
+    "downloadPath": {
+      "description": "downloadPath(guid, timeoutS?) 等下载完成后回落盘路径（#38）：completed 给 named 路径（改名未落时给 guid 原始名候选），canceled 报错，超时带当前态 CTA；guid 来自 downloads()。",
+      "example": "return await downloadPath(\"<guid>\")",
+      "input": {
+        "properties": {
+          "guid": {
+            "description": "",
+            "type": "string"
+          },
+          "timeoutS": {
+            "description": "缺省 20",
+            "type": "number"
+          }
+        },
+        "required": [
+          "guid"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "downloads": {
+      "description": "downloads(since?) 下载列表（#38）：Browser.downloadWillBegin 行情加同 guid 最新 downloadProgress（state/receivedBytes/totalBytes）；落盘目录是状态目录 downloads/，捕获随 tab 入口自动开（Browser 域事件不做活动 tab 过滤）。",
+      "example": "return await downloads()",
+      "input": {
+        "properties": {
+          "since": {
+            "description": "缺省 0（seq 游标）",
+            "type": "number"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
     "dragRef": {
       "description": "dragRef(srcRef, dstRef) 拖拽：源中心按下分八步移到目标中心松开（#23）；覆盖 pointer/mouse 型拖拽，原生 HTML5 draggable 不在序列内。",
       "example": "await dragRef(\"e2\", \"e4\")",
@@ -1662,7 +1700,7 @@
       "type": "object"
     },
     "routeMock": {
-      "description": "routeMock(pattern, body, opts?) 网络拦截：命中的请求本地应答（默认带 ACAO *）。",
+      "description": "routeMock(pattern, body, opts?) 网络拦截：命中的请求本地应答（默认带 ACAO *）；opts.headers（#38）加额外响应头（如 Content-Disposition 触发下载）。",
       "example": "await routeMock(\"http://mock.test/api*\", \"{\\\"ok\\\":1}\", {contentType: \"application/json\"})",
       "input": {
         "properties": {
