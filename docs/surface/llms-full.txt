@@ -71,7 +71,7 @@
 | `highlight(ref, {label}?)` | 持久高亮覆盖层（#41）：2px 橙框不挡点击（pointer-events none），页面坐标绝对定位滚动跟随；label 给定叠编号徽标；幂等（同元素刷新框位）；清场走 highlightClear()。人看 agent 在操作哪个元素。 |
 | `highlightClear()` | 移除全部高亮框与徽标（#41，按 data-browse-hl 属性）。 |
 | `annotate(refs)` | 批量画框加编号徽标（#24 残余）：对一批 ref 各画框并以 ref 本身为徽标文本（与 snapshot 编号天然对齐）；任一项失败先清场再报错（不留半批框）；配合 screenshot() 取证后 highlightClear() 收场。 |
-| `cloneCookies(domains)` | 登录态按域热迁（#48）：从附着浏览器（probe_default 发现）只读取指定域 cookie 后缀匹配，Network.setCookies 灌入当前引擎；源零写回铁律；回 {cloned,matched,domains}。无附着源报错指 exportStorageState 整包往返。 |
+| `cloneCookies(domains)` | 登录态按域热迁（#48）：从附着浏览器（probe_default 发现）只读取指定域 cookie 后缀匹配，Network.setCookies 灌入当前引擎；源零写回铁律；回 {cloned,matched,domains}。无附着源（probe_default 只探 9222 与默认 profile 的 DevToolsActivePort，其他端口的附着态取不到）报错指 exportStorageState 整包往返；域匹配不区分大小写、输入前导点剥掉；cloned 小于 matched 时回 failed 与 firstError。 |
 | `downloads(since?)` | 下载列表（#38）：Browser.downloadWillBegin 行情加同 guid 最新 downloadProgress（state/receivedBytes/totalBytes）；落盘目录是状态目录 downloads/，捕获随 tab 入口自动开（Browser 域事件不做活动 tab 过滤）。 |
 | `downloadPath(guid, timeoutS?)` | 等下载完成后回落盘路径（#38）：completed 给 named 路径（改名未落时给 guid 原始名候选），canceled 报错，超时带当前态 CTA；guid 来自 downloads()。 |
 | `screenshot(path?, full?, opts?)` | 页内截图存文件；opts（#24）：format png/jpeg、quality（jpeg 1-100 缺省 80）、ifChanged（与既有文件逐字节相同即 skipped，省读回不省拍摄；字节可比性限同一引擎二进制）。回 {path,bytes,skipped}。同片段 navigate 后的提交窗竞速由 host 层统一等提交（#34 根因级，页面级调用闸到主框架 frameNavigated），本函数另内建 Not attached 有界重试兜底；opts.ref 元素级截图（clip 到 bbox，#41）加 opts.hires/scale 高倍采样。 |
@@ -811,7 +811,7 @@ await annotate(["e1", "e3"])
 
 ## `cloneCookies(domains)`
 
-登录态按域热迁（#48）：从附着浏览器（probe_default 发现）只读取指定域 cookie 后缀匹配，Network.setCookies 灌入当前引擎；源零写回铁律；回 {cloned,matched,domains}。无附着源报错指 exportStorageState 整包往返。
+登录态按域热迁（#48）：从附着浏览器（probe_default 发现）只读取指定域 cookie 后缀匹配，Network.setCookies 灌入当前引擎；源零写回铁律；回 {cloned,matched,domains}。无附着源（probe_default 只探 9222 与默认 profile 的 DevToolsActivePort，其他端口的附着态取不到）报错指 exportStorageState 整包往返；域匹配不区分大小写、输入前导点剥掉；cloned 小于 matched 时回 failed 与 firstError。
 
 参数：
 - `domains`（array，缺省 域名字符串数组），必填

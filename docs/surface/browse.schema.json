@@ -726,7 +726,7 @@
       "type": "object"
     },
     "cloneCookies": {
-      "description": "cloneCookies(domains) 登录态按域热迁（#48）：从附着浏览器（probe_default 发现）只读取指定域 cookie 后缀匹配，Network.setCookies 灌入当前引擎；源零写回铁律；回 {cloned,matched,domains}。无附着源报错指 exportStorageState 整包往返。",
+      "description": "cloneCookies(domains) 登录态按域热迁（#48）：从附着浏览器（probe_default 发现）只读取指定域 cookie 后缀匹配，Network.setCookies 灌入当前引擎；源零写回铁律；回 {cloned,matched,domains}。无附着源（probe_default 只探 9222 与默认 profile 的 DevToolsActivePort，其他端口的附着态取不到）报错指 exportStorageState 整包往返；域匹配不区分大小写、输入前导点剥掉；cloned 小于 matched 时回 failed 与 firstError。",
       "example": "await cloneCookies([\"example.com\"])",
       "input": {
         "properties": {
