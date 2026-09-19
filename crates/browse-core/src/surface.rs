@@ -468,7 +468,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "cookies(domain?)",
         args: &[arg!("domain", "string", false)],
-        description: "列 cookie（#42）：Network.getCookies 原生字段简表；给 domain 按该域 http/https 过滤。",
+        description: "列 cookie（#42）：Network.getCookies 原生字段简表。无参＝当前页 URL 作用域（非全 jar，实弹口径）；给 domain 则按该域 http/https 显式过滤；要跨域清单就逐域调。",
         example: "return await cookies(\"example.com\")",
     },
     CmdSpec {
@@ -476,7 +476,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "cookieGet(name)",
         args: &[arg!("name", "string", true)],
-        description: "查单条 cookie（#42）：按 name 精确匹配，null 即不存在。",
+        description: "查单条 cookie（#42）：按 name 精确匹配（同名跨域取第一条，需要确定域用 cookies(domain) 再筛），null 即不存在。",
         example: "return await cookieGet(\"session\")",
     },
     CmdSpec {
@@ -502,7 +502,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("name", "string", true),
             arg!("domain", "string", false, "缺省当前页域"),
         ],
-        description: "删单条 cookie（#42）：Network.deleteCookie 按 name 加域。",
+        description: "删 cookie（#42）：Network.deleteCookies（CDP 无单数形）按 name 加域删全部匹配（同域同名多 path 一起清，破坏性动作）；domain 缺省当前页域。",
         example: "await cookieDelete(\"k\", \"example.com\")",
     },
     CmdSpec {

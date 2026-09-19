@@ -52,10 +52,10 @@
 | `requests(opts?)` | 网络响应摘要列表（#37，只认活动 tab）：Network.responseReceived 映射 {index,requestId,url,status,type,bytes}（index 是过滤后列表序，requestDetail 传同参即对齐）；Network 域随 tab 入口自动开，缓冲环形 1000 条。要单条详情走 requestDetail，要响应体走 responseBody(requestId)。 |
 | `requestDetail(indexOrRequestId, {since, filter}?)` | 单条网络响应详情（#37，只认活动 tab）：index 配同 filter 与 requests() 列表严格对齐（评审 F2 修法），或直接给 requestId 取最新；回 url/status/type/mimeType/headers/bytes，body 另走 responseBody(requestId)。 |
 | `detect()` | 页面态结构化判读（#49）：{verdict, evidence[], suggestion}。判序 challenged（挑战关键词加 403/503 或短正文）> rate-limited（429）> blocked（403）> stalled（加载失败且未完成）> login-wall（complete 且有密码框，保守独立信号）> blank（complete 但正文与节点双低）> loading > ok；网络信号只认活动 tab（后台 tab 状态码不劫持判读）；信号源是页内探针（一次 evaluate）加事件缓冲网络计数。与 #37 互补：那是流的可观测性，本函数是页面态判官。 |
-| `cookies(domain?)` | 列 cookie（#42）：Network.getCookies 原生字段简表；给 domain 按该域 http/https 过滤。 |
-| `cookieGet(name)` | 查单条 cookie（#42）：按 name 精确匹配，null 即不存在。 |
+| `cookies(domain?)` | 列 cookie（#42）：Network.getCookies 原生字段简表。无参＝当前页 URL 作用域（非全 jar，实弹口径）；给 domain 则按该域 http/https 显式过滤；要跨域清单就逐域调。 |
+| `cookieGet(name)` | 查单条 cookie（#42）：按 name 精确匹配（同名跨域取第一条，需要确定域用 cookies(domain) 再筛），null 即不存在。 |
 | `cookieSet(name, value, opts?)` | 写单条 cookie（#42）：Network.setCookie，缺 domain 走当前页 URL；回 success 布尔。 |
-| `cookieDelete(name, domain?)` | 删单条 cookie（#42）：Network.deleteCookie 按 name 加域。 |
+| `cookieDelete(name, domain?)` | 删 cookie（#42）：Network.deleteCookies（CDP 无单数形）按 name 加域删全部匹配（同域同名多 path 一起清，破坏性动作）；domain 缺省当前页域。 |
 | `cookiesClear()` | 清空浏览器全部 cookie（#42，Network.clearBrowserCookies，作用面整浏览器不只当前域，对照 playwright cookie-clear）。 |
 | `localGet(key)` | 读 localStorage 单键（#42）：null 即不存在；键值经 JSON 序列化内嵌防注入。 |
 | `localSet(key, value)` | 写 localStorage 单键（#42）：回写后回读值（写入即验）。 |

@@ -345,7 +345,7 @@
     {
       "path": "browse_core::semantic::cookies",
       "kind": "function",
-      "docs": "列 cookie（#42）：`Network.getCookies`，给了 domain 则按该域的\nhttp/https 两 URL 过滤。回 cookie 简表数组（name/value/domain/path/\nexpires/httpOnly/secure/sameSite 等 CDP 原生字段）。\n\n# Errors\n\n未连接或 CDP 失败。"
+      "docs": "列 cookie（#42）：`Network.getCookies`。无参是当前页 URL 作用域\n（CDP 按活动 target 的 URL 解析，非全 jar，实弹口径）；给了 domain\n则按该域 http/https 两 URL 显式过滤。回 cookie 简表数组（原生字段）。\n\n# Errors\n\n未连接或 CDP 失败。"
     },
     {
       "path": "browse_core::semantic::cookies_clear",

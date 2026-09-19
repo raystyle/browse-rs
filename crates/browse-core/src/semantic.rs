@@ -252,9 +252,9 @@ pub async fn wait_settled(s: &Session, since: u64, grace_ms: u64, budget_ms: u64
     }
 }
 
-/// 列 cookie（#42）：`Network.getCookies`，给了 domain 则按该域的
-/// http/https 两 URL 过滤。回 cookie 简表数组（name/value/domain/path/
-/// expires/httpOnly/secure/sameSite 等 CDP 原生字段）。
+/// 列 cookie（#42）：`Network.getCookies`。无参是当前页 URL 作用域
+/// （CDP 按活动 target 的 URL 解析，非全 jar，实弹口径）；给了 domain
+/// 则按该域 http/https 两 URL 显式过滤。回 cookie 简表数组（原生字段）。
 ///
 /// # Errors
 ///
@@ -296,7 +296,16 @@ pub async fn cookie_set(s: &Session, name: &str, value: &str, opts: &Value) -> R
                     .map(str::to_string)
             });
         match url {
-            Some(u) => params["url"] = json!(u),
+            // scheme 预检（#42 评审 G3）：data:/about: 等页直接给行动指令，
+            // 不让 CDP 的 scheme 报错裸透传
+            Some(u) if u.starts_with("http://") || u.starts_with("https://") => {
+                params["url"] = json!(u);
+            }
+            Some(_) => {
+                bail!(
+                    "cookieSet 当前页不是 http/https 源；下一步：cookieSet(name, value, {{domain: \"example.com\"}}) 显式给域"
+                );
+            }
             None => {
                 bail!(
                     "cookieSet 缺 domain 且无当前页 URL；下一步：cookieSet(name, value, {{domain: \"example.com\"}})"
