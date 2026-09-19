@@ -65,11 +65,7 @@ enum Mode {
     /// `browse snippets show <rel>`：看片段全文（#44）。
     SnippetsShow(String),
     /// `browse fetch <url> [--markdown] [--timeout <s>]`：一次性只读抓取（#50）。
-    Fetch {
-        url: String,
-        markdown: bool,
-        timeout_s: u64,
-    },
+    Fetch { url: String, timeout_s: u64 },
 }
 
 #[tokio::main]
@@ -171,11 +167,11 @@ async fn main() -> Result<()> {
             }
             "fetch" if snippets.is_empty() && mode_is_eval(&mode) => {
                 let url = next("fetch <url>")?;
-                let mut markdown = false;
+                let mut _markdown = false; // v1 同 text（#50），旗标受理向后兼容
                 let mut timeout_s = 15u64;
                 while let Ok(f) = next("fetch 旗标") {
                     match f.as_str() {
-                        "--markdown" | "-m" => markdown = true,
+                        "--markdown" | "-m" => _markdown = true,
                         "--timeout" => {
                             timeout_s = next("--timeout")?.parse().unwrap_or_else(|_| {
                                 eprintln!("browse: --timeout 要数字（退出 2）");
@@ -185,11 +181,7 @@ async fn main() -> Result<()> {
                         other2 => bail_arg(other2),
                     }
                 }
-                mode = Mode::Fetch {
-                    url,
-                    markdown,
-                    timeout_s,
-                };
+                mode = Mode::Fetch { url, timeout_s };
             }
             "snippets" if snippets.is_empty() && mode_is_eval(&mode) => {
                 match next("snippets")?.as_str() {
@@ -498,11 +490,7 @@ async fn main() -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&r)?);
             Ok(())
         }
-        Mode::Fetch {
-            url,
-            markdown: _,
-            timeout_s,
-        } => {
+        Mode::Fetch { url, timeout_s } => {
             let r = browse_cli::fetch::fetch(&url, true, timeout_s).await?;
             println!("{}", serde_json::to_string_pretty(&r)?);
             Ok(())

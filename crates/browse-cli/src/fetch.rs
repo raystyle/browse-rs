@@ -90,7 +90,7 @@ fn strip_html(html: &str) -> String {
 ///
 /// 两腿全失败（HTTP 网络错且引擎腿也失败）；引擎腿的 goto/抽取错误原样
 /// 上抛。
-pub async fn fetch(url: &str, markdown: bool, timeout_s: u64) -> Result<Value> {
+pub async fn fetch(url: &str, _markdown: bool, timeout_s: u64) -> Result<Value> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(timeout_s))
         .user_agent(concat!("browse/", env!("CARGO_PKG_VERSION")))
@@ -123,7 +123,7 @@ pub async fn fetch(url: &str, markdown: bool, timeout_s: u64) -> Result<Value> {
         None => Ok(json!({
             "url": url, "via": "http", "status": status,
             "title": title,
-            "text": if markdown { text } else { text },
+            "text": text,
             "bytes": html.len(),
         })),
         Some(why) => {
@@ -134,13 +134,11 @@ pub async fn fetch(url: &str, markdown: bool, timeout_s: u64) -> Result<Value> {
                 url = serde_json::to_string(url)?,
                 expr = serde_json::to_string(extract)?,
             );
-            let daemon_port = std::env::var("BROWSE_PORT").ok();
-            let port: u16 = match daemon_port {
-                Some(p) => p.parse().unwrap_or(9880),
-                None => 9880,
-            };
+            // G1：复用 CLI 求值面的 daemon 发现（含 BROWSE_NAME 派生端口），
+            // 不只认 BROWSE_PORT 缺省
+            let bind = crate::client::daemon_bind();
             let resp = client
-                .post(format!("http://127.0.0.1:{port}/eval"))
+                .post(format!("http://{bind}/eval"))
                 .json(&serde_json::json!({ "code": code }))
                 .timeout(std::time::Duration::from_secs(timeout_s + 60))
                 .send()
