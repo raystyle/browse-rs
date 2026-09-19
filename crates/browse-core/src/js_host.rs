@@ -31,6 +31,14 @@ pub struct JsHost {
     routes: Arc<Mutex<Vec<RouteRule>>>,
     /// Fetch 域是否由本宿主开启（手动 `session.Fetch.enable` 不被 watcher 打扰）。
     fetch_by_us: Arc<std::sync::atomic::AtomicBool>,
+    /// 每新文档注入脚本（#25.2 setInitScript）：watcher 对每个新 session
+    /// 补注（对齐 Page.enable 的兜底节奏）。
+    init_script: Arc<std::sync::Mutex<Option<String>>>,
+    /// 已注册 init 脚本的 identifier 记账（#25.2 评审 F1）：sessionId ->
+    /// identifier 集合（即时路径与 watcher 可能各注一次，都要记账）；
+    /// 替换/清除先 removeScriptToEvaluateOnNewDocument 再 add，否则旧注册
+    /// 叠加且注册跨 reload 永不回收。
+    init_script_ids: Arc<Mutex<HashMap<String, Vec<String>>>>,
 }
 
 /// 一条网络拦截规则：glob 模式（`*` 通配）+ 命中动作。
@@ -75,7 +83,15 @@ impl JsHost {
     /// let host = browse_core::JsHost::new(cdp::Session::new());
     /// ```
     pub fn new(session: Arc<Session>) -> Arc<Self> {
-        spawn_dialog_watcher(session.clone());
+        let init_script: Arc<std::sync::Mutex<Option<String>>> =
+            Arc::new(std::sync::Mutex::new(None));
+        let init_script_ids: Arc<Mutex<HashMap<String, Vec<String>>>> =
+            Arc::new(Mutex::new(HashMap::new()));
+        spawn_dialog_watcher(
+            session.clone(),
+            init_script.clone(),
+            init_script_ids.clone(),
+        );
         let routes = Arc::new(Mutex::new(Vec::new()));
         let fetch_by_us = Arc::new(std::sync::atomic::AtomicBool::new(false));
         spawn_route_watcher(session.clone(), routes.clone(), fetch_by_us.clone());
@@ -86,6 +102,8 @@ impl JsHost {
             record: Mutex::new(None),
             routes,
             fetch_by_us,
+            init_script,
+            init_script_ids,
         })
     }
 
@@ -556,9 +574,24 @@ impl JsHost {
             "screenshot" => {
                 let path = argv.first().and_then(Value::as_str).map(str::to_string);
                 let full = argv.get(1).and_then(Value::as_bool).unwrap_or(false);
-                let mut params = json!({ "format": "png" });
+                // 选项对象（#24）：format jpeg/png、quality（jpeg）、ifChanged
+                // （与既有文件逐字节相同即跳过，回 skipped）
+                let opts = argv.get(2).cloned().unwrap_or(json!({}));
+                let format = opts
+                    .get("format")
+                    .and_then(Value::as_str)
+                    .unwrap_or("png")
+                    .to_string();
+                if format != "png" && format != "jpeg" {
+                    bail!("screenshot 的 format 只支持 png 或 jpeg（当前 {format}）");
+                }
+                let quality = opts.get("quality").and_then(Value::as_u64).unwrap_or(80);
+                let mut params = json!({ "format": format });
                 if full {
                     params["captureBeyondViewport"] = json!(true);
+                }
+                if format == "jpeg" {
+                    params["quality"] = json!(quality.clamp(1, 100));
                 }
                 let r = self.session.call("Page.captureScreenshot", params).await?;
                 let data = r
@@ -566,6 +599,7 @@ impl JsHost {
                     .and_then(Value::as_str)
                     .ok_or_else(|| anyhow!("captureScreenshot 未回 data"))?;
                 let bytes = base64_decode(data)?;
+                let ext = if format == "jpeg" { "jpg" } else { "png" };
                 let path = match path {
                     Some(p) => std::path::PathBuf::from(p),
                     None => {
@@ -575,12 +609,33 @@ impl JsHost {
                             .duration_since(std::time::UNIX_EPOCH)
                             .map(|d| d.as_millis())
                             .unwrap_or(0);
-                        dir.join(format!("shot-{ts}.png"))
+                        dir.join(format!("shot-{ts}.{ext}"))
                     }
                 };
+                // 显式路径无扩展名时补格式后缀（#24）
+                let mut path = path;
+                if path.extension().is_none() {
+                    path.set_extension(ext);
+                }
+                // ifChanged（#24）：与既有文件逐字节相同即跳过（PNG/JPEG
+                // 对同一像素画面确定性编码，字节相同即画面相同；省 token
+                // 的读回与再加工）
+                if opts
+                    .get("ifChanged")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false)
+                    && let Ok(prev) = tokio::fs::read(&path).await
+                    && prev == bytes
+                {
+                    return Ok(json!({
+                        "path": path.display().to_string(),
+                        "bytes": prev.len(),
+                        "skipped": true,
+                    }));
+                }
                 let display = path.display().to_string();
                 tokio::fs::write(&path, &bytes).await?;
-                Ok(json!({ "path": display, "bytes": bytes.len() }))
+                Ok(json!({ "path": display, "bytes": bytes.len(), "skipped": false }))
             }
             // AX 树快照（对齐 browser-use-pi 的 snapshot 原语）：
             // getFullAXTree -> 精简节点表；url/title 一并带回
@@ -756,6 +811,113 @@ impl JsHost {
                     r["json"] = parsed;
                 }
                 Ok(r)
+            }
+            // ---- 交互动词补全（#23）与运营面（#25.2/#25.3）----
+            "hoverRef" => {
+                let r = str_arg(argv, 0, "hoverRef 的 ref")?;
+                self.assert_no_dialog().await?;
+                let bn = self.lookup_ref(r).await?;
+                crate::semantic::hover_ref(&self.session, bn).await
+            }
+            "hoverAt" => {
+                let x = int_arg(argv, 0, "hoverAt 的 x")?;
+                let y = int_arg(argv, 1, "hoverAt 的 y")?;
+                self.assert_no_dialog().await?;
+                crate::semantic::hover_at(&self.session, x, y).await
+            }
+            "dblclickRef" => {
+                let r = str_arg(argv, 0, "dblclickRef 的 ref")?;
+                self.assert_no_dialog().await?;
+                let bn = self.lookup_ref(r).await?;
+                crate::semantic::dblclick_ref(&self.session, bn).await
+            }
+            "dragRef" => {
+                let src = str_arg(argv, 0, "dragRef 的源 ref")?;
+                let dst = str_arg(argv, 1, "dragRef 的目标 ref")?;
+                self.assert_no_dialog().await?;
+                let sb = self.lookup_ref(src).await?;
+                let db = self.lookup_ref(dst).await?;
+                crate::semantic::drag_ref(&self.session, sb, db).await
+            }
+            "keydown" => {
+                let k = str_arg(argv, 0, "keydown 的键")?;
+                self.assert_no_dialog().await?;
+                crate::semantic::key_raw(&self.session, k, true).await
+            }
+            "keyup" => {
+                let k = str_arg(argv, 0, "keyup 的键")?;
+                crate::semantic::key_raw(&self.session, k, false).await
+            }
+            "typeRef" => {
+                let r = str_arg(argv, 0, "typeRef 的 ref")?;
+                let text = str_arg(argv, 1, "typeRef 的文本")?;
+                self.assert_no_dialog().await?;
+                let bn = self.lookup_ref(r).await?;
+                crate::semantic::type_ref(&self.session, bn, text).await
+            }
+            "emulate" => {
+                let opts = argv.first().cloned().ok_or_else(|| anyhow!(
+                    "emulate 需要 opts 对象；下一步：emulate({{viewport:{{width:390,height:844}}, mobile:true}}) 或 emulate({{userAgent:\"...\"}})"
+                ))?;
+                crate::semantic::emulate(&self.session, &opts).await
+            }
+            "setInitScript" => {
+                // #25.2：存共享态（watcher 对新 session 补注）+ 立即对活动
+                // session 生效。替换/清除先撤旧注册（评审 F1）：注册跨
+                // reload 存活，不撤会叠加
+                let code = str_arg(argv, 0, "setInitScript 的代码")?;
+                let olds: Vec<(String, Vec<String>)> =
+                    self.init_script_ids.lock().await.drain().collect();
+                for (sid, idents) in olds {
+                    for ident in idents {
+                        let _ = self
+                            .session
+                            .call_on(
+                                "Page.removeScriptToEvaluateOnNewDocument",
+                                json!({ "identifier": ident }),
+                                &sid,
+                            )
+                            .await;
+                    }
+                }
+                let applied = if code.is_empty() {
+                    None
+                } else {
+                    Some(code.to_string())
+                };
+                if let Ok(mut g) = self.init_script.lock() {
+                    *g = applied;
+                }
+                if let Some(code) = self.init_script.lock().ok().and_then(|g| g.clone())
+                    && let Some(sid) = self.session.get_active_session().await
+                    && let Ok(r) = self
+                        .session
+                        .call_on(
+                            "Page.addScriptToEvaluateOnNewDocument",
+                            json!({ "source": code }),
+                            &sid,
+                        )
+                        .await
+                    && let Some(ident) = r
+                        .get("identifier")
+                        .and_then(Value::as_str)
+                        .map(str::to_string)
+                {
+                    self.init_script_ids
+                        .lock()
+                        .await
+                        .entry(sid)
+                        .or_default()
+                        .push(ident);
+                }
+                Ok(json!(true))
+            }
+            "exportStorageState" => crate::semantic::export_storage_state(&self.session).await,
+            "importStorageState" => {
+                let arg = argv.first().cloned().ok_or_else(|| anyhow!(
+                    "importStorageState 需要 exportStorageState 的返回值或文件路径串；下一步：const st = <导出值> 后 importStorageState(st)"
+                ))?;
+                crate::semantic::import_storage_state(&self.session, &arg).await
             }
             // ---- 元素引用（D35-lite）：ref 来自最近一次 snapshot() ----
             "clickRef" => {
@@ -1103,7 +1265,11 @@ impl JsHost {
 /// webdriver 覆写不在此做（用户裁定 2026-09-18）：等 clean-chrome 源码级
 /// 恒 false（其 155 窗资产，四态免疫）；155 前需 Google 登录的场附着
 /// 正式版 Chrome。
-fn spawn_dialog_watcher(session: Arc<Session>) {
+fn spawn_dialog_watcher(
+    session: Arc<Session>,
+    init_script: Arc<std::sync::Mutex<Option<String>>>,
+    init_script_ids: Arc<Mutex<HashMap<String, Vec<String>>>>,
+) {
     tokio::spawn(async move {
         let auto =
             !std::env::var_os("BROWSE_NO_AUTO_DIALOG").is_some_and(|v| v == "1" || v == "true");
@@ -1118,6 +1284,28 @@ fn spawn_dialog_watcher(session: Arc<Session>) {
                     .await
                     .is_ok()
             {
+                // 每新 session 补注 init 脚本（#25.2）：已设则新文档生效，
+                // identifier 记账（替换/清除要 remove，评审 F1）
+                if let Some(code) = init_script.lock().ok().and_then(|g| g.clone())
+                    && let Ok(r) = session
+                        .call_on(
+                            "Page.addScriptToEvaluateOnNewDocument",
+                            json!({ "source": code }),
+                            &sid,
+                        )
+                        .await
+                    && let Some(ident) = r
+                        .get("identifier")
+                        .and_then(Value::as_str)
+                        .map(str::to_string)
+                {
+                    init_script_ids
+                        .lock()
+                        .await
+                        .entry(sid.clone())
+                        .or_default()
+                        .push(ident);
+                }
                 enabled.insert(sid);
             }
             if !auto {
@@ -1579,7 +1767,7 @@ const PREVIEW_HEAD_ITEMS: usize = 8;
 /// 全局函数 CTA 清单（#33 G6 单一真相）：「未知函数」提示由此派生，
 /// `global_cta_covers_catalog` 测试把它与 surface 目录的 Global 条目绑死；
 /// 增删全局必须同步这里（value-methods 是方法面族条目，不在此列）。
-const GLOBALS_CTA: &str = "listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/hostFunctions()/snapshot()/screenshot(path?, full?)/pdf(path?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/clickAt(x,y)/fillInput(sel,text)/clickRef(ref)/fillRef(ref,text)/selectOption(ref,value)/pressKey(key)/dialogStatus()/dialogAccept(text?)/dialogDismiss()/routeBlock(pattern)/routeMock(pattern,body,opts?)/routeClear()/waitLoad(ms?)/waitIdle(ms?)/waitForResponse(pattern,ms?)/responseBody(requestId)/JSON.parse(string)/JSON.stringify(value,indent?)/recordStart(opts?)/recordStop()/chromeInstall(opts?)/chromeList()/chromeUse(version)/chromeUpdate()/chromeRemove(version)/chromeDoctor()/print(x)";
+const GLOBALS_CTA: &str = "listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/hostFunctions()/snapshot()/screenshot(path?, full?)/pdf(path?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/clickAt(x,y)/fillInput(sel,text)/clickRef(ref)/fillRef(ref,text)/selectOption(ref,value)/pressKey(key)/dialogStatus()/dialogAccept(text?)/dialogDismiss()/routeBlock(pattern)/routeMock(pattern,body,opts?)/routeClear()/waitLoad(ms?)/waitIdle(ms?)/waitForResponse(pattern,ms?)/responseBody(requestId)/hoverRef(ref)/hoverAt(x,y)/dblclickRef(ref)/dragRef(src,dst)/keydown(key)/keyup(key)/typeRef(ref,text)/emulate(opts)/setInitScript(code)/exportStorageState()/importStorageState(state)/JSON.parse(string)/JSON.stringify(value,indent?)/recordStart(opts?)/recordStop()/chromeInstall(opts?)/chromeList()/chromeUse(version)/chromeUpdate()/chromeRemove(version)/chromeDoctor()/print(x)";
 
 /// 容器预览：头部 JSON 截断（留尾注位），超帽尾注总项数；小容器输出
 /// 与全量形一致。不与 [`trunc_preview`] 叠用（双省略号）。

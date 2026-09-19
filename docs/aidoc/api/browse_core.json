@@ -318,6 +318,26 @@
       "docs": "当前活动 tab 简表 `{targetId,title,url}`；无活动 tab 返回 `null`。\n\n# Errors\n\n未连接或 `Target.getTargets` 失败。"
     },
     {
+      "path": "browse_core::semantic::dblclick_ref",
+      "kind": "function",
+      "docs": "双击短 ref 元素（#23）：press/release 两轮，clickCount 递增成双击。\n\n# Errors\n\nref 失效或元素不可见。"
+    },
+    {
+      "path": "browse_core::semantic::drag_ref",
+      "kind": "function",
+      "docs": "拖拽：源 ref 中心按下，分步移到目标 ref 中心松开（#23）。\n\n鼠标事件序列实现，覆盖 pointer/mouse 型拖拽（sortable、拖放上传区）；\n原生 HTML5 `draggable`（dragstart/dragover/drop 语义）不在序列内，\n该类页面走页面侧合成事件或 `Input.dispatchDragEvent`（待后续批）。\n\n# Errors\n\n任一 ref 失效或元素不可见。"
+    },
+    {
+      "path": "browse_core::semantic::emulate",
+      "kind": "function",
+      "docs": "视口与 UA 仿真档位（#24）：`{viewport:{width,height}, mobile, userAgent,\ndeviceScaleFactor}` 全可省；省 viewport 只设 UA。`mobile: true` 触发\n移动仿真（含 touch），同站常更省 token。\n\n# Errors\n\n未连接或 CDP 覆写失败。"
+    },
+    {
+      "path": "browse_core::semantic::export_storage_state",
+      "kind": "function",
+      "docs": "导出会话态（#25.3）：cookies 全量加当前页 origin 的 localStorage。\n\n多 origin 的 localStorage 列举无 CDP 原语：跨 origin 场景逐个\nswitchTab 到目标页再导，各自合并。\n\n# Errors\n\n未连接或 cookies 读取失败。"
+    },
+    {
       "path": "browse_core::semantic::fill_input",
       "kind": "function",
       "docs": "按 CSS 选择器填输入框：focus -> 全选（commands，不发 Ctrl+A）-> 可选\nBackspace 清空 -> `Input.insertText` -> 回读严格验证。\n\n只支持文本类控件；`<select>` 用 `Runtime.evaluate` 设 value 并派发\nchange 事件（CTA 给写法）。\n\n# Errors\n\n选择器未命中、readOnly、回读不一致（错误附回读值）。"
@@ -326,6 +346,26 @@
       "path": "browse_core::semantic::fill_ref",
       "kind": "function",
       "docs": "按短 ref 填输入框：objectId 上 focus -> 探测控件（SELECT/readOnly 拒收\n并给 CTA）-> SelectAll+insertText（与 [`fill_input`] 同款，不发 Ctrl+A）\n-> 同一 objectId 回读严格验证。选择器会随重构漂移，backendNodeId 不会。\n\n# Errors\n\nref 失效、目标不是可填控件、回读不一致（错误附回读值）。"
+    },
+    {
+      "path": "browse_core::semantic::hover_at",
+      "kind": "function",
+      "docs": "移动鼠标到视口坐标（#23）：触发 `:hover` 与悬停菜单的 mouseMoved。\n\n# Errors\n\n未连接或派发失败。"
+    },
+    {
+      "path": "browse_core::semantic::hover_ref",
+      "kind": "function",
+      "docs": "悬停到短 ref 元素中心（#23）：触发 CSS `:hover` 与悬停菜单。\n\n# Errors\n\nref 失效或元素不可见。"
+    },
+    {
+      "path": "browse_core::semantic::import_storage_state",
+      "kind": "function",
+      "docs": "导入会话态（#25.3）：吃 [`export_storage_state`] 的返回值或其落盘\n文件路径串；cookies 走 `Network.setCookies`，localStorage 走\n`DOMStorage.setDOMStorageItem`。回执带两边计数。\n\n# Errors\n\n未连接、路径读不了或 JSON 解析失败。"
+    },
+    {
+      "path": "browse_core::semantic::key_raw",
+      "kind": "function",
+      "docs": "裸按键事件（#23）：keydown / keyup 按住语义（无 text，不发组合成键）。\n\n`down` 为 true 发 `keyDown`，否则 `keyUp`；组合写法同 [`press_key`]。\n\n# Errors\n\n未连接、修饰键名不合法或派发失败。"
     },
     {
       "path": "browse_core::semantic::new_tab",
@@ -351,6 +391,11 @@
       "path": "browse_core::semantic::switch_tab",
       "kind": "function",
       "docs": "切换活动路由到既有 tab（不改 Chrome 可见前景），返回该 tab 简表。\n\n# Errors\n\n未连接或 attach 失败（targetId 不存在）。"
+    },
+    {
+      "path": "browse_core::semantic::type_ref",
+      "kind": "function",
+      "docs": "真实按键序列输入（#23）：focus 后逐字符 keyDown(text)+keyUp，\ncontenteditable / ProseMirror 类编辑器需要；与 insertText 模式的\n[`fill_ref`] 并存。\n\n# Errors\n\nref 失效或 focus 失败。"
     },
     {
       "path": "browse_core::semantic::wait_idle",

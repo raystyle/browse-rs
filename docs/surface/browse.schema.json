@@ -584,6 +584,24 @@
       "output": "runtime JSON（回值随页面与 CDP 而定）",
       "type": "object"
     },
+    "dblclickRef": {
+      "description": "dblclickRef(ref) 双击元素（#23）：press/release 两轮 clickCount 递增。",
+      "example": "await dblclickRef(\"e5\")",
+      "input": {
+        "properties": {
+          "ref": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
     "detectBrowsers": {
       "description": "detectBrowsers() 探测本机已开的调试浏览器（profile/端口/wsUrl）。",
       "example": "return await detectBrowsers()",
@@ -625,6 +643,58 @@
     "dialogStatus": {
       "description": "dialogStatus() 当前 JS 对话框状态（open/type/message/defaultPrompt）。",
       "example": "return await dialogStatus()",
+      "input": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "dragRef": {
+      "description": "dragRef(srcRef, dstRef) 拖拽：源中心按下分八步移到目标中心松开（#23）；覆盖 pointer/mouse 型拖拽，原生 HTML5 draggable 不在序列内。",
+      "example": "await dragRef(\"e2\", \"e4\")",
+      "input": {
+        "properties": {
+          "dstRef": {
+            "description": "",
+            "type": "string"
+          },
+          "srcRef": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "srcRef",
+          "dstRef"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "emulate": {
+      "description": "emulate(opts) 视口与 UA 仿真（#24）：viewport 加 mobile 加 userAgent 全可省；mobile 档同站更省 token。",
+      "example": "return await emulate({viewport:{width:390,height:844}, mobile:true})",
+      "input": {
+        "properties": {
+          "opts": {
+            "description": "",
+            "type": "object"
+          }
+        },
+        "required": [
+          "opts"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "exportStorageState": {
+      "description": "exportStorageState() 导出会话态（#25.3）：cookies 全量加当前页 origin 的 localStorage；多 origin 逐个切 tab 再导。",
+      "example": "return await exportStorageState()",
       "input": {
         "properties": {},
         "required": [],
@@ -690,6 +760,101 @@
       "output": "runtime JSON（回值随页面与 CDP 而定）",
       "type": "object"
     },
+    "hoverAt": {
+      "description": "hoverAt(x, y) 悬停到视口坐标（#23）：mouseMoved。",
+      "example": "await hoverAt(120, 40)",
+      "input": {
+        "properties": {
+          "x": {
+            "description": "",
+            "type": "number"
+          },
+          "y": {
+            "description": "",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "hoverRef": {
+      "description": "hoverRef(ref) 悬停到元素中心（#23）：触发 CSS :hover 与悬停菜单。",
+      "example": "await hoverRef(\"e3\")",
+      "input": {
+        "properties": {
+          "ref": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "importStorageState": {
+      "description": "importStorageState(state 或 path) 导入会话态（#25.3）：吃 exportStorageState 的返回值或其落盘文件路径，回两边计数。",
+      "example": "return await importStorageState(st)",
+      "input": {
+        "properties": {
+          "state": {
+            "description": "",
+            "type": "any"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "keydown": {
+      "description": "keydown(key) 按下不松（#23）：裸 keyDown，配合 keyup 成按住语义；组合写法同 pressKey。",
+      "example": "await keydown(\"Shift\")",
+      "input": {
+        "properties": {
+          "key": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "keyup": {
+      "description": "keyup(key) 松开按键（#23）：裸 keyUp，与 keydown 成对。",
+      "example": "await keyup(\"Shift\")",
+      "input": {
+        "properties": {
+          "key": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
     "listPageTargets": {
       "description": "listPageTargets() 列可附着 page targets（带 own 标：只有 own=true 可 closeTab）。",
       "example": "const tabs = await listPageTargets()",
@@ -734,8 +899,8 @@
       "type": "object"
     },
     "pressKey": {
-      "description": "pressKey(key) 按一个键（Enter/Tab/单字符；Enter 的 text 是 \\r，CDP 契约）。",
-      "example": "await pressKey(\"Enter\")",
+      "description": "pressKey(key) 按键；单键与组合（#23）：Enter 等命名键、单字符、\"Control+a\" 式修饰组合（组合不发字符；Shift 组合不产生大写输入，大写用 typeRef/fillRef；浏览器级快捷键不保证）。",
+      "example": "await pressKey(\"Control+a\")",
       "input": {
         "properties": {
           "key": {
@@ -887,16 +1052,20 @@
       "type": "object"
     },
     "screenshot": {
-      "description": "screenshot(path?, full?) 页内截图存 PNG，回 {path,bytes}。",
-      "example": "return await screenshot()",
+      "description": "screenshot(path?, full?, opts?) 页内截图存文件；opts（#24）：format png/jpeg、quality（jpeg 1-100 缺省 80）、ifChanged（与既有文件逐字节相同即 skipped，省读回不省拍摄；字节可比性限同一引擎二进制）。回 {path,bytes,skipped}。",
+      "example": "return await screenshot(null, false, {ifChanged: true})",
       "input": {
         "properties": {
           "full": {
             "description": "缺省 false",
             "type": "boolean"
           },
+          "opts": {
+            "description": "缺省 {format,quality,ifChanged}",
+            "type": "object"
+          },
           "path": {
-            "description": "缺省 <state>/screenshots/…png",
+            "description": "缺省 state 目录时间戳名",
             "type": "string"
           }
         },
@@ -1159,6 +1328,24 @@
       "output": "runtime JSON（回值随页面与 CDP 而定）",
       "type": "object"
     },
+    "setInitScript": {
+      "description": "setInitScript(code) 每新文档前注入脚本（#25.2）：反检测补丁、杀 cookie 横幅；SPA 路由不重跑（只对新文档生效），空串清除。",
+      "example": "await setInitScript(\"window.__no_banner = 1\")",
+      "input": {
+        "properties": {
+          "code": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
     "snapshot": {
       "description": "snapshot() AX 树快照：nodes 带 role/name/value/短 ref（e1、e2…），引用表的唯一来源。",
       "example": "const s = await snapshot()",
@@ -1182,6 +1369,29 @@
         },
         "required": [
           "targetId"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "typeRef": {
+      "description": "typeRef(ref, text) 真实按键序列输入（#23）：focus 后逐字符 keyDown+keyUp，contenteditable/ProseMirror 类编辑器用；普通输入框用 fillRef（insertText）。",
+      "example": "await typeRef(\"e7\", \"hello\")",
+      "input": {
+        "properties": {
+          "ref": {
+            "description": "",
+            "type": "string"
+          },
+          "text": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "text"
         ],
         "type": "object"
       },

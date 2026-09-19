@@ -188,26 +188,428 @@ pub async fn fill_input(s: &Session, selector: &str, text: &str) -> Result<Value
 ///
 /// 未连接或派发失败。
 pub async fn press_key(s: &Session, key: &str) -> Result<Value> {
-    let text = match key {
-        "Enter" => "\r",
-        k if k.chars().count() == 1 => k,
-        _ => "",
+    // 组合键（#23）：「Control+a」拆修饰位与末位键
+    let (mods, key) = if key.contains('+') {
+        parse_modifiers(key)?
+    } else {
+        (0, key.to_string())
+    };
+    let text = if mods > 0 {
+        // 修饰组合是快捷键不是输入：不带 text（带 text 会被当字面输入）
+        ""
+    } else {
+        match key.as_str() {
+            "Enter" => "\r",
+            k if k.chars().count() == 1 => k,
+            _ => "",
+        }
     };
     let mut down = json!({ "type": "keyDown", "key": key });
+    if mods > 0 {
+        down["modifiers"] = json!(mods);
+        // 虚拟键码补齐：快捷键处理（全选/复制等）看 vkCode 不看 text
+        if let Some((code, vk)) = key_code(&key) {
+            down["code"] = json!(code);
+            down["windowsVirtualKeyCode"] = json!(vk);
+            down["nativeVirtualKeyCode"] = json!(vk);
+        }
+    }
     if !text.is_empty() {
         down["text"] = json!(text);
+    }
+    let mut up = json!({ "type": "keyUp", "key": key });
+    if mods > 0 {
+        up["modifiers"] = json!(mods);
+        if let Some((code, vk)) = key_code(&key) {
+            up["code"] = json!(code);
+            up["windowsVirtualKeyCode"] = json!(vk);
+            up["nativeVirtualKeyCode"] = json!(vk);
+        }
     }
     dispatch_input_seq(
         s,
         vec![
             ("Input.dispatchKeyEvent", down),
+            ("Input.dispatchKeyEvent", up),
+        ],
+    )
+    .await?;
+    Ok(json!(true))
+}
+
+/// 常用键的 code 与 Windows 虚拟键码（#23）：组合快捷键派发补齐用。
+fn key_code(key: &str) -> Option<(&'static str, u64)> {
+    Some(match key {
+        "a" => ("KeyA", 65),
+        "b" => ("KeyB", 66),
+        "c" => ("KeyC", 67),
+        "v" => ("KeyV", 86),
+        "x" => ("KeyX", 88),
+        "z" => ("KeyZ", 90),
+        "A" => ("KeyA", 65),
+        "C" => ("KeyC", 67),
+        "V" => ("KeyV", 86),
+        "X" => ("KeyX", 88),
+        "Z" => ("KeyZ", 90),
+        _ => return None,
+    })
+}
+
+/// 解析「修饰+...+键」组合（#23）：返回 CDP modifiers 位（Alt=1 /
+/// Control=2 / Meta=4 / Shift=8）与末位键名。
+fn parse_modifiers(key: &str) -> Result<(u64, String)> {
+    let parts: Vec<&str> = key.split('+').collect();
+    if parts.len() < 2 || parts.last().is_none_or(|k| k.is_empty()) {
+        bail!("组合键写法不完整（{key}）；下一步：形如 \"Control+a\"，修饰在前末位键在后");
+    }
+    let (mods, tail) = parts.split_at(parts.len() - 1);
+    let mut bits = 0u64;
+    for m in mods {
+        // |= 防重复修饰串位（Control+Control+a 不能变成 Meta，评审 G1）
+        bits |= match *m {
+            "Alt" | "AltGraph" => 1,
+            "Control" | "Ctrl" => 2,
+            "Meta" | "Command" | "Cmd" => 4,
+            "Shift" => 8,
+            other => bail!(
+                "未知修饰键 {other}；下一步：Alt / Control(或 Ctrl) / Meta(或 Cmd) / Shift，组合如 \"Control+Shift+a\""
+            ),
+        };
+    }
+    Ok((bits, tail[0].to_string()))
+}
+
+/// 裸按键事件（#23）：keydown / keyup 按住语义（无 text，不发组合成键）。
+///
+/// `down` 为 true 发 `keyDown`，否则 `keyUp`；组合写法同 [`press_key`]。
+///
+/// # Errors
+///
+/// 未连接、修饰键名不合法或派发失败。
+pub async fn key_raw(s: &Session, key: &str, down: bool) -> Result<Value> {
+    let (mods, key) = if key.contains('+') {
+        parse_modifiers(key)?
+    } else {
+        (0, key.to_string())
+    };
+    let ty = if down { "keyDown" } else { "keyUp" };
+    let mut ev = json!({ "type": ty, "key": key });
+    if mods > 0 {
+        ev["modifiers"] = json!(mods);
+    }
+    s.call("Input.dispatchKeyEvent", ev).await?;
+    Ok(json!(true))
+}
+
+/// 移动鼠标到视口坐标（#23）：触发 `:hover` 与悬停菜单的 mouseMoved。
+///
+/// # Errors
+///
+/// 未连接或派发失败。
+pub async fn hover_at(s: &Session, x: i64, y: i64) -> Result<Value> {
+    s.call(
+        "Input.dispatchMouseEvent",
+        json!({ "type": "mouseMoved", "x": x, "y": y }),
+    )
+    .await?;
+    Ok(json!(true))
+}
+
+/// 量元素视口中心（#23）：scrollIntoView 后取 rect 中心；不可见即报
+/// （CTA 同 clickRef 口径）。
+async fn node_center(s: &Session, backend_node_id: i64) -> Result<(f64, f64)> {
+    let object_id = resolve_node_object(s, backend_node_id).await?;
+    let r = s
+        .call(
+            "Runtime.callFunctionOn",
+            json!({
+                "objectId": object_id,
+                "functionDeclaration": r#"function(){
+                    this.scrollIntoView({block:'center'});
+                    const r = this.getBoundingClientRect();
+                    if (!this.isConnected || (!r.width && !r.height)) return null;
+                    return JSON.stringify({x: r.x + r.width/2, y: r.y + r.height/2});
+                }"#,
+                "returnByValue": true
+            }),
+        )
+        .await?;
+    let p = r
+        .pointer("/result/value")
+        .and_then(Value::as_str)
+        .and_then(|v| serde_json::from_str::<Value>(v).ok())
+        .ok_or_else(|| anyhow!(
+            "量不到元素中心（元素不可见或 ref 已随导航失效）；下一步：重新 await snapshot() 取新 ref"
+        ))?;
+    Ok((
+        p.get("x").and_then(Value::as_f64).unwrap_or(0.0),
+        p.get("y").and_then(Value::as_f64).unwrap_or(0.0),
+    ))
+}
+
+/// 悬停到短 ref 元素中心（#23）：触发 CSS `:hover` 与悬停菜单。
+///
+/// # Errors
+///
+/// ref 失效或元素不可见。
+pub async fn hover_ref(s: &Session, backend_node_id: i64) -> Result<Value> {
+    let (x, y) = node_center(s, backend_node_id).await?;
+    hover_at(s, x.round() as i64, y.round() as i64).await
+}
+
+/// 双击短 ref 元素（#23）：press/release 两轮，clickCount 递增成双击。
+///
+/// # Errors
+///
+/// ref 失效或元素不可见。
+pub async fn dblclick_ref(s: &Session, backend_node_id: i64) -> Result<Value> {
+    let (x, y) = node_center(s, backend_node_id).await?;
+    let (x, y) = (x.round() as i64, y.round() as i64);
+    dispatch_input_seq(
+        s,
+        vec![
             (
-                "Input.dispatchKeyEvent",
-                json!({ "type": "keyUp", "key": key }),
+                "Input.dispatchMouseEvent",
+                json!({"type":"mousePressed","x":x,"y":y,"button":"left","clickCount":1}),
+            ),
+            (
+                "Input.dispatchMouseEvent",
+                json!({"type":"mouseReleased","x":x,"y":y,"button":"left","clickCount":1}),
+            ),
+            (
+                "Input.dispatchMouseEvent",
+                json!({"type":"mousePressed","x":x,"y":y,"button":"left","clickCount":2}),
+            ),
+            (
+                "Input.dispatchMouseEvent",
+                json!({"type":"mouseReleased","x":x,"y":y,"button":"left","clickCount":2}),
             ),
         ],
     )
     .await?;
+    Ok(json!(true))
+}
+
+/// 拖拽：源 ref 中心按下，分步移到目标 ref 中心松开（#23）。
+///
+/// 鼠标事件序列实现，覆盖 pointer/mouse 型拖拽（sortable、拖放上传区）；
+/// 原生 HTML5 `draggable`（dragstart/dragover/drop 语义）不在序列内，
+/// 该类页面走页面侧合成事件或 `Input.dispatchDragEvent`（待后续批）。
+///
+/// # Errors
+///
+/// 任一 ref 失效或元素不可见。
+pub async fn drag_ref(s: &Session, src_bn: i64, dst_bn: i64) -> Result<Value> {
+    let (sx, sy) = node_center(s, src_bn).await?;
+    let (dx, dy) = node_center(s, dst_bn).await?;
+    let (sx, sy) = (sx.round() as i64, sy.round() as i64);
+    let (dx, dy) = (dx.round() as i64, dy.round() as i64);
+    let mut seq = vec![
+        (
+            "Input.dispatchMouseEvent",
+            json!({"type":"mouseMoved","x":sx,"y":sy}),
+        ),
+        (
+            "Input.dispatchMouseEvent",
+            json!({"type":"mousePressed","x":sx,"y":sy,"button":"left","clickCount":1}),
+        ),
+    ];
+    // 分八步移动：不少 dnd 实现要看 mouseMoved 中间点才认拖拽
+    for i in 1..=8 {
+        let t = i as f64 / 8.0;
+        let mx = sx as f64 + (dx - sx) as f64 * t;
+        let my = sy as f64 + (dy - sy) as f64 * t;
+        seq.push((
+            "Input.dispatchMouseEvent",
+            json!({"type":"mouseMoved","x":mx.round() as i64,"y":my.round() as i64}),
+        ));
+    }
+    seq.push((
+        "Input.dispatchMouseEvent",
+        json!({"type":"mouseReleased","x":dx,"y":dy,"button":"left","clickCount":1}),
+    ));
+    dispatch_input_seq(s, seq).await?;
+    Ok(json!(true))
+}
+
+/// 真实按键序列输入（#23）：focus 后逐字符 keyDown(text)+keyUp，
+/// contenteditable / ProseMirror 类编辑器需要；与 insertText 模式的
+/// [`fill_ref`] 并存。
+///
+/// # Errors
+///
+/// ref 失效或 focus 失败。
+pub async fn type_ref(s: &Session, backend_node_id: i64, text: &str) -> Result<Value> {
+    let object_id = resolve_node_object(s, backend_node_id).await?;
+    let _ = s
+        .call(
+            "Runtime.callFunctionOn",
+            json!({ "objectId": object_id, "functionDeclaration": "function(){ this.focus(); }", "returnByValue": true }),
+        )
+        .await;
+    let mut seq = Vec::new();
+    for ch in text.chars() {
+        let c = ch.to_string();
+        seq.push((
+            "Input.dispatchKeyEvent",
+            json!({ "type": "keyDown", "key": c, "text": c }),
+        ));
+        seq.push((
+            "Input.dispatchKeyEvent",
+            json!({ "type": "keyUp", "key": c }),
+        ));
+    }
+    dispatch_input_seq(s, seq).await?;
+    Ok(json!(true))
+}
+
+/// 导出会话态（#25.3）：cookies 全量加当前页 origin 的 localStorage。
+///
+/// 多 origin 的 localStorage 列举无 CDP 原语：跨 origin 场景逐个
+/// switchTab 到目标页再导，各自合并。
+///
+/// # Errors
+///
+/// 未连接或 cookies 读取失败。
+pub async fn export_storage_state(s: &Session) -> Result<Value> {
+    // Storage.getCookies（browser 级，评审 G4）：Network.getAllCookies 已
+    // 废弃，且这一面不需要先开 Network 域
+    let cookies = s
+        .call("Storage.getCookies", json!({}))
+        .await
+        .map_err(|e| anyhow!("Storage.getCookies 失败：{e:#}"))
+        .map(|r| r.get("cookies").cloned().unwrap_or(json!([])))?;
+    let mut origins: Vec<Value> = Vec::new();
+    if let Ok(tab) = current_tab(s).await
+        && let Some(url) = tab.get("url").and_then(Value::as_str)
+        && let Some(origin) = url_origin(url)
+    {
+        let items = s
+            .call(
+                "DOMStorage.getDOMStorageItems",
+                json!({ "storageId": { "securityOrigin": origin, "isLocalStorage": true } }),
+            )
+            .await;
+        // 回包形 {entries: [[k, v], ...]}，取 /entries（评审 G5 实弹）
+        let ls: Vec<Value> = items
+            .ok()
+            .and_then(|r| r.pointer("/entries").cloned())
+            .and_then(|e| e.as_array().cloned())
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|pair| pair.as_array().is_some_and(|kv| kv.len() == 2))
+            .map(|kv| json!({ "name": kv[0], "value": kv[1] }))
+            .collect();
+        origins.push(json!({ "origin": origin, "localStorage": ls }));
+    }
+    Ok(json!({ "cookies": cookies, "origins": origins }))
+}
+
+/// 导入会话态（#25.3）：吃 [`export_storage_state`] 的返回值或其落盘
+/// 文件路径串；cookies 走 `Network.setCookies`，localStorage 走
+/// `DOMStorage.setDOMStorageItem`。回执带两边计数。
+///
+/// # Errors
+///
+/// 未连接、路径读不了或 JSON 解析失败。
+pub async fn import_storage_state(s: &Session, arg: &Value) -> Result<Value> {
+    let state = match arg {
+        Value::String(p) => {
+            let text = tokio::fs::read_to_string(p)
+                .await
+                .map_err(|e| anyhow!("读不了存储态文件 {p}：{e}"))?;
+            serde_json::from_str::<Value>(&text)
+                .map_err(|e| anyhow!("存储态文件不是合法 JSON：{e}"))?
+        }
+        other => other.clone(),
+    };
+    let mut cookie_n = 0u64;
+    if let Some(cookies) = state.get("cookies").and_then(Value::as_array) {
+        for c in cookies {
+            if s.call("Network.setCookies", json!({ "cookies": [c] }))
+                .await
+                .is_ok()
+            {
+                cookie_n += 1;
+            }
+        }
+    }
+    let mut item_n = 0u64;
+    if let Some(origins) = state.get("origins").and_then(Value::as_array) {
+        for o in origins {
+            let Some(origin) = o.get("origin").and_then(Value::as_str) else {
+                continue;
+            };
+            if let Some(ls) = o.get("localStorage").and_then(Value::as_array) {
+                for kv in ls {
+                    let (k, v) = (
+                        kv.get("name").and_then(Value::as_str).unwrap_or(""),
+                        kv.get("value").and_then(Value::as_str).unwrap_or(""),
+                    );
+                    if k.is_empty() {
+                        continue;
+                    }
+                    if s.call(
+                        "DOMStorage.setDOMStorageItem",
+                        json!({ "storageId": { "securityOrigin": origin, "isLocalStorage": true }, "key": k, "value": v }),
+                    )
+                    .await
+                    .is_ok()
+                    {
+                        item_n += 1;
+                    }
+                }
+            }
+        }
+    }
+    Ok(json!({ "cookies": cookie_n, "items": item_n }))
+}
+
+/// 从 URL 取 securityOrigin（`scheme://host[:port]`，CDP DOMStorage
+/// 口径）；非 http(s) 返回 None。
+fn url_origin(url: &str) -> Option<String> {
+    let scheme = if url.starts_with("https://") {
+        "https"
+    } else if url.starts_with("http://") {
+        "http"
+    } else {
+        return None;
+    };
+    let rest = &url[scheme.len() + 3..];
+    let host = rest.split(['/', '?', '#']).next()?;
+    if host.is_empty() {
+        None
+    } else {
+        Some(format!("{scheme}://{host}"))
+    }
+}
+
+/// 视口与 UA 仿真档位（#24）：`{viewport:{width,height}, mobile, userAgent,
+/// deviceScaleFactor}` 全可省；省 viewport 只设 UA。`mobile: true` 触发
+/// 移动仿真（含 touch），同站常更省 token。
+///
+/// # Errors
+///
+/// 未连接或 CDP 覆写失败。
+pub async fn emulate(s: &Session, opts: &Value) -> Result<Value> {
+    if let Some(ua) = opts.get("userAgent").and_then(Value::as_str) {
+        s.call("Emulation.setUserAgentOverride", json!({ "userAgent": ua }))
+            .await?;
+    }
+    if let Some(v) = opts.get("viewport").and_then(Value::as_object) {
+        let mobile = opts.get("mobile").and_then(Value::as_bool).unwrap_or(false);
+        let mut p = json!({
+            "width": v.get("width").and_then(Value::as_i64).unwrap_or(1280),
+            "height": v.get("height").and_then(Value::as_i64).unwrap_or(800),
+            "deviceScaleFactor": v.get("deviceScaleFactor").and_then(Value::as_f64).unwrap_or(1.0),
+            "mobile": mobile,
+        });
+        if mobile {
+            p["screenWidth"] = p["width"].clone();
+            p["screenHeight"] = p["height"].clone();
+        }
+        s.call("Emulation.setDeviceMetricsOverride", p).await?;
+    }
     Ok(json!(true))
 }
 
@@ -638,4 +1040,39 @@ async fn tab_brief(s: &Session, target_id: &str) -> Result<Value> {
         .find(|t| t.target_id == target_id)
         .map(|t| json!({ "targetId": t.target_id, "title": t.title, "url": t.url, "own": t.own }))
         .unwrap_or(json!({ "targetId": target_id, "title": "", "url": "" })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 修饰键解析（#23）：位值、别名与末位键；坏写法带 CTA。
+    #[test]
+    fn modifier_parsing() {
+        assert_eq!(parse_modifiers("Control+a").unwrap(), (2, "a".into()));
+        assert_eq!(
+            parse_modifiers("Ctrl+Alt+Delete").unwrap(),
+            (3, "Delete".into())
+        );
+        assert_eq!(
+            parse_modifiers("Shift+Meta+ArrowLeft").unwrap(),
+            (12, "ArrowLeft".into())
+        );
+        let e = parse_modifiers("Hyper+x").unwrap_err().to_string();
+        assert!(e.contains("未知修饰键") && e.contains("下一步"), "{e}");
+        let e = parse_modifiers("Control+").unwrap_err().to_string();
+        assert!(e.contains("不完整"), "{e}");
+    }
+
+    /// securityOrigin 解析（#25.3）：scheme 保留，非 http(s) 与空 host 拒。
+    #[test]
+    fn origin_parsing() {
+        assert_eq!(
+            url_origin("https://a.test:8443/x?y#z").unwrap(),
+            "https://a.test:8443"
+        );
+        assert_eq!(url_origin("http://b.test/").unwrap(), "http://b.test");
+        assert!(url_origin("data:text/html,x").is_none());
+        assert!(url_origin("about:blank").is_none());
+    }
 }

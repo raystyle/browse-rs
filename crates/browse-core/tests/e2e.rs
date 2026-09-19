@@ -785,6 +785,268 @@ return await responseBody(evs[0].params.requestId)"#,
         .expect("waitIdle");
     assert!(wi.get("requests").is_some(), "{wi}");
 
+    eprintln!("[e2e] 薄封装批（#23/#24/#25.2/#25.3）开始");
+    // hover（#23）：:hover 触发子菜单显形
+    host.eval_snippet(
+        r#"await session.Page.navigate({url:"data:text/html,<style>.m{display:none}.t:hover .m{display:block}</style><button class=t>Ho<span class=m>shown</span></button>"})"#,
+    )
+    .await
+    .expect("导航 hover 页");
+    let hsn = host
+        .eval_snippet("return await snapshot()")
+        .await
+        .expect("hover snapshot");
+    let hover_ref = hsn
+        .get("nodes")
+        .and_then(Value::as_array)
+        .expect("nodes")
+        .iter()
+        .find(|n| n.get("name") == Some(&json!("Ho")))
+        .and_then(|n| n.get("ref"))
+        .and_then(Value::as_str)
+        .expect("hover 目标 ref")
+        .to_string();
+    host.eval_snippet(&format!(r#"await hoverRef("{hover_ref}")"#))
+        .await
+        .expect("hoverRef");
+    let shown = host
+        .eval_snippet(r#"await session.waitJs("getComputedStyle(document.querySelector('.m')).display === 'block'", 3000)"#)
+        .await;
+    assert!(shown.is_ok(), "hover 应触发 :hover 显形: {shown:?}");
+    // dblclick（#23）：计数器到 2
+    host.eval_snippet(
+        r#"await session.Page.navigate({url:"data:text/html,<button id=d onclick='window.n=(window.n||0)+1' ondblclick='window.db=(window.db||0)+1'>Dbl</button>"})"#,
+    )
+    .await
+    .expect("导航 dblclick 页");
+    let dsn = host
+        .eval_snippet("return await snapshot()")
+        .await
+        .expect("dbl snapshot");
+    let dbl_ref = dsn
+        .get("nodes")
+        .and_then(Value::as_array)
+        .expect("nodes")
+        .iter()
+        .find(|n| n.get("name") == Some(&json!("Dbl")))
+        .and_then(|n| n.get("ref"))
+        .and_then(Value::as_str)
+        .expect("dbl ref")
+        .to_string();
+    host.eval_snippet(&format!(r#"await dblclickRef("{dbl_ref}")"#))
+        .await
+        .expect("dblclickRef");
+    let db = host
+        .eval_snippet(r#"await session.waitJs("window.db", 3000)"#)
+        .await
+        .expect("dblclick 应触发 ondblclick");
+    assert_eq!(db, json!(1));
+    // pressKey 组合（#23）：Control+a 全选后覆盖输入
+    host.eval_snippet(
+        r#"await session.Page.navigate({url:"data:text/html,<input id=q value='old'>"})"#,
+    )
+    .await
+    .expect("导航组合键页");
+    host.eval_snippet(r##"await fillInput("#q", "first")"##)
+        .await
+        .expect("fillInput first");
+    host.eval_snippet(r#"await clickAt(10, 10)"#)
+        .await
+        .expect("点页面");
+    let _ = host.eval_snippet(r#"await session.Runtime.evaluate({expression:"document.getElementById('q').focus()"})"#).await;
+    host.eval_snippet(r#"await pressKey("Control+a")"#)
+        .await
+        .expect("pressKey 组合");
+    host.eval_snippet(r#"await session.Runtime.evaluate({expression:"document.execCommand('insertText', false, 'Z')"})"#)
+        .await
+        .expect("选中态输入 Z");
+    let qv = host
+        .eval_snippet(r#"return (await session.Runtime.evaluate({expression:"document.getElementById('q').value", returnByValue:true})).result.value"#)
+        .await
+        .expect("回读 q");
+    assert_eq!(qv, json!("Z"), "Control+a 应全选后覆盖: {qv}");
+    // typeRef（#23）：contenteditable 真实按键序列
+    host.eval_snippet(
+        r#"await session.Page.navigate({url:"data:text/html,<div id=ce contenteditable role=textbox aria-label='CE' tabindex=0>CE</div>"})"#,
+    )
+    .await
+    .expect("导航 typeRef 页");
+    let tsn = host
+        .eval_snippet("return await snapshot()")
+        .await
+        .expect("type snapshot");
+    let ce_ref = tsn
+        .get("nodes")
+        .and_then(Value::as_array)
+        .expect("nodes")
+        .iter()
+        .find(|n| n.get("name") == Some(&json!("CE")))
+        .and_then(|n| n.get("ref"))
+        .and_then(Value::as_str)
+        .expect("ce ref")
+        .to_string();
+    host.eval_snippet(&format!(r#"await typeRef("{ce_ref}", "hi")"#))
+        .await
+        .expect("typeRef");
+    let cev = host
+        .eval_snippet(r#"await session.waitJs("document.getElementById('ce').innerText.includes('hi')", 3000)"#)
+        .await;
+    assert!(cev.is_ok(), "typeRef 应入 contenteditable: {cev:?}");
+    // initScript（#25.2）：设脚本后新文档生效；替换不叠加、清除真撤
+    //（评审 F1 回归锁：identifier 记账，removeScript 先撤再 add）
+    host.eval_snippet(r#"await setInitScript("window.__init_probe = 41")"#)
+        .await
+        .expect("setInitScript");
+    host.eval_snippet(r#"await session.Page.navigate({url:"data:text/html,<title>ini</title>"})"#)
+        .await
+        .expect("导航 init 页");
+    let ini = host
+        .eval_snippet(r#"await session.waitJs("window.__init_probe === 41", 3000)"#)
+        .await;
+    assert!(ini.is_ok(), "init 脚本应在新文档前置执行: {ini:?}");
+    host.eval_snippet(r#"await setInitScript("window.__init_probe2 = 42")"#)
+        .await
+        .expect("setInitScript 替换");
+    host.eval_snippet(r#"await session.Page.navigate({url:"data:text/html,<title>ini2</title>"})"#)
+        .await
+        .expect("导航 init 页 2");
+    let ini2 = host
+        .eval_snippet(r#"await session.waitJs("window.__init_probe2 === 42", 3000)"#)
+        .await;
+    assert!(ini2.is_ok(), "新脚本应生效: {ini2:?}");
+    let old_gone = host
+        .eval_snippet(r#"await session.waitJs("window.__init_probe === 41", 1200)"#)
+        .await;
+    assert!(
+        old_gone.is_err(),
+        "替换后旧脚本不应再跑（不叠加）: {old_gone:?}"
+    );
+    host.eval_snippet(r#"await setInitScript("")"#)
+        .await
+        .expect("setInitScript 清除");
+    host.eval_snippet(r#"await session.Page.navigate({url:"data:text/html,<title>ini3</title>"})"#)
+        .await
+        .expect("导航 init 页 3");
+    let cleared = host
+        .eval_snippet(r#"await session.waitJs("window.__init_probe2 === 42", 1200)"#)
+        .await;
+    assert!(cleared.is_err(), "清除后不应再跑（注册真撤）: {cleared:?}");
+    // storageState（#25.3）：cookies 半边往返（CDP setCookies 不经网络）
+    host.eval_snippet(r#"await session.Network.setCookies({cookies:[{name:"probe", value:"v1", domain:"mock.test", path:"/"}]})"#)
+        .await
+        .expect("setCookies");
+    host.eval_snippet("const st = await exportStorageState()")
+        .await
+        .expect("exportStorageState");
+    let cookie_n = host
+        .eval_snippet("return st.cookies.length")
+        .await
+        .expect("cookie 计数");
+    assert!(
+        cookie_n.as_u64().unwrap_or(0) >= 1,
+        "导出应含探针 cookie: {cookie_n}"
+    );
+    let imp = host
+        .eval_snippet("return await importStorageState(st)")
+        .await
+        .expect("importStorageState");
+    assert!(
+        imp.pointer("/cookies").and_then(Value::as_u64).unwrap_or(0) >= 1,
+        "导入应回写 cookie: {imp}"
+    );
+    // storageState 的 localStorage 半边（评审 G5）：routeMock 造 http origin，
+    // 写 -> 导 -> 清 -> 导入 -> 回读同值
+    host.eval_snippet(r#"await routeMock("http://ls.test/*", "<html><body>LS</body></html>")"#)
+        .await
+        .expect("routeMock ls");
+    host.eval_snippet(r#"await session.Page.navigate({url:"http://ls.test/x"})"#)
+        .await
+        .expect("导航 ls 页");
+    host.eval_snippet(
+        r#"await session.waitJs("document.body && document.body.innerText.includes('LS')", 5000)"#,
+    )
+    .await
+    .expect("ls 页就绪");
+    host.eval_snippet(
+        r#"await session.Runtime.evaluate({expression:"localStorage.setItem('k', 'v1')"})"#,
+    )
+    .await
+    .expect("写 localStorage");
+    host.eval_snippet("const st = await exportStorageState()")
+        .await
+        .expect("导出含 ls");
+    let ls_n = host
+        .eval_snippet("return st.origins[0].localStorage.length")
+        .await
+        .expect("ls 计数");
+    assert_eq!(ls_n, json!(1), "导出应含一条 localStorage: {ls_n}");
+    host.eval_snippet(r#"await session.Runtime.evaluate({expression:"localStorage.clear()"})"#)
+        .await
+        .expect("清 localStorage");
+    let after_clear = host
+        .eval_snippet(r#"return (await session.Runtime.evaluate({expression:"localStorage.getItem('k')", returnByValue:true})).result.value"#)
+        .await
+        .expect("清后回读");
+    assert_eq!(after_clear, Value::Null, "清后应为 null: {after_clear}");
+    host.eval_snippet("await importStorageState(st)")
+        .await
+        .expect("导入 ls");
+    let after_import = host
+        .eval_snippet(r#"return (await session.Runtime.evaluate({expression:"localStorage.getItem('k')", returnByValue:true})).result.value"#)
+        .await
+        .expect("导入后回读");
+    assert_eq!(after_import, json!("v1"), "导入应回同值: {after_import}");
+    host.eval_snippet("await routeClear()")
+        .await
+        .expect("routeClear");
+
+    // screenshot 选项（#24）：ifChanged 第二次 skipped，jpeg 出 .jpg
+    //（先清残留：/tmp 跨测试运行持久，同画面会假 skipped）
+    let _ = tokio::fs::remove_file("/tmp/browse-e2e-shot.png").await;
+    let _ = tokio::fs::remove_file("/tmp/browse-e2e-shot.jpg").await;
+    let shot1 = host
+        .eval_snippet(
+            r#"return await screenshot("/tmp/browse-e2e-shot.png", false, {ifChanged: true})"#,
+        )
+        .await
+        .expect("shot1");
+    assert_eq!(shot1.pointer("/skipped"), Some(&json!(false)), "{shot1}");
+    let shot2 = host
+        .eval_snippet(
+            r#"return await screenshot("/tmp/browse-e2e-shot.png", false, {ifChanged: true})"#,
+        )
+        .await
+        .expect("shot2");
+    assert_eq!(
+        shot2.pointer("/skipped"),
+        Some(&json!(true)),
+        "同画面应跳过: {shot2}"
+    );
+    let jpg = host
+        .eval_snippet(r#"return await screenshot("/tmp/browse-e2e-shot", false, {format: "jpeg", quality: 70})"#)
+        .await
+        .expect("jpeg shot");
+    assert!(
+        jpg.pointer("/path")
+            .and_then(Value::as_str)
+            .is_some_and(|p| p.ends_with(".jpg")),
+        "jpeg 应 .jpg: {jpg}"
+    );
+    let _ = tokio::fs::remove_file("/tmp/browse-e2e-shot.png").await;
+    let _ = tokio::fs::remove_file("/tmp/browse-e2e-shot.jpg").await;
+    // emulate（#24）：视口改写生效
+    host.eval_snippet(r#"await emulate({viewport:{width:500,height:400}})"#)
+        .await
+        .expect("emulate");
+    let iw = host
+        .eval_snippet(r#"return (await session.Runtime.evaluate({expression:"window.innerWidth", returnByValue:true})).result.value"#)
+        .await
+        .expect("innerWidth");
+    assert_eq!(iw, json!(500), "视口应 500: {iw}");
+    host.eval_snippet(r#"await session.Emulation.clearDeviceMetricsOverride({})"#)
+        .await
+        .expect("清仿真");
+
     eprintln!("[e2e] closeTab 开始");
     // closeTab：关当前活动 tab（newTab 建的 t2，自建 -> 守卫放行）
     let closed = host
