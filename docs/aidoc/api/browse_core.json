@@ -148,6 +148,21 @@
       "docs": "方言宿主：持有一个 CDP [`Session`] 加一份跨片段持久的变量表。"
     },
     {
+      "path": "browse_core::js_host::load_secrets",
+      "kind": "function",
+      "docs": "加载 dotenv 形密钥文件（#25.4）：`KEY=VALUE` 行，`#` 注释与空行忽略，\n值剥首尾配对引号；重复键后者覆盖。幂等（清后装）。\n\n# Errors\n\n文件读不了或某行不是 `KEY=VALUE` 形（错误带行号）。"
+    },
+    {
+      "path": "browse_core::js_host::mask_secrets",
+      "kind": "function",
+      "docs": "对值做脱敏（#25.4）：字符串里出现任何密钥值即整值换 `***`（保守全换，\n不做部分遮挡，防切片还原）；非字符串原样。"
+    },
+    {
+      "path": "browse_core::js_host::mask_secrets_str",
+      "kind": "function",
+      "docs": "对错误/回显串做子串脱敏（#25.4 评审 G4）：只换密钥值出现处，保留\n其余文本（CTA 不能整串换没）；无密钥或不含则原样。"
+    },
+    {
       "path": "browse_core::js_host::render_result",
       "kind": "function",
       "docs": "把方言求值结果渲染成 CLI stdout 文本：字符串带引号（JSON 转义，与对象\n输出可区分，#21）、数字与布尔裸打、空容器不打、其余打 JSON。\n\n# Examples\n\n```\nuse serde_json::json;\nassert_eq!(browse_core::render_result(&json!(\"hi\")), \"\\\"hi\\\"\");\nassert_eq!(browse_core::render_result(&json!(\"a\\\"b\\n\")), \"\\\"a\\\\\\\"b\\\\n\\\"\");\nassert_eq!(browse_core::render_result(&json!(7)), \"7\");\nassert_eq!(browse_core::render_result(&json!({})), \"\");\nassert_eq!(browse_core::render_result(&json!({\"a\": 1})), r#\"{\"a\":1}\"#);\n```"

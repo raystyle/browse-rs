@@ -58,10 +58,11 @@ pub fn render_or_drop_sync(v: &Value) -> std::io::Result<String> {
         _ => "txt",
     };
     let path = dir.join(format!("value-{ts}.{ext}"));
-    // 文件是工件不是展示：字符串落原文，容器落 JSON 序列化
+    // 文件是工件不是展示（#25.4 评审 F2）：两类都落原值——字符串落原文，
+    // 容器落未脱敏的 JSON 序列化（rendered 已过面具，不能当工件）
     let raw = match v {
         Value::String(s) => s.clone(),
-        _ => rendered.clone(),
+        other => serde_json::to_string(other).unwrap_or_else(|_| rendered.clone()),
     };
     std::fs::write(&path, &raw)?;
     let preview: String = rendered.chars().take(PREVIEW_CHARS).collect();

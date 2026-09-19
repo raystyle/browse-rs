@@ -261,10 +261,19 @@ async fn eval_handler(
 }
 
 fn err_response(e: anyhow::Error) -> (axum::http::StatusCode, Json<Value>) {
-    // 前缀在此统一加：错误串形态是「browse: <下一步指令>」进 stderr
+    // 前缀在此统一加：错误串形态是「browse: <下一步指令>」进 stderr。
+    // 错误链内已有前缀的（cdp 守卫、引擎面文案）不再叠加，防「browse: browse:」。
+    // 错误链过密钥面具再上前缀（#25.4 评审 G4）：守卫文案嵌 id/url、CDP
+    // 错误嵌参数，agent 拿 secrets.X 当 token/URL 片段是自然用法
+    let msg = crate::js_host::mask_secrets_str(&format!("{e:#}"));
+    let msg = if msg.starts_with("browse:") {
+        msg
+    } else {
+        format!("browse: {msg}")
+    };
     (
         axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-        Json(json!({ "ok": false, "error": format!("browse: {e:#}") })),
+        Json(json!({ "ok": false, "error": msg })),
     )
 }
 
@@ -337,4 +346,52 @@ async fn engine_up_handler(
 async fn quit_handler(State(st): State<AppState>) -> impl IntoResponse {
     st.daemon.quit.store(true, Ordering::Relaxed);
     Json(json!({ "ok": true }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 错误前缀只加一次（#33 快核 G-lite）：cdp 守卫/引擎面文案自带
+    /// 「browse: 」时不得叠成「browse: browse:」。
+    #[test]
+    fn err_response_prefixes_exactly_once() {
+        let (_, Json(v)) = err_response(anyhow::anyhow!("browse: 守卫拦截 Browser.close"));
+        let msg = v["error"].as_str().unwrap_or_default();
+        assert_eq!(msg, "browse: 守卫拦截 Browser.close");
+        assert!(!msg.starts_with("browse: browse:"), "{msg}");
+
+        let (_, Json(v)) = err_response(anyhow::anyhow!("CDP Page.navigate: boom"));
+        assert_eq!(
+            v["error"].as_str().unwrap_or_default(),
+            "browse: CDP Page.navigate: boom"
+        );
+    }
+
+    /// 错误链脱敏调用点锁（#25.4 评审 G4 二轮）：err_response 必须过
+    /// [`crate::js_host::mask_secrets_str`]——守卫文案嵌 id/url、CDP 错误
+    /// 嵌参数，密钥值不得经错误出口上 stderr；CTA 保留。
+    #[tokio::test]
+    async fn err_response_masks_secret_values() {
+        let _ser = crate::js_host::SECRETS_TEST_LOCK.lock().await;
+        let dir = std::env::temp_dir().join(format!("browse-sec-srv-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).ok();
+        let f = dir.join("s.env");
+        std::fs::write(&f, "TOKEN=sk-live-abc123\n").unwrap();
+        crate::js_host::load_secrets(f.to_str().unwrap()).expect("装仓");
+        // 复刻守卫错误形态（评审方实弹件：Target.closeTarget 带密钥当 id）
+        let (_, Json(v)) = err_response(anyhow::anyhow!(
+            "守卫拦截 Target.closeTarget：sk-live-abc123 不是本会话自建 tab；下一步：只关 listPageTargets()"
+        ));
+        let msg = v["error"].as_str().unwrap_or_default();
+        assert!(!msg.contains("sk-live-abc123"), "密钥值应被换: {msg}");
+        assert!(msg.contains("***"), "{msg}");
+        assert!(msg.contains("下一步"), "CTA 应保留: {msg}");
+        // 前缀形态不回归（脱敏不破坏 browse: 头）
+        assert!(msg.starts_with("browse: "), "{msg}");
+        // 清仓防串测（空文件 = 清空全局）
+        std::fs::write(&f, "").unwrap();
+        crate::js_host::load_secrets(f.to_str().unwrap()).expect("清仓");
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }

@@ -42,6 +42,6 @@ pub mod server;
 pub mod surface;
 
 pub use engine::{Engine, EngineSource, EngineSpec};
-pub use js_host::{JsHost, render_result};
+pub use js_host::{JsHost, load_secrets, render_result};
 pub use parser::snippet_complete;
 pub use surface::CmdKind;

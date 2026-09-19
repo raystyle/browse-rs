@@ -215,6 +215,9 @@ clean-chrome 专为自动化而生（`--auto-allow-devtools-connections` 免确�
 
 ## Functions
 
+- `load_secrets` — 加载 dotenv 形密钥文件（#25.4）：`KEY=VALUE` 行，`#` 注释与空行忽略，
+- `mask_secrets` — 对值做脱敏（#25.4）：字符串里出现任何密钥值即整值换 `***`（保守全换，
+- `mask_secrets_str` — 对错误/回显串做子串脱敏（#25.4 评审 G4）：只换密钥值出现处，保留
 - `render_result` — 把方言求值结果渲染成 CLI stdout 文本：字符串带引号（JSON 转义，与对象
 
 ## Types

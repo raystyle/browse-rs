@@ -9,6 +9,102 @@
 //! - `vars` 在 daemon 内跨片段持久（`const tabs = ...` 之后的片段还能用 `tabs`）。
 
 use crate::parser::{Expr, Stmt, parse_script};
+
+/// 密钥仓（#25.4）：`--secrets <dotenv>` 加载一次进进程级全局；方言经
+/// `secrets.<NAME>` 取值，渲染与报错面统一走 [`mask_secrets`] 脱敏。
+static SECRETS: std::sync::Mutex<Vec<(String, String)>> = std::sync::Mutex::new(Vec::new());
+
+/// 密钥仓测试串行锁（全 crate 测试可见）：SECRETS 是进程级全局，js_host
+/// 与 server 的密钥相关测试并行互踩；tokio Mutex 可跨 await 持守卫。
+#[cfg(test)]
+pub(crate) static SECRETS_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// 加载 dotenv 形密钥文件（#25.4）：`KEY=VALUE` 行，`#` 注释与空行忽略，
+/// 值剥首尾配对引号；重复键后者覆盖。幂等（清后装）。
+///
+/// # Errors
+///
+/// 文件读不了或某行不是 `KEY=VALUE` 形（错误带行号）。
+pub fn load_secrets(path: &str) -> Result<()> {
+    let text = std::fs::read_to_string(path)
+        .map_err(|e| anyhow!("读不了密钥文件 {path}：{e}；下一步：检查 --secrets 路径与权限"))?;
+    // 剥 UTF-8 BOM（评审 G1）：Windows 记事本默认写 BOM，不剥则首键带
+    // \u{feff} 前缀查无且报错不指向 BOM
+    let text = text.trim_start_matches('\u{feff}');
+    let mut out = Vec::new();
+    for (i, line) in text.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let Some((k, v)) = line.split_once('=') else {
+            bail!(
+                "密钥文件第 {} 行不是 KEY=VALUE 形：{line}；下一步：每行一个键值对，# 注释",
+                i + 1
+            );
+        };
+        let k = k.trim().to_string();
+        let mut v = v.trim().to_string();
+        if v.len() >= 2
+            && ((v.starts_with('"') && v.ends_with('"'))
+                || (v.starts_with('\'') && v.ends_with('\'')))
+        {
+            v = v[1..v.len() - 1].to_string();
+        }
+        out.retain(|(ek, _): &(String, String)| ek != &k);
+        out.push((k, v));
+    }
+    if let Ok(mut g) = SECRETS.lock() {
+        *g = out;
+    }
+    Ok(())
+}
+
+/// 对错误/回显串做子串脱敏（#25.4 评审 G4）：只换密钥值出现处，保留
+/// 其余文本（CTA 不能整串换没）；无密钥或不含则原样。
+pub fn mask_secrets_str(s: &str) -> String {
+    let Ok(secrets) = SECRETS.lock() else {
+        return s.to_string();
+    };
+    let mut out = s.to_string();
+    for (_, val) in secrets.iter() {
+        if !val.is_empty() && out.contains(val.as_str()) {
+            out = out.replace(val.as_str(), "***");
+        }
+    }
+    out
+}
+
+/// 对值做脱敏（#25.4）：字符串里出现任何密钥值即整值换 `***`（保守全换，
+/// 不做部分遮挡，防切片还原）；非字符串原样。
+pub fn mask_secrets(v: &Value) -> Value {
+    // 先持锁取判定、放锁再递归：std Mutex 不可重入，持锁递归在嵌套
+    // 容器上自死锁（本批实弹雷）
+    let hit = {
+        let Ok(secrets) = SECRETS.lock() else {
+            return v.clone();
+        };
+        !secrets.is_empty()
+            && match v {
+                Value::String(s) => secrets
+                    .iter()
+                    .any(|(_, val)| !val.is_empty() && s.contains(val.as_str())),
+                _ => false,
+            }
+    };
+    if hit {
+        return Value::String("***".into());
+    }
+    match v {
+        Value::Array(a) => Value::Array(a.iter().map(mask_secrets).collect()),
+        Value::Object(o) => Value::Object(
+            o.iter()
+                .map(|(k, v)| (k.clone(), mask_secrets(v)))
+                .collect(),
+        ),
+        other => other.clone(),
+    }
+}
 use anyhow::{Result, anyhow, bail};
 use cdp::methods::METHODS_RAW;
 use cdp::{ConnectOptions, PageTarget, Session};
@@ -341,6 +437,9 @@ impl JsHost {
                     if name == "JSON" {
                         return Ok(json!({"__host": "json"}));
                     }
+                    if name == "secrets" {
+                        return Ok(json!({"__host": "secrets"}));
+                    }
                     if name == "undefined" {
                         return Ok(Value::Null);
                     }
@@ -371,6 +470,19 @@ impl JsHost {
                     let o = self.eval_expr(obj).await?;
                     if o.get("__host").and_then(|v| v.as_str()) == Some("session") {
                         return Ok(json!({"__host": "session", "__domain": prop}));
+                    }
+                    // 密钥命名空间（#25.4）：secrets.<NAME> 取值；键不存在报 CTA
+                    if o.get("__host").and_then(|v| v.as_str()) == Some("secrets") {
+                        let Ok(secrets) = SECRETS.lock() else {
+                            return Ok(Value::Null);
+                        };
+                        return secrets
+                            .iter()
+                            .find(|(k, _)| k == prop)
+                            .map(|(_, v)| json!(v.clone()))
+                            .ok_or_else(|| anyhow!(
+                                "secrets.{prop} 不在已加载密钥里；下一步：检查 --secrets 文件是否含该键或键名拼写"
+                            ));
                     }
                     // 内建 length：数组元素数与字符串长度（UTF-16 单元，同 JS）；
                     // serde_json 的 get 只走对象键，字符串与数组在此显式补齐（#15）
@@ -1789,6 +1901,7 @@ fn preview_container(kind: &str, head_json: String, head_n: usize, total: usize)
 /// 求值值的类型化短预览（报错与 `print` 调试）：标类型加截断内容，字符串
 /// 带引号、容器打 JSON 截断；杜绝「JSON 文本看着像对象」的误导（#21）。
 fn preview(v: &Value) -> String {
+    let v = &mask_secrets(v);
     match v {
         Value::Null => "null".to_string(),
         Value::Bool(b) => format!("布尔 {b}"),
@@ -1833,7 +1946,8 @@ fn preview(v: &Value) -> String {
 /// assert_eq!(browse_core::render_result(&json!({"a": 1})), r#"{"a":1}"#);
 /// ```
 pub fn render_result(v: &Value) -> String {
-    match v {
+    let v = mask_secrets(v);
+    match &v {
         Value::Null => String::new(),
         Value::Array(a) if a.is_empty() => String::new(),
         Value::Object(o) if o.is_empty() => String::new(),
@@ -2328,6 +2442,108 @@ return JSON.stringify(JSON.parse(raw).items.slice(0, 1))"#,
                 .is_some_and(|e| e.contains("No resource")),
             "bodyError 应带因: {stuck}"
         );
+    }
+
+    /// 密钥命名空间与脱敏（#25.4）：dotenv 加载、secrets.<NAME> 取值、
+    /// 渲染与报错回显面具；值含密钥即整值换 ***（保守全换）。
+    #[tokio::test]
+    async fn secrets_namespace_and_masking() {
+        let _ser = SECRETS_TEST_LOCK.lock().await;
+        // 直接装进程级密钥仓（绕文件，测行为面）
+        {
+            let mut g = SECRETS.lock().unwrap();
+            *g = vec![
+                ("API_KEY".into(), "sk-super-secret".into()),
+                ("EMPTY".into(), String::new()),
+            ];
+        }
+        let host = JsHost::new(cdp::Session::new());
+        let v = host
+            .eval_snippet(r#"return secrets.API_KEY"#)
+            .await
+            .expect("取密钥");
+        assert_eq!(
+            v,
+            json!("sk-super-secret"),
+            "方言值是真值（面具只在渲染面）"
+        );
+        // 渲染面：裸值、嵌在对象里、报错回显，全部脱敏（字符串带引号形，批 2 类型口径）
+        assert_eq!(render_result(&v), "\"***\"");
+        let nested = json!({ "token": "sk-super-secret", "n": 1, "arr": ["x", "sk-super-secret"] });
+        let r = render_result(&nested);
+        assert!(!r.contains("sk-super-secret"), "{r}");
+        assert!(r.contains(r#""token":"***""#), "{r}");
+        let e = host
+            .eval_snippet(r#"return "tok sk-super-secret".nope()"#)
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(!e.contains("sk-super-secret"), "报错回显应脱敏: {e}");
+        // 未加载键：CTA
+        let e = host
+            .eval_snippet("return secrets.NOPE")
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains("secrets.NOPE") && e.contains("下一步"), "{e}");
+        // 错误串子串脱敏（评审 G4）：密钥片段被换、CTA 保留
+        let es = mask_secrets_str("前缀 sk-super-secret 后缀；下一步：照抄");
+        assert!(
+            es.contains("***") && !es.contains("sk-super-secret"),
+            "{es}"
+        );
+        assert!(es.contains("下一步：照抄"), "{es}");
+        // 清仓后不再脱敏（幂等装载语义）
+        {
+            let mut g = SECRETS.lock().unwrap();
+            g.clear();
+        }
+        assert_eq!(
+            render_result(&json!("sk-super-secret")),
+            "\"sk-super-secret\""
+        );
+    }
+
+    /// dotenv 解析（#25.4）：注释空行、引号剥离、重复键覆盖、坏行报行号。
+    #[tokio::test]
+    async fn secrets_dotenv_parsing() {
+        let _ser = SECRETS_TEST_LOCK.lock().await;
+        let dir = std::env::temp_dir().join(format!("browse-sec-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).ok();
+        let f = dir.join("s.env");
+        std::fs::write(&f, "# 注释\nA=1\n\nB=\"two words\"\nC='sq'\nA=2\n").unwrap();
+        load_secrets(f.to_str().unwrap()).expect("解析");
+        {
+            let g = SECRETS.lock().unwrap();
+            let get = |k: &str| {
+                g.iter()
+                    .find(|(ek, _)| ek == k)
+                    .map(|(_, v)| v.clone())
+                    .unwrap_or_default()
+            };
+            assert_eq!(get("A"), "2", "重复键后者覆盖");
+            assert_eq!(get("B"), "two words");
+            assert_eq!(get("C"), "sq");
+        }
+        let bad = dir.join("bad.env");
+        std::fs::write(&bad, "no-equal-line\n").unwrap();
+        let e = load_secrets(bad.to_str().unwrap()).unwrap_err().to_string();
+        assert!(e.contains("第 1 行") && e.contains("下一步"), "{e}");
+        // BOM 剥离（评审 G1）：带 BOM 的首键可查
+        let bom = dir.join("bom.env");
+        std::fs::write(&bom, "\u{feff}BOMKEY=boom\n").unwrap();
+        load_secrets(bom.to_str().unwrap()).expect("BOM 解析");
+        {
+            let g = SECRETS.lock().unwrap();
+            assert!(
+                g.iter().any(|(k, v)| k == "BOMKEY" && v == "boom"),
+                "BOM 应被剥: {:?}",
+                g
+            );
+        }
+        // 清仓防串测
+        SECRETS.lock().unwrap().clear();
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     /// 模板字符串求值（#18）：raw 语义直出，反斜杠与真换行原样。

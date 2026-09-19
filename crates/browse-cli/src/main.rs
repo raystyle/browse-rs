@@ -80,6 +80,7 @@ async fn main() -> Result<()> {
     let mut proxy_bypass: Option<String> = None;
     let mut isolated = false;
     let mut idle_timeout: Option<String> = None;
+    let mut secrets: Option<String> = None;
 
     let mut args = std::env::args().skip(1);
     let mut gen_surface: Option<String> = None;
@@ -111,6 +112,7 @@ async fn main() -> Result<()> {
             "--proxy-bypass" => proxy_bypass = Some(next("--proxy-bypass")?),
             "--isolated" => isolated = true,
             "--idle-timeout" => idle_timeout = Some(next("--idle-timeout")?),
+            "--secrets" => secrets = Some(next("--secrets")?),
             "--json" => json = true,
             "--llms" => llms = true,
             "--repl" => repl = true,
@@ -267,6 +269,16 @@ async fn main() -> Result<()> {
             }
             if let Some(b) = &proxy_bypass {
                 envs.push(("BROWSE_PROXY_BYPASS", b.clone()));
+            }
+            if let Some(f) = secrets
+                .clone()
+                .or_else(|| std::env::var("BROWSE_SECRETS").ok())
+            {
+                if let Err(e) = browse_core::load_secrets(&f) {
+                    eprintln!("{e:#}");
+                    std::process::exit(1);
+                }
+                envs.push(("BROWSE_SECRETS", f));
             }
             client::ensure_daemon_with_env(&envs).await?;
             let health = client::engine_up(client::UpParams {
@@ -427,6 +439,7 @@ async fn main() -> Result<()> {
                 proxy,
                 proxy_bypass,
                 isolated,
+                secrets,
             )
             .await
         }
@@ -457,8 +470,23 @@ async fn run_eval(
     proxy: Option<String>,
     proxy_bypass: Option<String>,
     isolated: bool,
+    secrets: Option<String>,
 ) -> Result<()> {
-    client::ensure_daemon().await?;
+    // --secrets 随新 daemon 环境注入（#25.4；已在跑 daemon 以启动时口径为准）；
+    // CLI 进程自己也载一份（评审 F1）：return 出口的渲染发生在 CLI 侧，
+    // 不载则展示面零脱敏——取值看 daemon 启动时仓，展示看本次 CLI 旗标
+    if let Some(f) = secrets
+        .clone()
+        .or_else(|| std::env::var("BROWSE_SECRETS").ok())
+    {
+        if let Err(e) = browse_core::load_secrets(&f) {
+            eprintln!("{e:#}");
+            std::process::exit(1);
+        }
+        client::ensure_daemon_with_env(&[("BROWSE_SECRETS", f)]).await?;
+    } else {
+        client::ensure_daemon().await?;
+    }
     // 显式连接意图先落引擎（up 面接受同样的旗标），再求值；proxy 三旗标
     // 同守卫透传（评审 F2：静默吞比报错更坑）
     if ws.is_some()
@@ -511,7 +539,12 @@ async fn run_snip(snip: &str, new_tab: bool) {
             }
         }
         Err(e) => {
-            eprintln!("{e:#}");
+            // 错误链过密钥面具（#25.4 评审 G4 防御面）：daemon 侧已脱敏，
+            // 这里兜 CLI 自加的 context 层（HTTP 失败嵌响应文本）
+            eprintln!(
+                "{}",
+                browse_core::js_host::mask_secrets_str(&format!("{e:#}"))
+            );
             std::process::exit(1);
         }
     }
@@ -541,6 +574,10 @@ async fn serve_foreground(
         (&mut spec, profile.map(std::path::PathBuf::from))
     {
         *p = Some(explicit);
+    }
+    // 密钥文件 daemon 启动即载（#25.4）：改密钥 = 重启 daemon（口径在册）
+    if let Some(f) = std::env::var_os("BROWSE_SECRETS") {
+        browse_core::load_secrets(&f.to_string_lossy())?;
     }
     let daemon = browse_core::server::Daemon::new(host, engine, spec);
     browse_core::server::serve(daemon, &bind).await
