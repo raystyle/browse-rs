@@ -302,7 +302,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Cli,
         signature: "browse --serve [--bind host:port]",
         args: &[arg!("bind", "string", false, "127.0.0.1:9880")],
-        description: "前台跑 daemon（--bind 选监听地址）。",
+        description: "前台跑 daemon（--bind 选监听地址）。daemon 即公开 HTTP 契约（#45）：POST /eval 求值（body {code,new_tab,js}，错误形判 ok 字段）、GET /health 探活；方言做线协议门外语言不限，完整契约与 curl 三例见 docs/guides/http-api.md。",
         example: "browse --serve --bind 127.0.0.1:9880",
     },
     // ---- 全局函数 ----

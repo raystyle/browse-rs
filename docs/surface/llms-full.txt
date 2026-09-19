@@ -29,7 +29,7 @@
 | `browse issue new <标题> [--body <正文>] [--dry-run]` | 一键缺陷反馈：自动署名 tool=browse 加版本加平台加主机；--dry-run 同规校验并预览载荷零网络副作用（#57 G6，契约实弹走它别落生产台账）。 |
 | `browse issue list [--status <s>] [--limit <n>] [--tool <t>] [--before <id>]` | 列 issue（新到旧；默认本工具，--tool 换过滤；默认 limit 100 即服务端上限，返回 count 是本次返回条数非在册总数，恰打满时 stderr 出截断提示（#52）；--before <id> 是 keyset 游标翻更早一页（#53））。 |
 | `browse issue show <id>` | 看 issue 详情。 |
-| `browse --serve [--bind host:port]` | 前台跑 daemon（--bind 选监听地址）。 |
+| `browse --serve [--bind host:port]` | 前台跑 daemon（--bind 选监听地址）。daemon 即公开 HTTP 契约（#45）：POST /eval 求值（body {code,new_tab,js}，错误形判 ok 字段）、GET /health 探活；方言做线协议门外语言不限，完整契约与 curl 三例见 docs/guides/http-api.md。 |
 
 ## 全局函数
 
@@ -402,7 +402,7 @@ browse issue show 42
 
 ## `browse --serve [--bind host:port]`
 
-前台跑 daemon（--bind 选监听地址）。
+前台跑 daemon（--bind 选监听地址）。daemon 即公开 HTTP 契约（#45）：POST /eval 求值（body {code,new_tab,js}，错误形判 ok 字段）、GET /health 探活；方言做线协议门外语言不限，完整契约与 curl 三例见 docs/guides/http-api.md。
 
 参数：
 - `bind`（string，缺省 127.0.0.1:9880）
