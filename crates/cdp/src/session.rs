@@ -110,6 +110,12 @@ pub struct Session {
     /// auto-attach 得到的子 session（#60 OOPIF）：targetId -> sessionId，
     /// 供 snapshot 按子 session 拉各自 AX 树
     child_sessions: Arc<Mutex<HashMap<String, String>>>,
+    /// 待附着的 OOPIF target（#60）：`Target.targetCreated` 里 type=iframe
+    /// 的目标先记账，由 [`Session::sync_child_sessions`] 显式附着。
+    /// 本机实测（Chrome 152）：`Target.setAutoAttach` 无论挂浏览器级还是
+    /// 页面级、带不带 iframe filter，都不产生 iframe 型 attachedToTarget，
+    /// 所以 OOPIF 只能走「发现 + 显式 attach」这条路。
+    pending_children: Arc<Mutex<HashSet<String>>>,
     /// 提交屏障水位（#34 根因级）：sessionId -> 设屏时的事件 seq。
     /// 跨文档 navigate 回执后记录，后续页面级 [`Session::call`] 等
     /// 水位后的主框架 frameNavigated 再放行；满足或超时即清。
@@ -144,6 +150,7 @@ impl Session {
             doc_gens: Arc::new(Mutex::new(HashMap::new())),
             commit_barrier: Arc::new(Mutex::new(HashMap::new())),
             child_sessions: Arc::new(Mutex::new(HashMap::new())),
+            pending_children: Arc::new(Mutex::new(HashSet::new())),
         })
     }
 
@@ -170,6 +177,70 @@ impl Session {
     /// auto-attach 子 session 表快照（#60）：targetId -> sessionId。
     pub async fn child_sessions(&self) -> HashMap<String, String> {
         self.child_sessions.lock().await.clone()
+    }
+
+    /// 是否记有待附着的 OOPIF target（#60）：给 watcher 做廉价触发判断，
+    /// 不必每拍打一次 `Target.getTargets`。
+    pub async fn has_pending_children(&self) -> bool {
+        !self.pending_children.lock().await.is_empty()
+    }
+
+    /// 同步 OOPIF 子 session 表（#60）：扫 `Target.getTargets` 里
+    /// `type == "iframe"` 的目标，未附着的显式 `attachToTarget(flatten)`
+    /// 记账；已消失的条目清掉。返回当前子 session 数。
+    ///
+    /// 为什么不用 `Target.setAutoAttach`：本机 Chrome 152 实测，无论
+    /// 浏览器级还是页面级、带不带 `filter:[{type:"iframe"}]`，都收不到
+    /// iframe 型 `attachedToTarget`（只来 page/browser_ui/service_worker），
+    /// 而显式 attach 稳定可用。`pending_children` 由 `route` 从
+    /// `Target.targetCreated` 记账，这里一并清空（getTargets 已覆盖）。
+    ///
+    /// # Errors
+    ///
+    /// `Target.getTargets` 失败（未连接等）；单个 attach 失败只跳过该目标
+    /// （OOPIF 可能在枚举与附着之间销毁）。
+    pub async fn sync_child_sessions(&self) -> Result<usize> {
+        let r = self.call("Target.getTargets", json!({})).await?;
+        let iframes: HashSet<String> = r
+            .get("targetInfos")
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter(|t| t.get("type").and_then(Value::as_str) == Some("iframe"))
+                    .filter_map(|t| {
+                        t.get("targetId")
+                            .and_then(Value::as_str)
+                            .map(str::to_string)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        self.pending_children.lock().await.clear();
+        // 清陈尸：目标已不在册的条目
+        {
+            let mut kids = self.child_sessions.lock().await;
+            kids.retain(|tid, _| iframes.contains(tid));
+        }
+        for tid in &iframes {
+            let known = self.child_sessions.lock().await.get(tid).is_some();
+            if known {
+                continue;
+            }
+            if let Ok(v) = self
+                .call(
+                    "Target.attachToTarget",
+                    json!({ "targetId": tid, "flatten": true }),
+                )
+                .await
+                && let Some(sid) = v.get("sessionId").and_then(Value::as_str)
+            {
+                self.child_sessions
+                    .lock()
+                    .await
+                    .insert(tid.clone(), sid.to_string());
+            }
+        }
+        Ok(self.child_sessions.lock().await.len())
     }
 
     /// 返回当前连接纪元（每次 open_ws/connect_pipes 自增）：上层用它
@@ -272,12 +343,15 @@ impl Session {
             }
         });
 
-        let pending_r = self.pending.clone();
-        let events_r = self.events.clone();
-        let seq_r = self.next_seq.clone();
-        let dialog_r = self.pending_dialog.clone();
-        let gens_r = self.doc_gens.clone();
-        let children_r = self.child_sessions.clone();
+        let shared_r = RouteShared {
+            pending: self.pending.clone(),
+            events: self.events.clone(),
+            next_seq: self.next_seq.clone(),
+            dialog: self.pending_dialog.clone(),
+            gens: self.doc_gens.clone(),
+            children: self.child_sessions.clone(),
+            pending_children: self.pending_children.clone(),
+        };
         let flag = self.connected.clone();
         let dead_pending = self.pending.clone();
         let epoch = self.conn_epoch.fetch_add(1, Ordering::Relaxed) + 1;
@@ -290,16 +364,7 @@ impl Session {
                     break;
                 }
                 if let Ok(v) = serde_json::from_str::<Value>(&t) {
-                    route(
-                        v,
-                        &pending_r,
-                        &events_r,
-                        &seq_r,
-                        &dialog_r,
-                        &gens_r,
-                        &children_r,
-                    )
-                    .await;
+                    route(v, &shared_r).await;
                 }
             }
             // 只有自己仍是当前连接才翻死线：旧连接的泵在重连后迟到退出
@@ -334,6 +399,10 @@ impl Session {
         self.pinned_sessions.lock().await.clear();
         self.doc_gens.lock().await.clear();
         self.commit_barrier.lock().await.clear();
+        // #60 评审 F2：子 session 与待附着队列同属 per-connection 记账，
+        // 重连/close 后旧 sid 已是陈尸（合并处静默吞错只会让 OOPIF 消失）
+        self.child_sessions.lock().await.clear();
+        self.pending_children.lock().await.clear();
     }
 
     /// 把全部在途调用立刻以「连接已断开」失败（全量评审 F1）：给每个
@@ -395,12 +464,15 @@ impl Session {
         });
 
         // 读泵：游离线程阻塞读，字节块过通道交异步侧切帧路由
-        let pending_r = self.pending.clone();
-        let events_r = self.events.clone();
-        let seq_r = self.next_seq.clone();
-        let dialog_r = self.pending_dialog.clone();
-        let gens_r = self.doc_gens.clone();
-        let children_r = self.child_sessions.clone();
+        let shared_r = RouteShared {
+            pending: self.pending.clone(),
+            events: self.events.clone(),
+            next_seq: self.next_seq.clone(),
+            dialog: self.pending_dialog.clone(),
+            gens: self.doc_gens.clone(),
+            children: self.child_sessions.clone(),
+            pending_children: self.pending_children.clone(),
+        };
         let flag = self.connected.clone();
         let epoch = self.conn_epoch.fetch_add(1, Ordering::Relaxed) + 1;
         let epoch_r = self.conn_epoch.clone();
@@ -433,16 +505,7 @@ impl Session {
                 while let Some(pos) = carry.iter().position(|&c| c == 0) {
                     let frame: Vec<u8> = carry.drain(..=pos).collect();
                     if let Ok(v) = serde_json::from_slice(&frame[..frame.len() - 1]) {
-                        route(
-                            v,
-                            &pending_r,
-                            &events_r,
-                            &seq_r,
-                            &dialog_r,
-                            &gens_r,
-                            &children_r,
-                        )
-                        .await;
+                        route(v, &shared_r).await;
                     }
                 }
             }
@@ -1020,26 +1083,30 @@ impl Session {
 /// 维护 [`Session::pending_dialog`]（开着对话框时 Input/evaluate 会挂起，
 /// 消费方必须能不等 CDP 就看到它）与文档代计数（#30：主框架
 /// frameNavigated 递增该 session 的代，供快照引用表做代际失效）。
-async fn route(
-    mut v: Value,
-    pending: &Arc<Mutex<HashMap<i64, oneshot::Sender<Value>>>>,
-    events: &Arc<Mutex<VecDeque<Value>>>,
-    next_seq: &AtomicI64,
-    dialog: &Arc<Mutex<Option<Value>>>,
-    gens: &Arc<Mutex<HashMap<String, u64>>>,
-    children: &Arc<Mutex<HashMap<String, String>>>,
-) {
+/// 事件路由的共享面（#60：子 session 记账把参数推到 8 个，收成一个结构体）。
+#[derive(Clone)]
+struct RouteShared {
+    pending: Arc<Mutex<HashMap<i64, oneshot::Sender<Value>>>>,
+    events: Arc<Mutex<VecDeque<Value>>>,
+    next_seq: Arc<AtomicI64>,
+    dialog: Arc<Mutex<Option<Value>>>,
+    gens: Arc<Mutex<HashMap<String, u64>>>,
+    children: Arc<Mutex<HashMap<String, String>>>,
+    pending_children: Arc<Mutex<HashSet<String>>>,
+}
+
+async fn route(mut v: Value, shared: &RouteShared) {
     if let Some(id) = v.get("id").and_then(|x| x.as_i64()) {
-        if let Some(tx) = pending.lock().await.remove(&id) {
+        if let Some(tx) = shared.pending.lock().await.remove(&id) {
             let _ = tx.send(v);
         }
     } else if v.get("method").is_some() {
         match v.get("method").and_then(|m| m.as_str()) {
             Some("Page.javascriptDialogOpening") => {
-                *dialog.lock().await = Some(v.clone());
+                *shared.dialog.lock().await = Some(v.clone());
             }
             Some("Page.javascriptDialogClosed") => {
-                *dialog.lock().await = None;
+                *shared.dialog.lock().await = None;
             }
             // #60 OOPIF auto-attach：子 session 记账（事件自身已带子
             // sessionId，后续该 session 的事件照常进缓冲）
@@ -1054,7 +1121,28 @@ async fn route(
                         == Some("iframe") =>
             {
                 let (t, c) = (tid.to_string(), sid.to_string());
-                children.lock().await.insert(t, c);
+                shared.children.lock().await.insert(t, c);
+            }
+            // #60：OOPIF 目标出现即记账（本机 Chrome 只从 targetCreated 拿得到，
+            // auto-attach 不产 iframe 型 attachedToTarget）；实际附着由
+            // sync_child_sessions 显式做
+            Some("Target.targetCreated") | Some("Target.targetInfoChanged")
+                if v.pointer("/params/targetInfo/type").and_then(Value::as_str)
+                    == Some("iframe") =>
+            {
+                if let Some(tid) = v
+                    .pointer("/params/targetInfo/targetId")
+                    .and_then(Value::as_str)
+                {
+                    shared.pending_children.lock().await.insert(tid.to_string());
+                }
+            }
+            // #60：子目标销毁即摘账（按 sessionId 反查 targetId）
+            Some("Target.detachedFromTarget") => {
+                if let Some(sid) = v.pointer("/params/sessionId").and_then(Value::as_str) {
+                    let mut kids = shared.children.lock().await;
+                    kids.retain(|_, s| s != sid);
+                }
             }
             // 主框架导航（frame 无 parentId）递增该 session 的文档代（#30）：
             // 主文档被换，旧 backendNodeId 全体作废；iframe 导航（有
@@ -1067,15 +1155,15 @@ async fn route(
                         .is_some_and(|s| !s.is_empty()) =>
             {
                 let sid = v["sessionId"].as_str().unwrap_or_default().to_string();
-                *gens.lock().await.entry(sid).or_insert(0u64) += 1;
+                *shared.gens.lock().await.entry(sid).or_insert(0u64) += 1;
             }
             _ => {}
         }
-        let seq = next_seq.fetch_add(1, Ordering::Relaxed);
+        let seq = shared.next_seq.fetch_add(1, Ordering::Relaxed);
         if let Value::Object(map) = &mut v {
             map.insert("seq".into(), json!(seq));
         }
-        let mut evs = events.lock().await;
+        let mut evs = shared.events.lock().await;
         if evs.len() >= EVENT_BUFFER_CAP {
             evs.pop_front();
         }
@@ -1579,19 +1667,17 @@ mod tests {
     #[tokio::test]
     async fn ring_buffer_caps() {
         let s = Session::new();
-        let children_t = s.child_sessions.clone();
-        let pending = Arc::new(Mutex::new(HashMap::new()));
+        let shared = RouteShared {
+            pending: Arc::new(Mutex::new(HashMap::new())),
+            events: s.events.clone(),
+            next_seq: s.next_seq.clone(),
+            dialog: s.pending_dialog.clone(),
+            gens: s.doc_gens.clone(),
+            children: s.child_sessions.clone(),
+            pending_children: s.pending_children.clone(),
+        };
         for i in 0..(EVENT_BUFFER_CAP + 10) {
-            route(
-                ev("X.y", i as f64),
-                &pending,
-                &s.events,
-                &s.next_seq,
-                &s.pending_dialog,
-                &s.doc_gens,
-                &children_t,
-            )
-            .await;
+            route(ev("X.y", i as f64), &shared).await;
         }
         let len = s.events.lock().await.len();
         assert_eq!(len, EVENT_BUFFER_CAP, "容量封顶");
@@ -1625,19 +1711,17 @@ mod tests {
     }
 
     async fn route_all(s: &Session, events: Vec<Value>) {
-        let children_t = s.child_sessions.clone();
-        let pending = Arc::new(Mutex::new(HashMap::new()));
+        let shared = RouteShared {
+            pending: Arc::new(Mutex::new(HashMap::new())),
+            events: s.events.clone(),
+            next_seq: s.next_seq.clone(),
+            dialog: s.pending_dialog.clone(),
+            gens: s.doc_gens.clone(),
+            children: s.child_sessions.clone(),
+            pending_children: s.pending_children.clone(),
+        };
         for e in events {
-            route(
-                e,
-                &pending,
-                &s.events,
-                &s.next_seq,
-                &s.pending_dialog,
-                &s.doc_gens,
-                &children_t,
-            )
-            .await;
+            route(e, &shared).await;
         }
     }
 

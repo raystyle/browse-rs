@@ -353,6 +353,11 @@
       "docs": "按 snapshot 短 ref 参数化点击（#35）：button（left/right/middle/\nback/forward）与 clickCount（2 即双击语义）；遮挡命中测试与 trusted\n派发同 [`click_ref`] 口径。\n\n# Errors\n\n同 [`click_ref`]。"
     },
     {
+      "path": "browse_core::semantic::click_ref_opts_in",
+      "kind": "function",
+      "docs": "同 [`click_ref_opts`]，但可指定归属子 session（#60 OOPIF）：跨进程节点\n的中心要在子 session 里量（顶层 session 量出来是 0 尺寸），再用父页\niframe 元素的 rect 提升到顶层视口系派发；遮挡检查在父页对 iframe 元素\n做一次（iframe 自身被盖住要能拒）。嵌套 OOPIF 只提升一层，属 v1 边界。\n\n# Errors\n\n同 [`click_ref_opts`]；OOPIF 提升链失败时给 clickAt 手点 CTA。"
+    },
+    {
       "path": "browse_core::semantic::close_tab",
       "kind": "function",
       "docs": "关 tab（缺省关当前活动 tab）；守卫层只放行本会话自建 tab，用户 tab 一律拒绝。\n\n# Errors\n\n目标不是自建 tab（守卫拦截），或 closeTarget 失败。"
@@ -388,14 +393,29 @@
       "docs": "双击短 ref 元素（#23）：press/release 两轮，clickCount 递增成双击。\n\n# Errors\n\nref 失效或元素不可见。"
     },
     {
+      "path": "browse_core::semantic::dblclick_ref_in",
+      "kind": "function",
+      "docs": "同 [`dblclick_ref`]，但可指定归属子 session（#60 OOPIF）。\n\n# Errors\n\n同 [`dblclick_ref`]。"
+    },
+    {
       "path": "browse_core::semantic::drag_ref",
       "kind": "function",
       "docs": "拖拽：源 ref 中心按下，分步移到目标 ref 中心松开（#23）。\n\n鼠标事件序列实现，覆盖 pointer/mouse 型拖拽（sortable、拖放上传区）；\n原生 HTML5 `draggable`（dragstart/dragover/drop 语义）不在序列内，\n该类页面走页面侧合成事件或 `Input.dispatchDragEvent`（待后续批）。\n\n# Errors\n\n任一 ref 失效或元素不可见。"
     },
     {
+      "path": "browse_core::semantic::drag_ref_in",
+      "kind": "function",
+      "docs": "同 [`drag_ref`]，但两端可各自指定归属子 session（#60 OOPIF）。\n\n# Errors\n\n同 [`drag_ref`]。"
+    },
+    {
       "path": "browse_core::semantic::element_rect",
       "kind": "function",
       "docs": "量元素视口矩形（#41）：滚动可见后取 rect，回 (x, y, w, h)；不可见\n返回 None（调用方决定报错或全页截）。pub 供 js_host 的元素级截图用。\n\n# Errors\n\n页内求值失败。"
+    },
+    {
+      "path": "browse_core::semantic::element_rect_in",
+      "kind": "function",
+      "docs": "同 [`element_rect`]，但可指定归属子 session（#60 OOPIF：元素在自己\n的子 session 里量，调用方再用父页 iframe rect 提升到顶层裁剪系）。\n\n# Errors\n\n同 [`element_rect`]。"
     },
     {
       "path": "browse_core::semantic::emulate",
@@ -428,6 +448,11 @@
       "docs": "按短 ref 填输入框：objectId 上 focus -> 探测控件（SELECT/readOnly 拒收\n并给 CTA）-> SelectAll+insertText（与 [`fill_input`] 同款，不发 Ctrl+A）\n-> 同一 objectId 回读严格验证。选择器会随重构漂移，backendNodeId 不会。\n\n# Errors\n\nref 失效、目标不是可填控件、回读不一致（错误附回读值）。"
     },
     {
+      "path": "browse_core::semantic::fill_ref_in",
+      "kind": "function",
+      "docs": "同 [`fill_ref`]，但可指定归属子 session（#60 OOPIF：focus、SelectAll、\ninsertText 与回读都在子 session 上做）。\n\n# Errors\n\n同 [`fill_ref`]。"
+    },
+    {
       "path": "browse_core::semantic::go_back",
       "kind": "function",
       "docs": "历史回退（#39）：`Page.getNavigationHistory` 取 currentIndex，回退 delta\n步（缺省 1，越界钳到最早条目）后 `navigateToHistoryEntry`，再等加载\n收尾。返回实跳步数与落点 url/title。\n\n# Errors\n\n历史为空；历史查询或导航失败。"
@@ -453,6 +478,11 @@
       "docs": "持久高亮覆盖层（#41）：给元素画 2px 橙框加可选编号徽标（label），不\n挡点击（pointer-events: none）；幂等（同元素重复高亮刷新框位）。清场\n走上层 highlightClear（按 data-browse-hl 属性移除）。\n\n# Errors\n\n元素不可见（量不到 rect）或求值失败。"
     },
     {
+      "path": "browse_core::semantic::highlight_in",
+      "kind": "function",
+      "docs": "同 [`highlight`]，但可指定归属子 session（#60 OOPIF：覆盖层注入到该\n子 frame 自己的文档里，与元素同坐标系，screencast 帧里可见）。\n\n# Errors\n\n同 [`highlight`]。"
+    },
+    {
       "path": "browse_core::semantic::hover_at",
       "kind": "function",
       "docs": "移动鼠标到视口坐标（#23）：触发 `:hover` 与悬停菜单的 mouseMoved。\n\n# Errors\n\n未连接或派发失败。"
@@ -461,6 +491,11 @@
       "path": "browse_core::semantic::hover_ref",
       "kind": "function",
       "docs": "悬停到短 ref 元素中心（#23）：触发 CSS `:hover` 与悬停菜单。\n\n# Errors\n\nref 失效或元素不可见。"
+    },
+    {
+      "path": "browse_core::semantic::hover_ref_in",
+      "kind": "function",
+      "docs": "同 [`hover_ref`]，但可指定归属子 session（#60 OOPIF：中心在子 session 量、\n父页 iframe rect 提升）。\n\n# Errors\n\n同 [`hover_ref`]。"
     },
     {
       "path": "browse_core::semantic::import_storage_state",
@@ -518,9 +553,19 @@
       "docs": "按短 ref 选下拉框选项：value 或可见 label 匹配，设值并派发 input+change\n（不发鼠标事件，确定性路径），回 `{value,label}`。\n\n选择器版的入口是 `fillInput` 的 SELECT CTA（指向本函数先 snapshot 取 ref）。\n\n# Errors\n\nref 失效、目标不是 `<select>`、没有匹配选项（错误附全部可选 value）。"
     },
     {
+      "path": "browse_core::semantic::select_option_in",
+      "kind": "function",
+      "docs": "同 [`select_option`]，但可指定归属子 session（#60 OOPIF）。\n\n# Errors\n\n同 [`select_option`]。"
+    },
+    {
       "path": "browse_core::semantic::set_checked",
       "kind": "function",
       "docs": "勾选/取消复选框（#39）：读元素 checked 实态，与目标态不一致才点击\n（checkRef 后必为 true，重复调用幂等）。radio 只能置 true：已选中的\nradio 再 uncheck 无意义，原样返回不点击。\n\n# Errors\n\n元素不是 checkbox/radio；元素 disabled；状态读取或点击失败。"
+    },
+    {
+      "path": "browse_core::semantic::set_checked_in",
+      "kind": "function",
+      "docs": "同 [`set_checked`]，但可指定归属子 session（#60 OOPIF）。\n\n# Errors\n\n同 [`set_checked`]。"
     },
     {
       "path": "browse_core::semantic::storage_op_pub",
@@ -536,6 +581,11 @@
       "path": "browse_core::semantic::type_ref",
       "kind": "function",
       "docs": "真实按键序列输入（#23）：focus 后逐字符 keyDown(text)+keyUp，\ncontenteditable / ProseMirror 类编辑器需要；与 insertText 模式的\n[`fill_ref`] 并存。\n\n# Errors\n\nref 失效或 focus 失败。"
+    },
+    {
+      "path": "browse_core::semantic::type_ref_in",
+      "kind": "function",
+      "docs": "同 [`type_ref`]，但可指定归属子 session（#60 OOPIF：焦点、按键序列与\n回读都在子 session 上做）。\n\n# Errors\n\n同 [`type_ref`]。"
     },
     {
       "path": "browse_core::semantic::wait_idle",

@@ -427,7 +427,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("ref", "string", false, "单元素子树（部分展开）"),
             arg!("depth", "number", false, "限深层数（可见树根为第 1 层）"),
         ],
-        description: "AX 树快照：nodes 带 role/name/value/childIds/短 ref（e1、e2…），引用表的唯一来源；url/title 走 CDP 查询面，页面主世界零写入（无注入痕）。opts（#36 捕获与检索分离）：ref 取该元素子树（snapshot(e34) 部分展开），depth 限深（大页先浅扫再部分展开省 token）；ref 只盖过滤后的可见集；pierce（#47）：同源 iframe 与 shadow DOM 内容穿透（DOM.getDocument pierce，AX 树不含它们），节点带 ref 可直接 clickRef/fillRef（跨 frame 坐标已提升）；OOPIF 跨域不覆盖（需子 session attach）；pierce 清单与 AX 投影有结构节点重复（html/body 双份，ref 各自唯一同 backendNodeId），pierce 节点的 name 取 aria-label 或 id（非可见文本），pierce 与 ref 子树组合受限（pierce 节点无 childIds）。",
+        description: "AX 树快照：nodes 带 role/name/value/childIds/短 ref（e1、e2…），引用表的唯一来源；url/title 走 CDP 查询面，页面主世界零写入（无注入痕）。opts（#36 捕获与检索分离）：ref 取该元素子树（snapshot(e34) 部分展开），depth 限深（大页先浅扫再部分展开省 token）；ref 只盖过滤后的可见集；pierce（#47/#60）：同源 iframe 与 shadow DOM 内容走 DOM.getDocument pierce，跨域 iframe（OOPIF）走子 session AX 树合并（发现加显式 attach；节点带 oopif 标与 ownerSession），都进同一 ref 表可直接 clickRef/fillRef（跨 frame 与跨 OOPIF 坐标已提升；嵌套 OOPIF 只提升一层）；pierce 清单与 AX 投影有结构节点重复（html/body 双份，ref 各自唯一同 backendNodeId），pierce 节点的 name 取 aria-label 或 id（非可见文本），pierce 与 ref 子树组合受限（pierce 节点无 childIds）。",
         example: "const s = await snapshot({depth: 2})",
     },
     CmdSpec {
@@ -871,7 +871,7 @@ pub const COMMANDS: &[CmdSpec] = &[
                 "{button:left,clickCount:1,waitNav:false,timeout:10}"
             ),
         ],
-        description: "按 snapshot 短 ref 点击：滚动可见、量中心、遮挡命中测试（被盖即拒绝并报遮挡物）、trusted 派发；opts（#35）button/clickCount 与 waitNav 可同给；opts.waitNav 链接型点击后走有界提交等待（#19）：grace 窗（2 秒或 timeout 较小者）内探到导航即等加载收尾（waitLoad.settled=nav），无导航迹象即返回（waitLoad.settled=no-nav，同文档锚点与 JS 按钮不再误等全窗），timeout 秒口径；同源 iframe 内节点坐标沿 frameElement 链提升到顶层视口系（#47）。",
+        description: "按 snapshot 短 ref 点击：滚动可见、量中心、遮挡命中测试（被盖即拒绝并报遮挡物）、trusted 派发；opts（#35）button/clickCount 与 waitNav 可同给；opts.waitNav 链接型点击后走有界提交等待（#19）：grace 窗（2 秒或 timeout 较小者）内探到导航即等加载收尾（waitLoad.settled=nav），无导航迹象即返回（waitLoad.settled=no-nav，同文档锚点与 JS 按钮不再误等全窗），timeout 秒口径；同源 iframe 内节点坐标沿 frameElement 链提升到顶层视口系（#47），OOPIF（跨域 iframe）内节点在子 session 量中心后用父页 iframe rect 提升（#60，嵌套 OOPIF 只提升一层）。",
         example: "await clickRef(\"e3\", {waitNav: true})",
     },
     CmdSpec {
@@ -888,7 +888,7 @@ pub const COMMANDS: &[CmdSpec] = &[
                 "false（true 或 {submit:true} 填完顺带 Enter）"
             ),
         ],
-        description: "按 ref 填输入框：objectId focus、SelectAll+insertText、同节点回读严格验证；submit 填完顺带 Enter（#39）；提交若触发导航或对话框，后续用 goto()/waitLoad() 收尾或先 dialogStatus()。",
+        description: "按 ref 填输入框：objectId focus、SelectAll+insertText、同节点回读严格验证（OOPIF 内节点全程走子 session，#60）；submit 填完顺带 Enter（#39）；提交若触发导航或对话框，后续用 goto()/waitLoad() 收尾或先 dialogStatus()。",
         example: "await fillRef(\"e2\", \"hello\", true)",
     },
     CmdSpec {

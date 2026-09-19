@@ -17,6 +17,7 @@
 - `click_at_opts` — clickAt 的参数化半边（#35）：button（left/right/middle/back/forward）
 - `click_ref` — 按短 ref 点击：滚动可见 -> 量视口中心 -> **遮挡命中测试** -> 复用
 - `click_ref_opts` — 按 snapshot 短 ref 参数化点击（#35）：button（left/right/middle/
+- `click_ref_opts_in` — 同 [`click_ref_opts`]，但可指定归属子 session（#60 OOPIF）：跨进程节点
 - `close_tab` — 关 tab（缺省关当前活动 tab）；守卫层只放行本会话自建 tab，用户 tab 一律拒绝。
 - `cookie_delete` — 删单条 cookie（#42）：`Network.deleteCookies`（CDP 无单数形，按 name 加域删全部匹配），缺省
 - `cookie_set` — 写单条 cookie（#42）：`Network.setCookie`。`opts` 可带 domain（缺省用
@@ -24,21 +25,27 @@
 - `cookies_clear` — 清空浏览器全部 cookie（#42）：`Network.clearBrowserCookies`（对照
 - `current_tab` — 当前活动 tab 简表 `{targetId,title,url}`；无活动 tab 返回 `null`。
 - `dblclick_ref` — 双击短 ref 元素（#23）：press/release 两轮，clickCount 递增成双击。
+- `dblclick_ref_in` — 同 [`dblclick_ref`]，但可指定归属子 session（#60 OOPIF）。
 - `drag_ref` — 拖拽：源 ref 中心按下，分步移到目标 ref 中心松开（#23）。
+- `drag_ref_in` — 同 [`drag_ref`]，但两端可各自指定归属子 session（#60 OOPIF）。
 - `element_rect` — 量元素视口矩形（#41）：滚动可见后取 rect，回 (x, y, w, h)；不可见
+- `element_rect_in` — 同 [`element_rect`]，但可指定归属子 session（#60 OOPIF：元素在自己
 - `emulate` — 视口与 UA 仿真档位（#24）：`{viewport:{width,height}, mobile, userAgent,
 - `emulate_media` — a11y 媒质仿真族（#40）：`Emulation.setEmulatedMedia` 的 features 面。
 - `emulate_media_clear` — 还原媒质仿真（#40）：`Emulation.setEmulatedMedia` 空参，五特征与媒质
 - `export_storage_state` — 导出会话态（#25.3）：cookies 全量加当前页 origin 的 localStorage。
 - `fill_input` — 按 CSS 选择器填输入框：focus -> 全选（commands，不发 Ctrl+A）-> 可选
 - `fill_ref` — 按短 ref 填输入框：objectId 上 focus -> 探测控件（SELECT/readOnly 拒收
+- `fill_ref_in` — 同 [`fill_ref`]，但可指定归属子 session（#60 OOPIF：focus、SelectAll、
 - `go_back` — 历史回退（#39）：`Page.getNavigationHistory` 取 currentIndex，回退 delta
 - `go_forward` — 历史前进（#39）：同 [`go_back`] 方向相反，钳到最新条目。
 - `goto` — 一步导航（#19）：`Page.navigate` 加 waitLoad 一体收尾，可选再等网络静默，
 - `grant_permissions` — 开关级权限自动授予（#28）：`Browser.grantPermissions`，permissions 是
 - `highlight` — 持久高亮覆盖层（#41）：给元素画 2px 橙框加可选编号徽标（label），不
+- `highlight_in` — 同 [`highlight`]，但可指定归属子 session（#60 OOPIF：覆盖层注入到该
 - `hover_at` — 移动鼠标到视口坐标（#23）：触发 `:hover` 与悬停菜单的 mouseMoved。
 - `hover_ref` — 悬停到短 ref 元素中心（#23）：触发 CSS `:hover` 与悬停菜单。
+- `hover_ref_in` — 同 [`hover_ref`]，但可指定归属子 session（#60 OOPIF：中心在子 session 量、
 - `import_storage_state` — 导入会话态（#25.3）：吃 [`export_storage_state`] 的返回值或其落盘
 - `key_raw` — 裸按键事件（#23）：keydown / keyup 按住语义（无 text，不发组合成键）。
 - `mouse_down` — 按下不释放（#35）：拖拽与长按语义的半边。
@@ -50,10 +57,13 @@
 - `press_key` — 用 `Input.dispatchKeyEvent` keyDown(+text)+keyUp 按一个键；Enter 的
 - `reload` — 刷新当前页（#39）：`Page.reload`（可带 ignoreCache）后等加载收尾。
 - `select_option` — 按短 ref 选下拉框选项：value 或可见 label 匹配，设值并派发 input+change
+- `select_option_in` — 同 [`select_option`]，但可指定归属子 session（#60 OOPIF）。
 - `set_checked` — 勾选/取消复选框（#39）：读元素 checked 实态，与目标态不一致才点击
+- `set_checked_in` — 同 [`set_checked`]，但可指定归属子 session（#60 OOPIF）。
 - `storage_op_pub` — Web Storage 逐键 CRUD 的统一执行面（#42）：`which` 是 localStorage 或
 - `switch_tab` — 切换活动路由到既有 tab（不改 Chrome 可见前景），返回该 tab 简表。
 - `type_ref` — 真实按键序列输入（#23）：focus 后逐字符 keyDown(text)+keyUp，
+- `type_ref_in` — 同 [`type_ref`]，但可指定归属子 session（#60 OOPIF：焦点、按键序列与
 - `wait_idle` — 等 network 静默：从调用时刻起观察 `Network.requestWillBeSent` 与
 - `wait_load` — 等页面 load 完成：先宽容地等一次 frameNavigated（导航可能已完成，
 - `wait_settled` — 等导航落定（评审二轮 F4）：reload、历史跳、点击后导航的通用收尾。

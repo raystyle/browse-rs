@@ -194,7 +194,16 @@ pub(crate) enum RouteAction {
 struct RefTable {
     session_id: String,
     generation: u64,
-    map: HashMap<String, i64>,
+    map: HashMap<String, RefEntry>,
+}
+
+/// 一条 ref 的落点（#60）：backendNodeId 加可选的「归属子 session」——
+/// OOPIF 节点的 backendNodeId 只在它自己的子 session 里有意义（量布局、
+/// 填值都要回到那条 session 上做），None 表示顶层活动 session。
+#[derive(Clone)]
+struct RefEntry {
+    backend_node_id: i64,
+    session: Option<String>,
 }
 
 impl JsHost {
@@ -960,9 +969,25 @@ impl JsHost {
                     .cloned()
                     .unwrap_or(json!({}));
                 let elem_rect = if let Some(rf) = opts_pre.get("ref").and_then(Value::as_str) {
-                    let bn = self.lookup_ref(rf).await?;
-                    let object_id = crate::semantic::resolve_node_object(&self.session, bn).await?;
-                    crate::semantic::element_rect(&self.session, &object_id).await?
+                    let (bn, owner) = self.lookup_ref_owner(rf).await?;
+                    let object_id = crate::semantic::resolve_node_object_in(
+                        &self.session,
+                        owner.as_deref(),
+                        bn,
+                    )
+                    .await?;
+                    let rect = crate::semantic::element_rect_in(
+                        &self.session,
+                        &object_id,
+                        owner.as_deref(),
+                    )
+                    .await?;
+                    if let (Some((x, y, w, h)), Some(child)) = (rect, owner.as_deref()) {
+                        let (ox, oy) = crate::semantic::oopif_offset(&self.session, child).await?;
+                        Some((x + ox, y + oy, w, h))
+                    } else {
+                        rect
+                    }
                 } else {
                     None
                 };
@@ -1071,8 +1096,10 @@ impl JsHost {
                         nodes.extend(extra);
                     }
                     // #60 OOPIF：跨域 iframe 走子 session AX 树（DOM
-                    // pierce 不含跨域 contentDocument），每个子 session
-                    // 各拉一次 getFullAXTree 投影进同一 ref 表
+                    // pierce 不含跨域 contentDocument）；先同步一次子 session
+                    // 表（本机 Chrome 的 setAutoAttach 不产 iframe 型事件，
+                    // 只能扫 Target.getTargets 显式 attach）
+                    let _ = self.session.sync_child_sessions().await;
                     let children = self.session.child_sessions().await;
                     for (tid, sid) in children {
                         if let Ok(r) = self
@@ -1110,6 +1137,7 @@ impl JsHost {
                                         "role": role,
                                         "name": name,
                                         "frameId": tid,
+                                        "ownerSession": sid,
                                         "value": n.get("value").and_then(|v| v.get("value")),
                                         "backendNodeId": bn,
                                         "oopif": true,
@@ -1228,7 +1256,17 @@ impl JsHost {
                         if let Value::Object(m) = &mut n {
                             m.insert("ref".into(), json!(r));
                         }
-                        refmap.insert(r, bn);
+                        let owner = n
+                            .get("ownerSession")
+                            .and_then(Value::as_str)
+                            .map(str::to_string);
+                        refmap.insert(
+                            r,
+                            RefEntry {
+                                backend_node_id: bn,
+                                session: owner,
+                            },
+                        );
                         Some(n)
                     })
                     .collect();
@@ -1474,7 +1512,17 @@ impl JsHost {
                             .get("id")
                             .and_then(Value::as_i64)
                             .is_some_and(|i| hit_ids.contains(&i));
-                        refmap.insert(r.clone(), bn);
+                        let owner = n
+                            .get("ownerSession")
+                            .and_then(Value::as_str)
+                            .map(str::to_string);
+                        refmap.insert(
+                            r.clone(),
+                            RefEntry {
+                                backend_node_id: bn,
+                                session: owner,
+                            },
+                        );
                         Some(json!({
                             "ref": r, "hit": hit,
                             "id": n.get("id"), "role": n.get("role"),
@@ -1735,13 +1783,26 @@ impl JsHost {
                         missing.join(", ")
                     );
                 }
-                let bn = self.lookup_ref(r).await?;
-                self.session
-                    .call(
-                        "DOM.setFileInputFiles",
-                        json!({ "files": files, "backendNodeId": bn }),
-                    )
-                    .await?;
+                let (bn, owner) = self.lookup_ref_owner(r).await?;
+                match owner.as_deref() {
+                    Some(sid) => {
+                        self.session
+                            .call_on(
+                                "DOM.setFileInputFiles",
+                                json!({ "files": files, "backendNodeId": bn }),
+                                sid,
+                            )
+                            .await?
+                    }
+                    None => {
+                        self.session
+                            .call(
+                                "DOM.setFileInputFiles",
+                                json!({ "files": files, "backendNodeId": bn }),
+                            )
+                            .await?
+                    }
+                };
                 Ok(json!(true))
             }
             // ---- 下载捕获（#38）----
@@ -1860,8 +1921,9 @@ impl JsHost {
                     .get("label")
                     .and_then(Value::as_str)
                     .map(str::to_string);
-                let bn = self.lookup_ref(r).await?;
-                crate::semantic::highlight(&self.session, bn, label.as_deref()).await
+                let (bn, owner) = self.lookup_ref_owner(r).await?;
+                crate::semantic::highlight_in(&self.session, bn, label.as_deref(), owner.as_deref())
+                    .await
             }
             "highlightClear" => {
                 self.session
@@ -1903,7 +1965,7 @@ impl JsHost {
                             );
                         }
                     };
-                    let bn = match self.lookup_ref(r).await {
+                    let (bn, owner) = match self.lookup_ref_owner(r).await {
                         Ok(bn) => bn,
                         Err(e) => {
                             self.highlight_clear_quiet().await;
@@ -1914,7 +1976,10 @@ impl JsHost {
                             );
                         }
                     };
-                    if let Err(e) = crate::semantic::highlight(&self.session, bn, Some(r)).await {
+                    if let Err(e) =
+                        crate::semantic::highlight_in(&self.session, bn, Some(r), owner.as_deref())
+                            .await
+                    {
                         self.highlight_clear_quiet().await;
                         bail!(
                             "annotate 第 {} 项 {r} 画框失败：{e:#}；已画 {} 项已清场",
@@ -2200,8 +2265,8 @@ impl JsHost {
             "hoverRef" => {
                 let r = str_arg(argv, 0, "hoverRef 的 ref")?;
                 self.assert_no_dialog().await?;
-                let bn = self.lookup_ref(r).await?;
-                crate::semantic::hover_ref(&self.session, bn).await
+                let (bn, owner) = self.lookup_ref_owner(r).await?;
+                crate::semantic::hover_ref_in(&self.session, bn, owner.as_deref()).await
             }
             "hoverAt" => {
                 let x = int_arg(argv, 0, "hoverAt 的 x")?;
@@ -2212,16 +2277,23 @@ impl JsHost {
             "dblclickRef" => {
                 let r = str_arg(argv, 0, "dblclickRef 的 ref")?;
                 self.assert_no_dialog().await?;
-                let bn = self.lookup_ref(r).await?;
-                crate::semantic::dblclick_ref(&self.session, bn).await
+                let (bn, owner) = self.lookup_ref_owner(r).await?;
+                crate::semantic::dblclick_ref_in(&self.session, bn, owner.as_deref()).await
             }
             "dragRef" => {
                 let src = str_arg(argv, 0, "dragRef 的源 ref")?;
                 let dst = str_arg(argv, 1, "dragRef 的目标 ref")?;
                 self.assert_no_dialog().await?;
-                let sb = self.lookup_ref(src).await?;
-                let db = self.lookup_ref(dst).await?;
-                crate::semantic::drag_ref(&self.session, sb, db).await
+                let (sb, sowner) = self.lookup_ref_owner(src).await?;
+                let (db, downer) = self.lookup_ref_owner(dst).await?;
+                crate::semantic::drag_ref_in(
+                    &self.session,
+                    sb,
+                    db,
+                    sowner.as_deref(),
+                    downer.as_deref(),
+                )
+                .await
             }
             "keydown" => {
                 let k = str_arg(argv, 0, "keydown 的键")?;
@@ -2236,8 +2308,8 @@ impl JsHost {
                 let r = str_arg(argv, 0, "typeRef 的 ref")?;
                 let text = str_arg(argv, 1, "typeRef 的文本")?;
                 self.assert_no_dialog().await?;
-                let bn = self.lookup_ref(r).await?;
-                crate::semantic::type_ref(&self.session, bn, text).await
+                let (bn, owner) = self.lookup_ref_owner(r).await?;
+                crate::semantic::type_ref_in(&self.session, bn, text, owner.as_deref()).await
             }
             "emulate" => {
                 let opts = argv.first().cloned().ok_or_else(|| anyhow!(
@@ -2309,7 +2381,7 @@ impl JsHost {
                     "clickRef 缺 ref；下一步：clickRef(\"e3\")，ref 在最近一次 snapshot() 返回的 nodes[].ref"
                 ))?;
                 self.assert_no_dialog().await?;
-                let bn = self.lookup_ref(r).await?;
+                let (bn, owner) = self.lookup_ref_owner(r).await?;
                 let opts = argv.get(1).cloned().unwrap_or(json!({}));
                 // 点击可能触发用户侧导航（无提交屏障背书）：点前记事件水位
                 // 供 waitNav 的有界提交等待（评审二轮 F4）
@@ -2320,9 +2392,14 @@ impl JsHost {
                     .unwrap_or("left")
                     .to_string();
                 let click_count = opts.get("clickCount").and_then(Value::as_i64).unwrap_or(1);
-                let mut out =
-                    crate::semantic::click_ref_opts(&self.session, bn, &button, click_count)
-                        .await?;
+                let mut out = crate::semantic::click_ref_opts_in(
+                    &self.session,
+                    bn,
+                    owner.as_deref(),
+                    &button,
+                    click_count,
+                )
+                .await?;
                 // waitNav（#19）：链接型点击后自动等导航稳定，免点击加
                 // waitLoad 两步；同文档锚点与纯 JS 按钮等已加载页 grace 窗
                 // 后返回。clickRef 基础回执是裸 true（布尔面），waitNav 在位
@@ -2357,8 +2434,9 @@ impl JsHost {
                 ))?;
                 let text = argv.get(1).and_then(Value::as_str).unwrap_or("");
                 self.assert_no_dialog().await?;
-                let bn = self.lookup_ref(r).await?;
-                let out = crate::semantic::fill_ref(&self.session, bn, text).await?;
+                let (bn, owner) = self.lookup_ref_owner(r).await?;
+                let out =
+                    crate::semantic::fill_ref_in(&self.session, bn, text, owner.as_deref()).await?;
                 // submit（#39）：填完顺带 Enter；返回值保持回读串契约不变，
                 // 提交副作用由页内可观察
                 if submit_arg(argv.get(2)) {
@@ -2374,8 +2452,8 @@ impl JsHost {
                     "selectOption 缺选项值；下一步：selectOption(\"e4\", \"Beta\")（第二参是 value 或可见 label）"
                 ))?;
                 self.assert_no_dialog().await?;
-                let bn = self.lookup_ref(r).await?;
-                crate::semantic::select_option(&self.session, bn, value).await
+                let (bn, owner) = self.lookup_ref_owner(r).await?;
+                crate::semantic::select_option_in(&self.session, bn, value, owner.as_deref()).await
             }
             // 防呆勾选动词（#39）：checkRef 后必为 true，幂等
             name @ ("checkRef" | "uncheckRef") => {
@@ -2384,8 +2462,8 @@ impl JsHost {
                     "{name} 缺 ref；下一步：{name}(\"e5\")（checkbox/radio 的 ref，来自 snapshot()）"
                 ))?;
                 self.assert_no_dialog().await?;
-                let bn = self.lookup_ref(r).await?;
-                crate::semantic::set_checked(&self.session, bn, want).await
+                let (bn, owner) = self.lookup_ref_owner(r).await?;
+                crate::semantic::set_checked_in(&self.session, bn, want, owner.as_deref()).await
             }
             // ---- 对话框（吸收 agent-browser 语义）----
             "dialogStatus" => match self.session.pending_dialog().await {
@@ -2619,7 +2697,7 @@ impl JsHost {
                 "还没有元素引用（引用表来自 snapshot()）；下一步：先 await snapshot()，用返回里 nodes[].ref"
             );
         };
-        let Some(bn) = t.map.get(r).copied() else {
+        let Some(bn) = t.map.get(r).map(|e| e.backend_node_id) else {
             bail!(
                 "未知 ref {r}（引用表只保留最近一次 snapshot()）；下一步：先 await snapshot()，用返回里 nodes[].ref"
             );
@@ -2639,6 +2717,35 @@ impl JsHost {
             );
         }
         Ok(bn)
+    }
+
+    /// 同 [`JsHost::lookup_ref`]，但把「归属子 session」一并带出（#60）：
+    /// OOPIF 节点要在自己的子 session 上量布局/填值，调用方据此选通道。
+    async fn lookup_ref_owner(&self, r: &str) -> Result<(i64, Option<String>)> {
+        let table = self.refs.lock().await.clone();
+        let Some(t) = table else {
+            bail!(
+                "还没有元素引用（引用表来自 snapshot()）；下一步：先 await snapshot()，用返回里 nodes[].ref"
+            );
+        };
+        let Some(e) = t.map.get(r).cloned() else {
+            bail!(
+                "未知 ref {r}（引用表只保留最近一次 snapshot()）；下一步：先 await snapshot()，用返回里 nodes[].ref"
+            );
+        };
+        let cur = self.session.get_active_session().await;
+        let fresh = match cur.as_deref() {
+            Some(sid) if sid == t.session_id => {
+                self.session.doc_generation(sid).await == t.generation
+            }
+            _ => false,
+        };
+        if !fresh {
+            bail!(
+                "ref 已过期（换过 tab 或页面文档已换代，旧 ref 全体作废）；下一步：重新 await snapshot() 取新 ref"
+            );
+        }
+        Ok((e.backend_node_id, e.session.clone()))
     }
 
     /// 活动页的 url/title（#30 消注入痕）：主源 `Target.getTargetInfo`
@@ -2897,6 +3004,11 @@ fn spawn_dialog_watcher(
                 seen_epoch = epoch;
                 init_script_ids.lock().await.clear();
                 enabled.clear();
+            }
+            // #60：OOPIF 目标出现（targetCreated 记账）即显式附着成子
+            // session；无待附着时不打 CDP（廉价触发）
+            if session.has_pending_children().await {
+                let _ = session.sync_child_sessions().await;
             }
             // 活动路由换 session 后补开域（幂等）
             if let Some(sid) = session.get_active_session().await
@@ -3186,16 +3298,15 @@ pub(crate) async fn ensure_page_enabled(session: &Session, sid: &str) {
     // Network。幂等；晚开域之前的旧事件收不到（自开域后起算）
     let _ = session.call_on("Runtime.enable", json!({}), sid).await;
     let _ = session.call_on("Network.enable", json!({}), sid).await;
-    // #60 OOPIF auto-attach：跨域 iframe 自附着成子 session（幂等），
-    // snapshot pierce 时按子 session 拉各自 AX 树
+    // #60 OOPIF：setAutoAttach 只当补充（本机 Chrome 实测不产 iframe 型
+    // 事件），真正的发现在 setDiscoverTargets + sync_child_sessions：
+    // 跨域 iframe 目标出现即记账（route 里 Target.targetCreated），这里与
+    // pierce 时再显式 attach 一遍
+    let _ = session.enable_auto_attach().await;
     let _ = session
-        .call(
-            "Target.setAutoAttach",
-            json!({
-                "autoAttach": true, "waitForDebuggerOnStart": false, "flatten": true
-            }),
-        )
+        .call("Target.setDiscoverTargets", json!({ "discover": true }))
         .await;
+    let _ = session.sync_child_sessions().await;
     // #38 下载捕获：落盘到状态目录 downloads 子目录并开事件（browser 级
     // 幂等）
     let _ = session

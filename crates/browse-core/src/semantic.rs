@@ -563,22 +563,37 @@ pub async fn storage_op_pub(
 ///
 /// 元素不是 checkbox/radio；元素 disabled；状态读取或点击失败。
 pub async fn set_checked(s: &Session, backend_node_id: i64, checked: bool) -> Result<Value> {
-    let object_id = resolve_node_object(s, backend_node_id).await?;
-    let r = s
-        .call(
-            "Runtime.callFunctionOn",
-            json!({
-                "objectId": object_id,
-                "functionDeclaration": r#"function(){ return {
+    set_checked_in(s, backend_node_id, checked, None).await
+}
+
+/// 同 [`set_checked`]，但可指定归属子 session（#60 OOPIF）。
+///
+/// # Errors
+///
+/// 同 [`set_checked`]。
+pub async fn set_checked_in(
+    s: &Session,
+    backend_node_id: i64,
+    checked: bool,
+    sid: Option<&str>,
+) -> Result<Value> {
+    let object_id = resolve_node_object_in(s, sid, backend_node_id).await?;
+    let r = call_in(
+        s,
+        sid,
+        "Runtime.callFunctionOn",
+        json!({
+            "objectId": object_id,
+            "functionDeclaration": r#"function(){ return {
                     tag: this.tagName,
                     type: (this.type || ''),
                     checked: !!this.checked,
                     enabled: !this.disabled
                 }; }"#,
-                "returnByValue": true
-            }),
-        )
-        .await?;
+            "returnByValue": true
+        }),
+    )
+    .await?;
     let st = r.pointer("/result/value").cloned().unwrap_or(Value::Null);
     let tag = st
         .get("tag")
@@ -598,7 +613,7 @@ pub async fn set_checked(s: &Session, backend_node_id: i64, checked: bool) -> Re
     if cur == checked || (ty == "radio" && cur) {
         return Ok(json!({ "checked": cur, "clicked": false }));
     }
-    click_ref(s, backend_node_id).await?;
+    click_ref_opts_in(s, backend_node_id, sid, "left", 1).await?;
     Ok(json!({ "checked": checked, "clicked": true }))
 }
 
@@ -651,21 +666,36 @@ static LAST_MOUSE: std::sync::Mutex<Option<(i64, i64)>> = std::sync::Mutex::new(
 ///
 /// 页内求值失败。
 pub async fn element_rect(s: &Session, object_id: &str) -> Result<Option<(f64, f64, f64, f64)>> {
-    let r = s
-        .call(
-            "Runtime.callFunctionOn",
-            json!({
-                "objectId": object_id,
-                "functionDeclaration": r#"function(){
+    element_rect_in(s, object_id, None).await
+}
+
+/// 同 [`element_rect`]，但可指定归属子 session（#60 OOPIF：元素在自己
+/// 的子 session 里量，调用方再用父页 iframe rect 提升到顶层裁剪系）。
+///
+/// # Errors
+///
+/// 同 [`element_rect`]。
+pub async fn element_rect_in(
+    s: &Session,
+    object_id: &str,
+    sid: Option<&str>,
+) -> Result<Option<(f64, f64, f64, f64)>> {
+    let r = call_in(
+        s,
+        sid,
+        "Runtime.callFunctionOn",
+        json!({
+            "objectId": object_id,
+            "functionDeclaration": r#"function(){
                     this.scrollIntoView({block: 'center'});
                     const r = this.getBoundingClientRect();
                     if (!this.isConnected || (!r.width && !r.height)) return null;
                     return JSON.stringify({x: r.x, y: r.y, w: r.width, h: r.height});
                 }"#,
-                "returnByValue": true
-            }),
-        )
-        .await?;
+            "returnByValue": true
+        }),
+    )
+    .await?;
     let v = r
         .pointer("/result/value")
         .and_then(Value::as_str)
@@ -688,9 +718,26 @@ pub async fn element_rect(s: &Session, object_id: &str) -> Result<Option<(f64, f
 ///
 /// 元素不可见（量不到 rect）或求值失败。
 pub async fn highlight(s: &Session, backend_node_id: i64, label: Option<&str>) -> Result<Value> {
-    let object_id = resolve_node_object(s, backend_node_id).await?;
-    let r = s
-        .call(
+    highlight_in(s, backend_node_id, label, None).await
+}
+
+/// 同 [`highlight`]，但可指定归属子 session（#60 OOPIF：覆盖层注入到该
+/// 子 frame 自己的文档里，与元素同坐标系，screencast 帧里可见）。
+///
+/// # Errors
+///
+/// 同 [`highlight`]。
+pub async fn highlight_in(
+    s: &Session,
+    backend_node_id: i64,
+    label: Option<&str>,
+    sid: Option<&str>,
+) -> Result<Value> {
+    let object_id = resolve_node_object_in(s, sid, backend_node_id).await?;
+    let r = call_in(
+        s,
+        sid,
+
             "Runtime.callFunctionOn",
             json!({
                 "objectId": object_id,
@@ -1075,8 +1122,123 @@ pub async fn hover_at(s: &Session, x: i64, y: i64) -> Result<Value> {
 
 /// 量元素视口中心（#23）：scrollIntoView 后取 rect 中心；不可见即报
 /// （CTA 同 clickRef 口径）。
-async fn node_center(s: &Session, backend_node_id: i64) -> Result<(f64, f64)> {
-    let object_id = resolve_node_object(s, backend_node_id).await?;
+/// 按 ref 归属选通道（#60）：`Some(sid)` 是 OOPIF 子 session，`None` 是
+/// 活动 session（同源路径）。
+async fn call_in(s: &Session, sid: Option<&str>, method: &str, params: Value) -> Result<Value> {
+    match sid {
+        Some(sid) => s.call_on(method, params, sid).await,
+        None => s.call(method, params).await,
+    }
+}
+
+/// OOPIF 子 frame 在父页视口里的偏移（#60）：子 session 的主 frameId 拿去
+/// 父页问 `DOM.getFrameOwner`（实测跨 OOPIF 可用），再量该 iframe 元素的
+/// `getBoundingClientRect`。嵌套 OOPIF（OOPIF 里再套 OOPIF）只提升一层，
+/// 属 v1 边界。
+pub(crate) async fn oopif_offset(s: &Session, child_sid: &str) -> Result<(f64, f64)> {
+    oopif_frame_offset(s, child_sid).await
+}
+
+/// 内部实现见 [`oopif_offset`]（crate 内给元素级截图做父页提升）。
+async fn oopif_frame_offset(s: &Session, child_sid: &str) -> Result<(f64, f64)> {
+    let (x, y, _) = oopif_frame_anchor(s, child_sid).await?;
+    Ok((x, y))
+}
+
+/// OOPIF 子 frame 的父页锚点（#60）：(offsetX, offsetY, owner 元素 objectId)。
+/// owner objectId 供「父页遮挡检查」复用（iframe 被父页某层盖住时要能判出来）。
+async fn oopif_frame_anchor(s: &Session, child_sid: &str) -> Result<(f64, f64, String)> {
+    let ft = call_in(s, Some(child_sid), "Page.getFrameTree", json!({})).await?;
+    let fid = ft
+        .pointer("/frameTree/frame/id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("OOPIF 子 session 取不到 frameId（Page.getFrameTree 形状变了？）"))?
+        .to_string();
+    let owner = s
+        .call("DOM.getFrameOwner", json!({ "frameId": fid }))
+        .await?;
+    let bn = owner
+        .get("backendNodeId")
+        .and_then(Value::as_i64)
+        .ok_or_else(|| {
+            anyhow!("父页找不到该 OOPIF 的 owner 元素（DOM.getFrameOwner 无 backendNodeId）；下一步：改用 clickAt 手点顶层坐标")
+        })?;
+    let rn = s
+        .call("DOM.resolveNode", json!({ "backendNodeId": bn }))
+        .await?;
+    let oid = rn
+        .pointer("/object/objectId")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            anyhow!("OOPIF owner 元素解析不出 objectId；下一步：改用 clickAt 手点顶层坐标")
+        })?
+        .to_string();
+    let r = s
+        .call(
+            "Runtime.callFunctionOn",
+            json!({
+                "objectId": oid.clone(),
+                "functionDeclaration": "function(){ const r = this.getBoundingClientRect(); return JSON.stringify({x: r.x, y: r.y}) }",
+                "returnByValue": true
+            }),
+        )
+        .await?;
+    let v = r
+        .pointer("/result/value")
+        .and_then(Value::as_str)
+        .and_then(|t| serde_json::from_str::<Value>(t).ok())
+        .unwrap_or(json!({}));
+    Ok((
+        v.get("x").and_then(Value::as_f64).unwrap_or(0.0),
+        v.get("y").and_then(Value::as_f64).unwrap_or(0.0),
+        oid,
+    ))
+}
+
+/// 量元素中心（#60 带归属版本）：`sid` 给定时在该子 session 里量（OOPIF 的
+/// 布局只有它自己的 session 量得准），再用父页 iframe 元素的 rect 提升到
+/// 顶层视口系；`None` 时是原同源路径（frameElement 链提升）。
+///
+/// # Errors
+///
+/// ref 失效、元素不可见、缩放 iframe（坐标提升不换算缩放）、OOPIF 提升链失败。
+async fn node_center_in(
+    s: &Session,
+    sid: Option<&str>,
+    backend_node_id: i64,
+) -> Result<(f64, f64)> {
+    if let Some(child) = sid {
+        let object_id = resolve_node_object_in(s, Some(child), backend_node_id).await?;
+        let r = call_in(
+            s,
+            Some(child),
+            "Runtime.callFunctionOn",
+            json!({
+                "objectId": object_id,
+                "functionDeclaration": r#"function(){
+                    this.scrollIntoView({block:'center'});
+                    const r = this.getBoundingClientRect();
+                    if (!this.isConnected || (!r.width && !r.height)) return null;
+                    return JSON.stringify({x: r.x + r.width/2, y: r.y + r.height/2});
+                }"#,
+                "returnByValue": true
+            }),
+        )
+        .await?;
+        let p = r
+            .pointer("/result/value")
+            .and_then(Value::as_str)
+            .and_then(|t| serde_json::from_str::<Value>(t).ok())
+            .ok_or_else(|| {
+                anyhow!("OOPIF 内元素量不到中心（不可见或已失效）；下一步：重新 await snapshot({{pierce:true}}) 取新 ref")
+            })?;
+        let (ox, oy) = oopif_frame_offset(s, child).await?;
+        return Ok((
+            p.get("x").and_then(Value::as_f64).unwrap_or(0.0) + ox,
+            p.get("y").and_then(Value::as_f64).unwrap_or(0.0) + oy,
+        ));
+    }
+    let object_id = resolve_node_object_in(s, None, backend_node_id).await?;
     let r = s
         .call(
             "Runtime.callFunctionOn",
@@ -1134,7 +1296,17 @@ async fn node_center(s: &Session, backend_node_id: i64) -> Result<(f64, f64)> {
 ///
 /// ref 失效或元素不可见。
 pub async fn hover_ref(s: &Session, backend_node_id: i64) -> Result<Value> {
-    let (x, y) = node_center(s, backend_node_id).await?;
+    hover_ref_in(s, backend_node_id, None).await
+}
+
+/// 同 [`hover_ref`]，但可指定归属子 session（#60 OOPIF：中心在子 session 量、
+/// 父页 iframe rect 提升）。
+///
+/// # Errors
+///
+/// 同 [`hover_ref`]。
+pub async fn hover_ref_in(s: &Session, backend_node_id: i64, sid: Option<&str>) -> Result<Value> {
+    let (x, y) = node_center_in(s, sid, backend_node_id).await?;
     hover_at(s, x.round() as i64, y.round() as i64).await
 }
 
@@ -1144,7 +1316,20 @@ pub async fn hover_ref(s: &Session, backend_node_id: i64) -> Result<Value> {
 ///
 /// ref 失效或元素不可见。
 pub async fn dblclick_ref(s: &Session, backend_node_id: i64) -> Result<Value> {
-    let (x, y) = node_center(s, backend_node_id).await?;
+    dblclick_ref_in(s, backend_node_id, None).await
+}
+
+/// 同 [`dblclick_ref`]，但可指定归属子 session（#60 OOPIF）。
+///
+/// # Errors
+///
+/// 同 [`dblclick_ref`]。
+pub async fn dblclick_ref_in(
+    s: &Session,
+    backend_node_id: i64,
+    sid: Option<&str>,
+) -> Result<Value> {
+    let (x, y) = node_center_in(s, sid, backend_node_id).await?;
     let (x, y) = (x.round() as i64, y.round() as i64);
     dispatch_input_seq(
         s,
@@ -1181,8 +1366,23 @@ pub async fn dblclick_ref(s: &Session, backend_node_id: i64) -> Result<Value> {
 ///
 /// 任一 ref 失效或元素不可见。
 pub async fn drag_ref(s: &Session, src_bn: i64, dst_bn: i64) -> Result<Value> {
-    let (sx, sy) = node_center(s, src_bn).await?;
-    let (dx, dy) = node_center(s, dst_bn).await?;
+    drag_ref_in(s, src_bn, dst_bn, None, None).await
+}
+
+/// 同 [`drag_ref`]，但两端可各自指定归属子 session（#60 OOPIF）。
+///
+/// # Errors
+///
+/// 同 [`drag_ref`]。
+pub async fn drag_ref_in(
+    s: &Session,
+    src_bn: i64,
+    dst_bn: i64,
+    src_sid: Option<&str>,
+    dst_sid: Option<&str>,
+) -> Result<Value> {
+    let (sx, sy) = node_center_in(s, src_sid, src_bn).await?;
+    let (dx, dy) = node_center_in(s, dst_sid, dst_bn).await?;
     let (sx, sy) = (sx.round() as i64, sy.round() as i64);
     let (dx, dy) = (dx.round() as i64, dy.round() as i64);
     let mut seq = vec![
@@ -1221,9 +1421,26 @@ pub async fn drag_ref(s: &Session, src_bn: i64, dst_bn: i64) -> Result<Value> {
 ///
 /// ref 失效或 focus 失败。
 pub async fn type_ref(s: &Session, backend_node_id: i64, text: &str) -> Result<Value> {
-    let object_id = resolve_node_object(s, backend_node_id).await?;
-    let _ = s
-        .call(
+    type_ref_in(s, backend_node_id, text, None).await
+}
+
+/// 同 [`type_ref`]，但可指定归属子 session（#60 OOPIF：焦点、按键序列与
+/// 回读都在子 session 上做）。
+///
+/// # Errors
+///
+/// 同 [`type_ref`]。
+pub async fn type_ref_in(
+    s: &Session,
+    backend_node_id: i64,
+    text: &str,
+    sid: Option<&str>,
+) -> Result<Value> {
+    let object_id = resolve_node_object_in(s, sid, backend_node_id).await?;
+    let _ = call_in(
+        s,
+        sid,
+
             "Runtime.callFunctionOn",
             json!({ "objectId": object_id, "functionDeclaration": "function(){ this.focus(); }", "returnByValue": true }),
         )
@@ -1240,7 +1457,7 @@ pub async fn type_ref(s: &Session, backend_node_id: i64, text: &str) -> Result<V
             json!({ "type": "keyUp", "key": c }),
         ));
     }
-    dispatch_input_seq(s, seq).await?;
+    dispatch_input_seq_in(s, sid, seq).await?;
     Ok(json!(true))
 }
 
@@ -1493,9 +1710,23 @@ pub async fn wait_idle(s: &Session, ms: u64) -> Result<Value> {
 /// backendNodeId 变成 focus/click；引用失效是被动发现的（导航后节点
 /// 没了，`DOM.resolveNode` 报错 -> CTA 重新 snapshot）。
 pub(crate) async fn resolve_node_object(s: &Session, backend_node_id: i64) -> Result<String> {
-    match s
-        .call("DOM.resolveNode", json!({ "backendNodeId": backend_node_id }))
-        .await
+    resolve_node_object_in(s, None, backend_node_id).await
+}
+
+/// 同 [`resolve_node_object`]，但可指定归属 session（#60 OOPIF）：跨进程节点
+/// 的布局只有在它自己的子 session 上才量得到，解析也要走同一条 session。
+pub(crate) async fn resolve_node_object_in(
+    s: &Session,
+    sid: Option<&str>,
+    backend_node_id: i64,
+) -> Result<String> {
+    match call_in(
+        s,
+        sid,
+        "DOM.resolveNode",
+        json!({ "backendNodeId": backend_node_id }),
+    )
+    .await
     {
         Ok(v) => v
             .pointer("/object/objectId")
@@ -1539,7 +1770,93 @@ pub async fn click_ref_opts(
     button: &str,
     click_count: i64,
 ) -> Result<Value> {
+    click_ref_opts_in(s, backend_node_id, None, button, click_count).await
+}
+
+/// 同 [`click_ref_opts`]，但可指定归属子 session（#60 OOPIF）：跨进程节点
+/// 的中心要在子 session 里量（顶层 session 量出来是 0 尺寸），再用父页
+/// iframe 元素的 rect 提升到顶层视口系派发；遮挡检查在父页对 iframe 元素
+/// 做一次（iframe 自身被盖住要能拒）。嵌套 OOPIF 只提升一层，属 v1 边界。
+///
+/// # Errors
+///
+/// 同 [`click_ref_opts`]；OOPIF 提升链失败时给 clickAt 手点 CTA。
+pub async fn click_ref_opts_in(
+    s: &Session,
+    backend_node_id: i64,
+    sid: Option<&str>,
+    button: &str,
+    click_count: i64,
+) -> Result<Value> {
     validate_button(button)?;
+    if let Some(child) = sid {
+        let object_id = resolve_node_object_in(s, Some(child), backend_node_id).await?;
+        let r = call_in(
+            s,
+            Some(child),
+            "Runtime.callFunctionOn",
+            json!({
+                "objectId": object_id,
+                "functionDeclaration": r#"function(){
+                    this.scrollIntoView({block:'center'});
+                    const r = this.getBoundingClientRect();
+                    if (!this.isConnected || (!r.width && !r.height)) return null;
+                    return JSON.stringify({x: r.x + r.width/2, y: r.y + r.height/2});
+                }"#,
+                "returnByValue": true
+            }),
+        )
+        .await?;
+        let p = r
+            .pointer("/result/value")
+            .and_then(Value::as_str)
+            .and_then(|v| serde_json::from_str::<Value>(v).ok())
+            .ok_or_else(|| anyhow!(
+                "OOPIF 内元素量不到中心（不可见或已失效）；下一步：重新 await snapshot({{pierce:true}}) 取新 ref"
+            ))?;
+        let lx = p.get("x").and_then(Value::as_f64).unwrap_or(0.0);
+        let ly = p.get("y").and_then(Value::as_f64).unwrap_or(0.0);
+        let (ox, oy, owner_oid) = oopif_frame_anchor(s, child).await?;
+        // 父页遮挡检查：点在 iframe 元素矩形内的对应位置，命中的不该是别的元素
+        let blocker = s
+            .call(
+                "Runtime.callFunctionOn",
+                json!({
+                    "objectId": owner_oid,
+                    "functionDeclaration": r#"function(lx, ly){
+                        const r = this.getBoundingClientRect();
+                        const hit = document.elementFromPoint(r.x + lx, r.y + ly);
+                        if (!hit || hit === this || this.contains(hit)) return "";
+                        let d = hit.tagName.toLowerCase();
+                        if (hit.id) d += '#' + hit.id;
+                        return d;
+                    }"#,
+                    "arguments": [json!(lx), json!(ly)],
+                    "returnByValue": true
+                }),
+            )
+            .await
+            .ok()
+            .and_then(|v| {
+                v.pointer("/result/value")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            })
+            .unwrap_or_default();
+        if !blocker.is_empty() {
+            bail!(
+                "clickRef 目标所在的 OOPIF 被遮挡：{blocker} 盖住了 iframe 上的点击点；下一步：先处理遮挡物再重试"
+            );
+        }
+        return click_at_opts(
+            s,
+            (ox + lx).round() as i64,
+            (oy + ly).round() as i64,
+            button,
+            click_count,
+        )
+        .await;
+    }
     let object_id = resolve_node_object(s, backend_node_id).await?;
     let r = s
         .call(
@@ -1631,9 +1948,26 @@ pub async fn click_ref_opts(
 ///
 /// ref 失效、目标不是可填控件、回读不一致（错误附回读值）。
 pub async fn fill_ref(s: &Session, backend_node_id: i64, text: &str) -> Result<Value> {
-    let object_id = resolve_node_object(s, backend_node_id).await?;
-    let meta = s
-        .call(
+    fill_ref_in(s, backend_node_id, text, None).await
+}
+
+/// 同 [`fill_ref`]，但可指定归属子 session（#60 OOPIF：focus、SelectAll、
+/// insertText 与回读都在子 session 上做）。
+///
+/// # Errors
+///
+/// 同 [`fill_ref`]。
+pub async fn fill_ref_in(
+    s: &Session,
+    backend_node_id: i64,
+    text: &str,
+    sid: Option<&str>,
+) -> Result<Value> {
+    let object_id = resolve_node_object_in(s, sid, backend_node_id).await?;
+    let meta = call_in(
+        s,
+        sid,
+
             "Runtime.callFunctionOn",
             json!({
                 "objectId": object_id,
@@ -1679,17 +2013,18 @@ pub async fn fill_ref(s: &Session, backend_node_id: i64, text: &str) -> Result<V
     } else {
         seq.push(("Input.insertText", json!({ "text": text })));
     }
-    dispatch_input_seq(s, seq).await?;
-    let read = s
-        .call(
-            "Runtime.callFunctionOn",
-            json!({
-                "objectId": object_id,
-                "functionDeclaration": "function(){ return this.value; }",
-                "returnByValue": true
-            }),
-        )
-        .await?;
+    dispatch_input_seq_in(s, sid, seq).await?;
+    let read = call_in(
+        s,
+        sid,
+        "Runtime.callFunctionOn",
+        json!({
+            "objectId": object_id,
+            "functionDeclaration": "function(){ return this.value; }",
+            "returnByValue": true
+        }),
+    )
+    .await?;
     let got = read
         .pointer("/result/value")
         .and_then(Value::as_str)
@@ -1752,9 +2087,25 @@ pub async fn pdf(s: &Session, path: Option<&str>) -> Result<Value> {
 ///
 /// ref 失效、目标不是 `<select>`、没有匹配选项（错误附全部可选 value）。
 pub async fn select_option(s: &Session, backend_node_id: i64, value: &str) -> Result<Value> {
-    let object_id = resolve_node_object(s, backend_node_id).await?;
-    let r = s
-        .call(
+    select_option_in(s, backend_node_id, value, None).await
+}
+
+/// 同 [`select_option`]，但可指定归属子 session（#60 OOPIF）。
+///
+/// # Errors
+///
+/// 同 [`select_option`]。
+pub async fn select_option_in(
+    s: &Session,
+    backend_node_id: i64,
+    value: &str,
+    sid: Option<&str>,
+) -> Result<Value> {
+    let object_id = resolve_node_object_in(s, sid, backend_node_id).await?;
+    let r = call_in(
+        s,
+        sid,
+
             "Runtime.callFunctionOn",
             json!({
                 "objectId": object_id,
@@ -1808,6 +2159,26 @@ pub async fn select_option(s: &Session, backend_node_id: i64, value: &str) -> Re
 /// - `cdp timeout`（从未激活的后台 tab 收 Input 的典型症状）：
 ///   `Target.activateTarget` 后整串重试一次；bh 内置激活重试同款，
 ///   只在挂起时自愈，不主动抢用户前台。
+///
+/// 会话感知版（#60）：OOPIF 的键盘与文本事件要发在子 session 上（顶层
+/// session 发不到跨进程 frame 的焦点元素）；坐标类事件（点击与拖拽）的
+/// 坐标已提升到顶层视口系，仍走顶层 session。
+async fn dispatch_input_seq_in(
+    s: &Session,
+    sid: Option<&str>,
+    seq: Vec<(&'static str, Value)>,
+) -> Result<()> {
+    match sid {
+        Some(sid) => {
+            for (m, p) in seq {
+                s.call_on(m, p, sid).await?;
+            }
+            Ok(())
+        }
+        None => dispatch_input_seq(s, seq).await,
+    }
+}
+
 async fn dispatch_input_seq(s: &Session, seq: Vec<(&'static str, Value)>) -> Result<()> {
     if s.pending_dialog().await.is_some() {
         bail!(

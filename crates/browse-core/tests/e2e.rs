@@ -1162,6 +1162,74 @@ l`.length === 3].join(\"|\")", returnByValue:true})).result.value"#;
         .expect("读 shadow 值");
     assert_eq!(sv, json!("sh-filled"), "shadow input 填写应生效: {sv}");
 
+    // ---- #60 OOPIF：跨域 iframe 走子 session（发现 + 显式 attach）----
+    // 跨域 iframe 内的按钮：pierce 合并出 oopif 节点，clickRef 命中（坐标
+    // 在子 session 量、父页 iframe rect 提升）；子帧自记点击供回读
+    host.eval_snippet(
+        r##"await routeMock("http://oopif60.test/*", "<button id=ob style='margin:30px;width:120px;height:40px'>O60</button>", {contentType: "text/html"}); await routeMock("http://host60.test/*", "<div style='height:200px'></div><iframe id=o1 style='margin-left:130px' src='http://oopif60.test/' width=260 height=140></iframe>", {contentType: "text/html"}); await goto("http://host60.test/x", {timeout: 15})"##,
+    )
+    .await
+    .expect("goto OOPIF 宿主页");
+    // 等 watcher 把 OOPIF 附成子 session（300ms 拍，最多 ~3 秒）
+    let session = host.session();
+    let mut kids = 0usize;
+    for _ in 0..10 {
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        kids = session.child_sessions().await.len();
+        if kids > 0 {
+            break;
+        }
+    }
+    assert!(kids >= 1, "OOPIF 应被附成子 session（发现加显式 attach）");
+    let csid = session
+        .child_sessions()
+        .await
+        .values()
+        .next()
+        .cloned()
+        .expect("子 session id");
+    // 子帧自记点击次数
+    let _ = session
+        .call_on(
+            "Runtime.evaluate",
+            json!({"expression":"window.__o60=0; document.getElementById('ob').addEventListener('click', () => { window.__o60 = 1 })", "returnByValue": true}),
+            &csid,
+        )
+        .await;
+    let ps60 = host
+        .eval_snippet("return await snapshot({pierce: true})")
+        .await
+        .expect("pierce 快照");
+    let o60 = ps60
+        .get("nodes")
+        .and_then(Value::as_array)
+        .and_then(|a| {
+            a.iter()
+                .find(|n| {
+                    n.get("oopif") == Some(&json!(true)) && n.get("role") == Some(&json!("button"))
+                })
+                .and_then(|n| n.get("ref"))
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .expect("pierce 应合并出 OOPIF 按钮节点");
+    host.eval_snippet(&format!(r#"await clickRef("{o60}")"#))
+        .await
+        .expect("OOPIF 内点击");
+    let hit60 = session
+        .call_on(
+            "Runtime.evaluate",
+            json!({"expression":"String(window.__o60 || 0)", "returnByValue": true}),
+            &csid,
+        )
+        .await
+        .expect("读子帧命中");
+    assert_eq!(
+        hit60.pointer("/result/value"),
+        Some(&json!("1")),
+        "OOPIF 内按钮点击应命中（子 session 量中心加父页提升）"
+    );
+
     // screenshot：存文件、字节数为正、清场
     let shot = host
         .eval_snippet("return await screenshot()")
