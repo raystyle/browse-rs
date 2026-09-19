@@ -2177,15 +2177,56 @@ impl JsHost {
                         .and_then(Value::as_str)
                         .unwrap_or("text/html")
                         .to_string(),
-                    headers: opts
-                        .and_then(|o| o.get("headers"))
-                        .and_then(Value::as_object)
-                        .map(|h| {
-                            h.iter()
-                                .filter_map(|(k, v)| v.as_str().map(|v| (k.clone(), v.to_string())))
-                                .collect::<Vec<_>>()
-                        })
-                        .unwrap_or_default(),
+                    headers: {
+                        let hs = opts
+                            .and_then(|o| o.get("headers"))
+                            .and_then(Value::as_object)
+                            .map(|h| {
+                                h.iter()
+                                    .filter_map(|(k, v)| {
+                                        v.as_str().map(|v| (k.clone(), v.to_string()))
+                                    })
+                                    .collect::<Vec<_>>()
+                            })
+                            .unwrap_or_default();
+                        // 头名/头值预检（#38 评审 F1）：非法头名会让
+                        // fulfillRequest 被 Chrome 拒执行而 requestPaused 无人
+                        // 应答，页面静默挂到 30 秒超时
+                        for (k, v) in &hs {
+                            let token_ok = !k.is_empty()
+                                && k.bytes().all(|b| {
+                                    b.is_ascii_alphanumeric()
+                                        || matches!(
+                                            b,
+                                            b'!' | b'#'
+                                                | b'$'
+                                                | b'%'
+                                                | b'&'
+                                                | b'\''
+                                                | b'*'
+                                                | b'+'
+                                                | b'-'
+                                                | b'.'
+                                                | b'^'
+                                                | b'_'
+                                                | b'`'
+                                                | b'|'
+                                                | b'~'
+                                        )
+                                });
+                            if !token_ok {
+                                bail!(
+                                    "routeMock headers 头名 {k:?} 不是合法 HTTP token（RFC 7230 字符集）；下一步：改头名，要自定义头跨源可读一并给 Access-Control-Expose-Headers"
+                                );
+                            }
+                            if v.bytes().any(|b| b < 0x20 || b == 0x7f) {
+                                bail!(
+                                    "routeMock headers 头值含控制字符（{k}）；下一步：剔除控制字符"
+                                );
+                            }
+                        }
+                        hs
+                    },
                 };
                 self.routes.lock().await.push(RouteRule {
                     pattern: pattern.to_string(),
@@ -2647,7 +2688,7 @@ fn spawn_route_watcher(
                         for (k, v) in headers {
                             rh.push(json!({ "name": k, "value": v }));
                         }
-                        let _ = session
+                        if let Err(e) = session
                             .call_on(
                                 "Fetch.fulfillRequest",
                                 json!({
@@ -2658,7 +2699,14 @@ fn spawn_route_watcher(
                                 }),
                                 sid,
                             )
-                            .await;
+                            .await
+                        {
+                            // 兑付失败升级留痕（#38 评审 F1）：静默吞会让
+                            // requestPaused 无人应答、页面挂到超时无线索
+                            eprintln!(
+                                "[browse] routeMock 兑付失败（该请求将挂起至超时，检查规则的头与值）：{e:#}"
+                            );
+                        }
                     }
                     None => {
                         let _ = session
