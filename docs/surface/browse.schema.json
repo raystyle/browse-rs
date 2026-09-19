@@ -533,6 +533,40 @@
       "output": "runtime JSON（回值随页面与 CDP 而定）",
       "type": "object"
     },
+    "cli.snippets-list": {
+      "description": "browse snippets list [site] 列片段库（#44，#45 组合生态）：状态目录 snippets/ 下递归走访（<site>/<task>.js 天然分层），每文件取首行 // 注释头当摘要。先查库再写新片段的纪律入口。",
+      "example": "browse snippets list",
+      "input": {
+        "properties": {
+          "site": {
+            "description": "缺省 目录/路径子串过滤",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "cli.snippets-show": {
+      "description": "browse snippets show <rel> 看片段全文（#44）；配合 --js 管道或 POST /eval 即「缺 helper 自己存」闭环。",
+      "example": "browse snippets show x.test/search-title.js",
+      "input": {
+        "properties": {
+          "rel": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rel"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
     "cli.status": {
       "description": "browse status [--json] daemon/引擎/实例名/活动 tab 概览。",
       "example": "browse status --json",

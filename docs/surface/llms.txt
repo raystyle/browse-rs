@@ -26,6 +26,8 @@
 | `browse chrome update` | 升级到镜像最新版并默认切用（发现源 latest，BROWSE_CHROME_LATEST 可钉）。 |
 | `browse chrome remove <版本>` | 删已装版本（目录加登记一起清；pin 指向的拒删，先 use 切走）。 |
 | `browse chrome doctor` | 托管 Chromium 部署体检（在位/文件基线/pin；AppContainer ACE 仅 Windows 有值，缺则 hints 给 icacls 修法，#32）。 |
+| `browse snippets list [site]` | 列片段库（#44，#45 组合生态）：状态目录 snippets/ 下递归走访（<site>/<task>.js 天然分层），每文件取首行 // 注释头当摘要。先查库再写新片段的纪律入口。 |
+| `browse snippets show <rel>` | 看片段全文（#44）；配合 --js 管道或 POST /eval 即「缺 helper 自己存」闭环。 |
 | `browse issue new <标题> [--body <正文>] [--dry-run]` | 一键缺陷反馈：自动署名 tool=browse 加版本加平台加主机；--dry-run 同规校验并预览载荷零网络副作用（#57 G6，契约实弹走它别落生产台账）。 |
 | `browse issue list [--status <s>] [--limit <n>] [--tool <t>] [--before <id>]` | 列 issue（新到旧；默认本工具，--tool 换过滤；默认 limit 100 即服务端上限，返回 count 是本次返回条数非在册总数，恰打满时 stderr 出截断提示（#52）；--before <id> 是 keyset 游标翻更早一页（#53））。 |
 | `browse issue show <id>` | 看 issue 详情。 |

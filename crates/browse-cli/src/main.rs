@@ -11,7 +11,7 @@
 //! 引擎策略：附着优先（探测 9222 / DevToolsActivePort），缺则 spawn
 //! clean-chrome 专属实例；`browse down` 只终结自己 spawn 的。
 
-use anyhow::{Result, anyhow};
+use anyhow::{Result, anyhow, bail};
 use browse_cli::client;
 use browse_core::snippet_complete;
 use rustyline::DefaultEditor;
@@ -60,6 +60,10 @@ enum Mode {
     },
     /// `browse issue show <id>`：看 issue 详情。
     IssueShow(String),
+    /// `browse snippets list [site]`：列片段库（#44）。
+    SnippetsList(Option<String>),
+    /// `browse snippets show <rel>`：看片段全文（#44）。
+    SnippetsShow(String),
 }
 
 #[tokio::main]
@@ -155,6 +159,18 @@ async fn main() -> Result<()> {
                         eprintln!(
                             "browse: chrome 子命令不认识 {other}（install/use/update/remove/list/doctor，退出 2）"
                         );
+                        std::process::exit(2);
+                    }
+                }
+            }
+            "snippets" if snippets.is_empty() && mode_is_eval(&mode) => {
+                match next("snippets")?.as_str() {
+                    "list" => mode = Mode::SnippetsList(next("snippets list [site]").ok()),
+                    "show" => {
+                        mode = Mode::SnippetsShow(next("snippets show <rel>").unwrap_or_default())
+                    }
+                    other => {
+                        eprintln!("browse: snippets 子命令不认识 {other}（list/show，退出 2）");
                         std::process::exit(2);
                     }
                 }
@@ -453,6 +469,35 @@ async fn main() -> Result<()> {
             let r = browse_cli::issue::show(&id).await?;
             println!("{}", serde_json::to_string_pretty(&r)?);
             Ok(())
+        }
+        // ---- 片段库（#44）：纯文件系统读，零协议改动，不经 daemon ----
+        Mode::SnippetsList(site) => {
+            let root = browse_core::paths::state_dir().join("snippets");
+            let mut found = 0usize;
+            visit_snippets(&root, &root, site.as_deref(), &mut |rel, header| {
+                found += 1;
+                println!("{rel}  {header}");
+            });
+            if found == 0 {
+                eprintln!(
+                    "片段库为空（{}）；下一步：把可复用片段存成文件（首行 // 用途： 注释头），再 browse snippets list",
+                    root.display()
+                );
+            }
+            Ok(())
+        }
+        Mode::SnippetsShow(rel) => {
+            let path = browse_core::paths::state_dir().join("snippets").join(&rel);
+            match std::fs::read_to_string(&path) {
+                Ok(text) => {
+                    println!("{text}");
+                    Ok(())
+                }
+                Err(_) => bail!(
+                    "片段 {rel} 不存在（{}）；下一步：browse snippets list 看在册片段",
+                    path.display()
+                ),
+            }
         }
         Mode::Eval => {
             // 裸调用 = 导航事件：无参不弹交互，TTY 裸跑出本仓帮助体 exit 0；
@@ -789,4 +834,52 @@ fn print_help() {
     // 帮助面由命令目录活树派生（surface::render_help，cli-docs 标准节序）；
     // --help、-h 与裸调用三入口共用本函数，节序与对齐的守卫在 surface_contract。
     println!("{}", browse_core::surface::render_help());
+}
+
+/// 递归走访片段库（#44）：目录形 <site>/<task>.js 天然分层；每文件取首行
+/// 注释头当摘要。只读，不建目录不写文件。
+fn visit_snippets(
+    root: &std::path::Path,
+    dir: &std::path::Path,
+    site: Option<&str>,
+    out: &mut dyn FnMut(&str, &str),
+) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for e in entries.flatten() {
+        let p = e.path();
+        if p.is_dir() {
+            // site 过滤：目录名前缀匹配
+            let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if site.is_none_or(|want| name.contains(want)) {
+                visit_snippets(root, &p, site, out);
+            }
+        } else if p
+            .extension()
+            .and_then(|x| x.to_str())
+            .is_some_and(|x| x == "js" || x == "browse" || x == "txt")
+        {
+            let rel = p
+                .strip_prefix(root)
+                .ok()
+                .and_then(|r| r.to_str())
+                .unwrap_or_else(|| p.to_str().unwrap_or("?"));
+            if let Some(site) = site
+                && !rel.split('/').nth(0).is_some_and(|seg| seg.contains(site))
+                && !rel.contains(site)
+            {
+                continue;
+            }
+            let header = std::fs::read_to_string(&p)
+                .ok()
+                .and_then(|t| {
+                    t.lines()
+                        .find(|l| l.trim_start().starts_with("//"))
+                        .map(|l| l.trim().trim_start_matches('/').trim().to_string())
+                })
+                .unwrap_or_default();
+            out(rel, &header);
+        }
+    }
 }
