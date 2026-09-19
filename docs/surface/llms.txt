@@ -100,7 +100,7 @@
 | `keydown(key)` | 按下不松（#23）：裸 keyDown，配合 keyup 成按住语义；组合写法同 pressKey。 |
 | `keyup(key)` | 松开按键（#23）：裸 keyUp，与 keydown 成对。 |
 | `typeRef(ref, text)` | 真实按键序列输入（#23）：focus 后逐字符 keyDown+keyUp，contenteditable/ProseMirror 类编辑器用；普通输入框用 fillRef（insertText）。 |
-| `emulateMedia(opts)` | a11y 媒质仿真族（#40）：Emulation.setEmulatedMedia features 面，五参任给其一以上；页内 matchMedia 感知；与 emulate({viewport,mobile,userAgent}) 并列成族；还原走 emulateMediaClear()。 |
+| `emulateMedia(opts)` | a11y 媒质仿真族（#40）：Emulation.setEmulatedMedia features 面，五参任给其一以上（非法枚举当场报错列合法值）；页内 matchMedia 感知。单次调用是全量替换：多特征同一次 opts 里给；仿真挂在 target 上跨导航保留，goto 后要 stock 视图记得 emulateMediaClear()。与 emulate({viewport,mobile,userAgent}) 并列成族。 |
 | `emulateMediaClear()` | 还原媒质仿真（#40）：五特征与媒质全部回 stock。 |
 | `emulate(opts)` | 视口与 UA 仿真（#24）：viewport 加 mobile 加 userAgent 全可省；mobile 档同站更省 token；userAgent 只覆写 UA 字符串，UA-CH 高熵字段未动（引擎级覆写是 #28 范围）。 |
 | `setInitScript(code)` | 每新文档前注入脚本（#25.2）：反检测补丁、杀 cookie 横幅；SPA 路由不重跑（只对新文档生效），空串清除。 |

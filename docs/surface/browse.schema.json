@@ -912,7 +912,7 @@
       "type": "object"
     },
     "emulateMedia": {
-      "description": "emulateMedia(opts) a11y 媒质仿真族（#40）：Emulation.setEmulatedMedia features 面，五参任给其一以上；页内 matchMedia 感知；与 emulate({viewport,mobile,userAgent}) 并列成族；还原走 emulateMediaClear()。",
+      "description": "emulateMedia(opts) a11y 媒质仿真族（#40）：Emulation.setEmulatedMedia features 面，五参任给其一以上（非法枚举当场报错列合法值）；页内 matchMedia 感知。单次调用是全量替换：多特征同一次 opts 里给；仿真挂在 target 上跨导航保留，goto 后要 stock 视图记得 emulateMediaClear()。与 emulate({viewport,mobile,userAgent}) 并列成族。",
       "example": "await emulateMedia({colorScheme: \"dark\", media: \"print\"})",
       "input": {
         "properties": {

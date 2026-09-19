@@ -270,6 +270,57 @@ pub async fn emulate_media(s: &Session, opts: &Value) -> Result<Value> {
             features.push(json!({ "name": name, "value": v }));
         }
     };
+    // 五参白名单（#40 评审 G2/G3）：非法枚举当场 bail 列合法值，不静默
+    // true；未知键与值类型错分叉归因
+    const KNOWN: [&str; 5] = [
+        "colorScheme",
+        "reducedMotion",
+        "forcedColors",
+        "prefersContrast",
+        "media",
+    ];
+    for k in opts
+        .as_object()
+        .map(|o| o.keys().cloned().collect::<Vec<_>>())
+        .unwrap_or_default()
+    {
+        if !KNOWN.contains(&k.as_str()) {
+            bail!(
+                "emulateMedia 不认识的键 {k}（可认五键：colorScheme/reducedMotion/forcedColors/prefersContrast/media）"
+            );
+        }
+        if !opts.get(&k).is_some_and(Value::is_string) {
+            bail!("emulateMedia 的 {k} 值要是字符串");
+        }
+    }
+    let check = |k: &str, who: &str, allowed: &[&str]| -> Result<()> {
+        if let Some(v) = opts.get(k).and_then(Value::as_str)
+            && !allowed.contains(&v)
+        {
+            bail!(
+                "emulateMedia 的 {who} 非法值 {v}（合法：{}）",
+                allowed.join("/")
+            );
+        }
+        Ok(())
+    };
+    check(
+        "colorScheme",
+        "colorScheme",
+        &["dark", "light", "no-preference"],
+    )?;
+    check(
+        "reducedMotion",
+        "reducedMotion",
+        &["reduce", "no-preference"],
+    )?;
+    check("forcedColors", "forcedColors", &["active", "none"])?;
+    check(
+        "prefersContrast",
+        "prefersContrast",
+        &["more", "less", "no-preference"],
+    )?;
+    check("media", "media", &["screen", "print"])?;
     push(
         "prefers-color-scheme",
         opts.get("colorScheme").and_then(Value::as_str),
