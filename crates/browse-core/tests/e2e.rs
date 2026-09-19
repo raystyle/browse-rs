@@ -517,6 +517,191 @@ l`.length === 3].join(\"|\")", returnByValue:true})).result.value"#;
         .expect("读 title");
     assert_eq!(t, json!("submitted"), "Enter 应触发页内提交副作用: {t}");
 
+    // ---- 批 2（REQ-007）：#36 限深与 findRefs、#37 可观测三件、#49 detect ----
+    // #36 depth：限深节点数必少于全量，且 childIds 在卷
+    host.eval_snippet(
+        r#"await goto("data:text/html,<div><h1>T1</h1><p>para</p></div><div><h1>T2</h1><button id=b2 onclick=\"window.frHit=7\">Deep</button></div>")"#,
+    )
+    .await
+    .expect("goto 结构页");
+    let full_snap = host
+        .eval_snippet("return await snapshot()")
+        .await
+        .expect("全量 snapshot");
+    let full_n = full_snap
+        .get("nodes")
+        .and_then(Value::as_array)
+        .map(|a| a.len())
+        .unwrap_or(0);
+    let deep_snap = host
+        .eval_snippet("return await snapshot({depth: 1})")
+        .await
+        .expect("限深 snapshot");
+    let deep_n = deep_snap
+        .get("nodes")
+        .and_then(Value::as_array)
+        .map(|a| a.len())
+        .unwrap_or(0);
+    assert!(
+        full_n > deep_n && deep_n >= 1,
+        "限深应更少: full={full_n} depth1={deep_n}"
+    );
+    // #36 findRefs：命中只回子集带 ref，且 ref 可直接驱动（fillRef 通道即证）
+    let fr = host
+        .eval_snippet(r#"return await findRefs("Deep", {context: 1})"#)
+        .await
+        .expect("findRefs");
+    // 按钮与其 StaticText 子文本都含 Deep，count=2（name 子串匹配面如实）
+    assert_eq!(
+        fr.get("count"),
+        Some(&json!(2)),
+        "应命中按钮与文本两节点: {fr}"
+    );
+    let fr_nodes = fr
+        .get("nodes")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    assert!(
+        fr_nodes.len() < full_n,
+        "命中加祖先链应远少于全量: {}",
+        fr_nodes.len()
+    );
+    let hit_ref = fr_nodes
+        .iter()
+        .find(|n| n.get("hit") == Some(&json!(true)) && n.get("role") == Some(&json!("button")))
+        .and_then(|n| n.get("ref"))
+        .and_then(Value::as_str)
+        .expect("命中节点应带 ref")
+        .to_string();
+    // 命中 ref 直接可驱动（引用表已替换为 findRefs 结果集）
+    host.eval_snippet(&format!(r#"await clickRef("{hit_ref}")"#))
+        .await
+        .expect("clickRef 命中 ref");
+    let fr_hit = host
+        .eval_snippet(r#"return (await session.Runtime.evaluate({expression:"window.frHit", returnByValue:true})).result.value"#)
+        .await
+        .expect("读 frHit");
+    assert_eq!(fr_hit, json!(7), "findRefs 的 ref 应可直接点击: {fr_hit}");
+    // #37 console 分级：log 不进 error 档，error 进
+    // 抛错走 setTimeout（同步 throw 会被 pageEval 当调用失败返回，
+    // 异步抛才落 Runtime.exceptionThrown）；哨兵等它落地
+    host.eval_snippet(
+        r#"await pageEval("console.log('c-log'); console.error('c-err'); setTimeout(() => { throw new Error('uncaught-boom') }, 0); setTimeout(() => { window.__t = 1 }, 50)")"#,
+    )
+    .await
+    .expect("页内 console 与未捕获异常");
+    host.eval_snippet(r#"await session.waitJs("window.__t === 1", 3)"#)
+        .await
+        .expect("等哨兵");
+    let cerr = host
+        .eval_snippet(r#"return await console({minLevel: "error"})"#)
+        .await
+        .expect("console error 档");
+    let msgs = cerr
+        .get("messages")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    assert!(
+        msgs.iter().any(|m| m.get("text") == Some(&json!("c-err"))),
+        "error 档应含 c-err: {cerr}"
+    );
+    assert!(
+        !msgs.iter().any(|m| m.get("text") == Some(&json!("c-log"))),
+        "error 档不应含 c-log: {cerr}"
+    );
+    // #37 jsErrors：未捕获异常可取
+    let je = host
+        .eval_snippet("return await jsErrors()")
+        .await
+        .expect("jsErrors");
+    let errs = je
+        .get("errors")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    assert!(
+        errs.iter().any(|e| e
+            .get("text")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .contains("uncaught-boom")),
+        "jsErrors 应含 uncaught-boom: {je}"
+    );
+    // #37 requests/detail：routeMock 假域出对账（status 200 带 requestId）
+    host.eval_snippet(
+        r#"await routeMock("http://obs.test/api*", "{}", {contentType: "application/json"}); await pageEval("fetch('http://obs.test/api1').then(r => r.text())")"#,
+    )
+    .await
+    .expect("mock 与 fetch");
+    host.eval_snippet(r#"await session.waitJs("window.__ok || true", 1)"#)
+        .await
+        .ok();
+    let rq = host
+        .eval_snippet(r#"return await requests({filter: "obs.test"})"#)
+        .await
+        .expect("requests");
+    let rows = rq
+        .get("requests")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    assert!(!rows.is_empty(), "requests 应有 obs.test 条目: {rq}");
+    let rid = rows[0]
+        .get("requestId")
+        .and_then(Value::as_str)
+        .expect("requestId")
+        .to_string();
+    let rd = host
+        .eval_snippet(&format!(r#"return await requestDetail("{rid}")"#))
+        .await
+        .expect("requestDetail");
+    assert_eq!(rd.get("status"), Some(&json!(200)), "detail 应 200: {rd}");
+    // #49 detect：正常页 ok、空白页 blank、密码页 login-wall
+    host.eval_snippet(
+        r#"await goto("data:text/html,<title>d-ok</title><h1>full</h1><p>words words words words words</p>")"#,
+    )
+    .await
+    .expect("goto 正常页");
+    let det = host
+        .eval_snippet("return await detect()")
+        .await
+        .expect("detect ok");
+    assert_eq!(det.get("verdict"), Some(&json!("ok")), "正常页应 ok: {det}");
+    assert!(
+        det.get("evidence")
+            .and_then(Value::as_array)
+            .is_some_and(|e| !e.is_empty()),
+        "ok 判证据应非空: {det}"
+    );
+    host.eval_snippet(r#"await goto("data:text/html,<title>d-blank</title>")"#)
+        .await
+        .expect("goto 空白页");
+    let detb = host
+        .eval_snippet("return await detect()")
+        .await
+        .expect("detect blank");
+    assert_eq!(
+        detb.get("verdict"),
+        Some(&json!("blank")),
+        "空白页应 blank: {detb}"
+    );
+    host.eval_snippet(
+        r#"await goto("data:text/html,<title>d-login</title><form><input type=password></form>")"#,
+    )
+    .await
+    .expect("goto 登录页");
+    let detl = host
+        .eval_snippet("return await detect()")
+        .await
+        .expect("detect login");
+    assert_eq!(
+        detl.get("verdict"),
+        Some(&json!("login-wall")),
+        "密码页应 login-wall: {detl}"
+    );
+
     // screenshot：存文件、字节数为正、清场
     let shot = host
         .eval_snippet("return await screenshot()")

@@ -389,10 +389,79 @@ pub const COMMANDS: &[CmdSpec] = &[
     CmdSpec {
         name: "snapshot",
         kind: CmdKind::Global,
-        signature: "snapshot()",
+        signature: "snapshot(opts?)",
+        args: &[
+            arg!("ref", "string", false, "单元素子树（部分展开）"),
+            arg!("depth", "number", false, "限深层数（可见树根为第 1 层）"),
+        ],
+        description: "AX 树快照：nodes 带 role/name/value/childIds/短 ref（e1、e2…），引用表的唯一来源；url/title 走 CDP 查询面，页面主世界零写入（无注入痕）。opts（#36 捕获与检索分离）：ref 取该元素子树（snapshot(e34) 部分展开），depth 限深（大页先浅扫再部分展开省 token）；ref 只盖过滤后的可见集。",
+        example: "const s = await snapshot({depth: 2})",
+    },
+    CmdSpec {
+        name: "findRefs",
+        kind: CmdKind::Global,
+        signature: "findRefs(query, opts?)",
+        args: &[
+            arg!("query", "string", true),
+            arg!("insensitive", "boolean", false, "false"),
+            arg!("context", "number", false, "2（祖先链层数）"),
+        ],
+        description: "服务端检索 AX 树（#36）：daemon 侧按 name/value 子串匹配（insensitive 开大小写不敏感，不引正则依赖），只回命中节点加 context 层祖先链（grep -C 式），节点带新 ref 可直接 clickRef/fillRef——比全量 snapshot 省一个量级 token；引用表整表替换（同 snapshot 语义）。",
+        example: "const f = await findRefs(\"Sign in\", {context: 1})",
+    },
+    CmdSpec {
+        name: "console",
+        kind: CmdKind::Global,
+        signature: "console(opts?)",
+        args: &[
+            arg!("since", "number", false, "0（seq 游标）"),
+            arg!(
+                "minLevel",
+                "string",
+                false,
+                "verbose（error<warning<log/info<debug<verbose）"
+            ),
+        ],
+        description: "控制台消息分级检索（#37）：Runtime.consoleAPICalled 缓冲过滤 minLevel 及以上；Runtime 域随 tab 入口自动开（开域前的旧消息收不到），缓冲环形 1000 条超量挤老。回 {count, messages:[{seq,level,text}]}。",
+        example: "return await console({minLevel: \"error\"})",
+    },
+    CmdSpec {
+        name: "jsErrors",
+        kind: CmdKind::Global,
+        signature: "jsErrors(since?)",
+        args: &[arg!("since", "number", false, "0（seq 游标）")],
+        description: "未捕获 JS 异常列表（#37）：Runtime.exceptionThrown 过滤（该事件本就是未捕获面），回 {count, errors:[{seq,text,url,line}]}；开域前与被挤出环形缓冲的旧异常取不到。",
+        example: "return await jsErrors()",
+    },
+    CmdSpec {
+        name: "requests",
+        kind: CmdKind::Global,
+        signature: "requests(opts?)",
+        args: &[
+            arg!("since", "number", false, "0（seq 游标）"),
+            arg!("filter", "string", false, "url 子串过滤"),
+        ],
+        description: "网络响应摘要列表（#37）：Network.responseReceived 映射 {index,requestId,url,status,type,bytes}；Network 域随 tab 入口自动开，缓冲环形 1000 条。要单条详情走 requestDetail，要响应体走 responseBody(requestId)。",
+        example: "return await requests({filter: \"/api/\"})",
+    },
+    CmdSpec {
+        name: "requestDetail",
+        kind: CmdKind::Global,
+        signature: "requestDetail(indexOrRequestId, opts?)",
+        args: &[
+            arg!("indexOrRequestId", "any", true),
+            arg!("since", "number", false, "0（与 requests 同窗）"),
+        ],
+        description: "单条网络响应详情（#37）：index 是 since 窗内未过滤序号（对齐 requests() 不带 filter 的列表），或直接给 requestId 取最新；回 url/status/type/mimeType/headers/bytes，body 另走 responseBody(requestId)。",
+        example: "return await requestDetail(0)",
+    },
+    CmdSpec {
+        name: "detect",
+        kind: CmdKind::Global,
+        signature: "detect()",
         args: &[],
-        description: "AX 树快照：nodes 带 role/name/value/短 ref（e1、e2…），引用表的唯一来源；url/title 走 CDP 查询面，页面主世界零写入（无注入痕）。",
-        example: "const s = await snapshot()",
+        description: "页面态结构化判读（#49）：{verdict, evidence[], suggestion}。判序 challenged（挑战关键词加 403/503 或短正文）> rate-limited（429）> blocked（403）> stalled（加载失败且未完成）> login-wall（密码框加短正文）> blank（complete 但正文与节点双低）> loading > ok；信号源是页内探针（一次 evaluate）加事件缓冲网络计数。与 #37 互补：那是流的可观测性，本函数是页面态判官。",
+        example: "return await detect()",
     },
     CmdSpec {
         name: "screenshot",

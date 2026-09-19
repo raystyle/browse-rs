@@ -45,7 +45,13 @@
 | `chromeRemove(version)` | 删已装版本（目录加登记一起清；pin 指向的拒删，先 chromeUse 切走）。 |
 | `chromeDoctor()` | 托管 Chromium 部署体检（在位/文件基线/pin 健康）。 |
 | `cdpMethods(domain?)` | 652 个 CDP 命令的运行时探针（按域过滤）。 |
-| `snapshot()` | AX 树快照：nodes 带 role/name/value/短 ref（e1、e2…），引用表的唯一来源；url/title 走 CDP 查询面，页面主世界零写入（无注入痕）。 |
+| `snapshot(opts?)` | AX 树快照：nodes 带 role/name/value/childIds/短 ref（e1、e2…），引用表的唯一来源；url/title 走 CDP 查询面，页面主世界零写入（无注入痕）。opts（#36 捕获与检索分离）：ref 取该元素子树（snapshot(e34) 部分展开），depth 限深（大页先浅扫再部分展开省 token）；ref 只盖过滤后的可见集。 |
+| `findRefs(query, opts?)` | 服务端检索 AX 树（#36）：daemon 侧按 name/value 子串匹配（insensitive 开大小写不敏感，不引正则依赖），只回命中节点加 context 层祖先链（grep -C 式），节点带新 ref 可直接 clickRef/fillRef——比全量 snapshot 省一个量级 token；引用表整表替换（同 snapshot 语义）。 |
+| `console(opts?)` | 控制台消息分级检索（#37）：Runtime.consoleAPICalled 缓冲过滤 minLevel 及以上；Runtime 域随 tab 入口自动开（开域前的旧消息收不到），缓冲环形 1000 条超量挤老。回 {count, messages:[{seq,level,text}]}。 |
+| `jsErrors(since?)` | 未捕获 JS 异常列表（#37）：Runtime.exceptionThrown 过滤（该事件本就是未捕获面），回 {count, errors:[{seq,text,url,line}]}；开域前与被挤出环形缓冲的旧异常取不到。 |
+| `requests(opts?)` | 网络响应摘要列表（#37）：Network.responseReceived 映射 {index,requestId,url,status,type,bytes}；Network 域随 tab 入口自动开，缓冲环形 1000 条。要单条详情走 requestDetail，要响应体走 responseBody(requestId)。 |
+| `requestDetail(indexOrRequestId, opts?)` | 单条网络响应详情（#37）：index 是 since 窗内未过滤序号（对齐 requests() 不带 filter 的列表），或直接给 requestId 取最新；回 url/status/type/mimeType/headers/bytes，body 另走 responseBody(requestId)。 |
+| `detect()` | 页面态结构化判读（#49）：{verdict, evidence[], suggestion}。判序 challenged（挑战关键词加 403/503 或短正文）> rate-limited（429）> blocked（403）> stalled（加载失败且未完成）> login-wall（密码框加短正文）> blank（complete 但正文与节点双低）> loading > ok；信号源是页内探针（一次 evaluate）加事件缓冲网络计数。与 #37 互补：那是流的可观测性，本函数是页面态判官。 |
 | `screenshot(path?, full?, opts?)` | 页内截图存文件；opts（#24）：format png/jpeg、quality（jpeg 1-100 缺省 80）、ifChanged（与既有文件逐字节相同即 skipped，省读回不省拍摄；字节可比性限同一引擎二进制）。回 {path,bytes,skipped}。同片段 navigate 后的提交窗竞速由 host 层统一等提交（#34 根因级，页面级调用闸到主框架 frameNavigated），本函数另内建 Not attached 有界重试兜底。 |
 | `pdf(path?)` | 当前页存 PDF（仅无头 chrome），回 {path,bytes}。 |
 | `newTab(url?)` | 开新 tab 并设为活动路由（先 about:blank 再 goto，防竞速假完成）；带 url 时内部等加载预算 15 秒与 goto 缺省对齐（#57 G3）。 |
@@ -480,13 +486,85 @@ return await chromeDoctor()
 return await cdpMethods("Network")
 ```
 
-## `snapshot()`
+## `snapshot(opts?)`
 
-AX 树快照：nodes 带 role/name/value/短 ref（e1、e2…），引用表的唯一来源；url/title 走 CDP 查询面，页面主世界零写入（无注入痕）。
+AX 树快照：nodes 带 role/name/value/childIds/短 ref（e1、e2…），引用表的唯一来源；url/title 走 CDP 查询面，页面主世界零写入（无注入痕）。opts（#36 捕获与检索分离）：ref 取该元素子树（snapshot(e34) 部分展开），depth 限深（大页先浅扫再部分展开省 token）；ref 只盖过滤后的可见集。
+
+参数：
+- `ref`（string，缺省 单元素子树（部分展开））
+- `depth`（number，缺省 限深层数（可见树根为第 1 层））
+
+```js
+const s = await snapshot({depth: 2})
+```
+
+## `findRefs(query, opts?)`
+
+服务端检索 AX 树（#36）：daemon 侧按 name/value 子串匹配（insensitive 开大小写不敏感，不引正则依赖），只回命中节点加 context 层祖先链（grep -C 式），节点带新 ref 可直接 clickRef/fillRef——比全量 snapshot 省一个量级 token；引用表整表替换（同 snapshot 语义）。
+
+参数：
+- `query`（string），必填
+- `insensitive`（boolean，缺省 false）
+- `context`（number，缺省 2（祖先链层数））
+
+```js
+const f = await findRefs("Sign in", {context: 1})
+```
+
+## `console(opts?)`
+
+控制台消息分级检索（#37）：Runtime.consoleAPICalled 缓冲过滤 minLevel 及以上；Runtime 域随 tab 入口自动开（开域前的旧消息收不到），缓冲环形 1000 条超量挤老。回 {count, messages:[{seq,level,text}]}。
+
+参数：
+- `since`（number，缺省 0（seq 游标））
+- `minLevel`（string，缺省 verbose（error<warning<log/info<debug<verbose））
+
+```js
+return await console({minLevel: "error"})
+```
+
+## `jsErrors(since?)`
+
+未捕获 JS 异常列表（#37）：Runtime.exceptionThrown 过滤（该事件本就是未捕获面），回 {count, errors:[{seq,text,url,line}]}；开域前与被挤出环形缓冲的旧异常取不到。
+
+参数：
+- `since`（number，缺省 0（seq 游标））
+
+```js
+return await jsErrors()
+```
+
+## `requests(opts?)`
+
+网络响应摘要列表（#37）：Network.responseReceived 映射 {index,requestId,url,status,type,bytes}；Network 域随 tab 入口自动开，缓冲环形 1000 条。要单条详情走 requestDetail，要响应体走 responseBody(requestId)。
+
+参数：
+- `since`（number，缺省 0（seq 游标））
+- `filter`（string，缺省 url 子串过滤）
+
+```js
+return await requests({filter: "/api/"})
+```
+
+## `requestDetail(indexOrRequestId, opts?)`
+
+单条网络响应详情（#37）：index 是 since 窗内未过滤序号（对齐 requests() 不带 filter 的列表），或直接给 requestId 取最新；回 url/status/type/mimeType/headers/bytes，body 另走 responseBody(requestId)。
+
+参数：
+- `indexOrRequestId`（any），必填
+- `since`（number，缺省 0（与 requests 同窗））
+
+```js
+return await requestDetail(0)
+```
+
+## `detect()`
+
+页面态结构化判读（#49）：{verdict, evidence[], suggestion}。判序 challenged（挑战关键词加 403/503 或短正文）> rate-limited（429）> blocked（403）> stalled（加载失败且未完成）> login-wall（密码框加短正文）> blank（complete 但正文与节点双低）> loading > ok；信号源是页内探针（一次 evaluate）加事件缓冲网络计数。与 #37 互补：那是流的可观测性，本函数是页面态判官。
 
 
 ```js
-const s = await snapshot()
+return await detect()
 ```
 
 ## `screenshot(path?, full?, opts?)`

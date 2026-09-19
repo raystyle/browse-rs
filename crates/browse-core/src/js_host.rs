@@ -259,6 +259,73 @@ impl JsHost {
         Ok(())
     }
 
+    /// AX 树投影（#36）：getFullAXTree 拉全量，投影成扁平节点表（丢纯
+    /// 布局节点，判据同旧 snapshot），childIds 随卷保留并另建 parent 边
+    /// 供限深、子树、祖先链过滤。提交窗竞速同走 call_commit_retry。
+    ///
+    /// # Errors
+    ///
+    /// 同 [`Session::call`]（含提交窗重试耗尽）。
+    async fn ax_projected(&self) -> Result<(Vec<Value>, HashMap<i64, i64>)> {
+        let r = self
+            .call_commit_retry("Accessibility.getFullAXTree", json!({}))
+            .await?;
+        let mut parent: HashMap<i64, i64> = HashMap::new();
+        let nodes: Vec<Value> = r
+            .get("nodes")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|n| {
+                let role = n
+                    .pointer("/role/value")
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                if matches!(role, "generic" | "InlineTextBox" | "presentation" | "none") {
+                    return None;
+                }
+                let name = n
+                    .pointer("/name/value")
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                if name.is_empty()
+                    && !n.get("value").is_some_and(|v| !v.is_null())
+                    && n.get("backendDOMNodeId").is_none()
+                {
+                    return None;
+                }
+                // nodeId/childIds 在真 chrome 回执里是数字串（"2"），假对端
+                // 与文档示例是数字——两形都吃（#36 实弹坑）
+                let id = n.get("nodeId").and_then(ax_id)?;
+                for c in n
+                    .get("childIds")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default()
+                    .iter()
+                    .filter_map(ax_id)
+                {
+                    parent.insert(c, id);
+                }
+                Some(json!({
+                    "id": id,
+                    "role": role,
+                    "name": name,
+                    "value": n.get("value").and_then(|v| v.get("value")),
+                    "checked": n.get("checked"),
+                    "pressed": n.get("pressed"),
+                    "selected": n.get("selected"),
+                    "expanded": n.get("expanded"),
+                    "disabled": n.get("disabled"),
+                    "backendNodeId": n.get("backendDOMNodeId"),
+                    "childIds": n.get("childIds"),
+                }))
+            })
+            .collect();
+        Ok((nodes, parent))
+    }
+
     /// 等 URL 命中 glob 的最近一个响应完成（#20）：窗口语义是「最近命中
     /// （含历史，前提是 Network 域在触发前已开），没有则等到超时」；方言
     /// 无并发，可用形态是触发后等待。命中响应头后等同一 requestId 的体
@@ -879,55 +946,110 @@ impl JsHost {
             // Target.getTargetInfo（browser 级查询，不触页面求值），代取
             // 文档代计数，页面窗口零写入
             "snapshot" => {
-                // AX 拉取同走提交窗重试（评审 G1：竞速出口共面）
-                let r = self
-                    .call_commit_retry("Accessibility.getFullAXTree", json!({}))
-                    .await?;
+                // #36 捕获与检索分离的捕获面：opts {ref 单元素子树, depth
+                // 限深}；childIds 随卷输出供 agent 自行展开
+                let opts = argv
+                    .first()
+                    .filter(|v| v.is_object())
+                    .cloned()
+                    .unwrap_or(json!({}));
+                let (mut nodes, parent) = self.ax_projected().await?;
+                // 子树过滤（ref）：命中节点的可见子树
+                if let Some(rf) = opts.get("ref").and_then(Value::as_str) {
+                    let bn = self.lookup_ref(rf).await?;
+                    let root_id = nodes
+                        .iter()
+                        .find(|n| n.get("backendNodeId") == Some(&json!(bn)))
+                        .and_then(|n| n.get("id"))
+                        .and_then(Value::as_i64)
+                        .ok_or_else(|| {
+                            anyhow!(
+                                "ref {rf} 在当前 AX 树无对应节点；下一步：重新 snapshot() 取新 ref"
+                            )
+                        })?;
+                    let mut keep = std::collections::HashSet::new();
+                    let mut q = vec![root_id];
+                    while let Some(cur) = q.pop() {
+                        if keep.insert(cur) {
+                            for n in nodes.iter().filter(|n| n.get("id") == Some(&json!(cur))) {
+                                for c in n
+                                    .get("childIds")
+                                    .and_then(Value::as_array)
+                                    .cloned()
+                                    .unwrap_or_default()
+                                    .iter()
+                                    .filter_map(ax_id)
+                                {
+                                    q.push(c);
+                                }
+                            }
+                        }
+                    }
+                    nodes.retain(|n| {
+                        n.get("id")
+                            .and_then(Value::as_i64)
+                            .is_some_and(|id| keep.contains(&id))
+                    });
+                }
+                // 限深（depth）：可见树根起计层，保留前 depth 层
+                if let Some(d) = opts.get("depth").and_then(Value::as_u64) {
+                    let d = d.max(1) as usize;
+                    let ids: std::collections::HashSet<i64> = nodes
+                        .iter()
+                        .filter_map(|n| n.get("id").and_then(Value::as_i64))
+                        .collect();
+                    let mut children: HashMap<i64, Vec<i64>> = HashMap::new();
+                    for n in &nodes {
+                        if let Some(id) = n.get("id").and_then(Value::as_i64) {
+                            for c in n
+                                .get("childIds")
+                                .and_then(Value::as_array)
+                                .cloned()
+                                .unwrap_or_default()
+                                .iter()
+                                .filter_map(ax_id)
+                            {
+                                if ids.contains(&c) {
+                                    children.entry(id).or_default().push(c);
+                                }
+                            }
+                        }
+                    }
+                    let mut depth: HashMap<i64, usize> = HashMap::new();
+                    let mut q: Vec<i64> = nodes
+                        .iter()
+                        .filter_map(|n| n.get("id").and_then(Value::as_i64))
+                        .filter(|id| parent.get(id).is_none_or(|p| !ids.contains(p)))
+                        .collect();
+                    for r in &q {
+                        depth.insert(*r, 1);
+                    }
+                    let mut i = 0;
+                    while i < q.len() {
+                        let cur = q[i];
+                        i += 1;
+                        let cd = depth[&cur];
+                        if cd >= d {
+                            continue;
+                        }
+                        for c in children.get(&cur).cloned().unwrap_or_default() {
+                            if depth.insert(c, cd + 1).is_none() {
+                                q.push(c);
+                            }
+                        }
+                    }
+                    nodes.retain(|n| {
+                        n.get("id")
+                            .and_then(Value::as_i64)
+                            .is_some_and(|id| depth.get(&id).is_some_and(|dd| *dd <= d))
+                    });
+                }
                 let sid = self.session.get_active_session().await;
                 let generation = match &sid {
                     Some(s) => self.session.doc_generation(s).await,
                     None => 0,
                 };
                 let (url, title) = self.page_meta().await;
-                let nodes: Vec<Value> = r
-                    .get("nodes")
-                    .and_then(Value::as_array)
-                    .cloned()
-                    .unwrap_or_default()
-                    .into_iter()
-                    .filter_map(|n| {
-                        let role = n
-                            .pointer("/role/value")
-                            .and_then(Value::as_str)
-                            .unwrap_or("");
-                        // 丢纯布局节点：无名的 generic/文本框/展示层
-                        if matches!(role, "generic" | "InlineTextBox" | "presentation" | "none") {
-                            return None;
-                        }
-                        let name = n
-                            .pointer("/name/value")
-                            .and_then(Value::as_str)
-                            .unwrap_or("");
-                        if name.is_empty()
-                            && !n.get("value").is_some_and(|v| !v.is_null())
-                            && n.get("backendDOMNodeId").is_none()
-                        {
-                            return None;
-                        }
-                        Some(json!({
-                            "id": n.get("nodeId"),
-                            "role": role,
-                            "name": name,
-                            "value": n.get("value").and_then(|v| v.get("value")),
-                            "checked": n.get("checked"),
-                            "pressed": n.get("pressed"),
-                            "selected": n.get("selected"),
-                            "expanded": n.get("expanded"),
-                            "disabled": n.get("disabled"),
-                            "backendNodeId": n.get("backendDOMNodeId"),
-                        }))
-                    })
-                    .collect();
                 // D35-lite：给带 backendNodeId 的节点依次盖短 ref（e1、e2…），
                 // 并整表替换引用表：只有最近一次 snapshot 的 ref 有效
                 let mut refmap = HashMap::new();
@@ -1097,6 +1219,366 @@ impl JsHost {
                     r["json"] = parsed;
                 }
                 Ok(r)
+            }
+            // ---- 捕获与检索分离（#36）：服务端搜索，只回命中加祖先链 ----
+            "findRefs" => {
+                // #36：AX 树在 daemon 侧匹配（name/value 子串，insensitive
+                // 开大小写不敏感；不引正则依赖），命中带 context 层祖先链
+                // 与 ref（可直接 clickRef），比全量 snapshot 省一个量级
+                let q = str_arg(argv, 0, "findRefs 的查询串")?;
+                let opts = argv.get(1).cloned().unwrap_or(json!({}));
+                let insensitive = opts
+                    .get("insensitive")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                let context = opts.get("context").and_then(Value::as_u64).unwrap_or(2) as usize;
+                let (nodes, parent) = self.ax_projected().await?;
+                let needle = if insensitive {
+                    q.to_lowercase()
+                } else {
+                    q.to_string()
+                };
+                let hit_ids: HashSet<i64> = nodes
+                    .iter()
+                    .filter_map(|n| {
+                        let name = n.get("name").and_then(Value::as_str).unwrap_or("");
+                        let val = n.get("value").and_then(Value::as_str).unwrap_or("");
+                        let hay = |x: &str| {
+                            if insensitive {
+                                x.to_lowercase()
+                            } else {
+                                x.to_string()
+                            }
+                        };
+                        (hay(name).contains(&needle) || hay(val).contains(&needle))
+                            .then(|| n.get("id").and_then(Value::as_i64))
+                    })
+                    .flatten()
+                    .collect();
+                // 命中加祖先链（context 层）进结果集
+                let mut keep: HashSet<i64> = hit_ids.clone();
+                for h in &hit_ids {
+                    let mut cur = *h;
+                    let mut up = 0;
+                    while up < context {
+                        if let Some(p) = parent.get(&cur) {
+                            keep.insert(*p);
+                            cur = *p;
+                            up += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                }
+                let sid = self.session.get_active_session().await;
+                let generation = match &sid {
+                    Some(s) => self.session.doc_generation(s).await,
+                    None => 0,
+                };
+                let (url, title) = self.page_meta().await;
+                // ref 只盖结果集（引用表整表替换，同 snapshot 语义）
+                let mut refmap = HashMap::new();
+                let mut counter = 0usize;
+                let kept: Vec<Value> = nodes
+                    .iter()
+                    .filter(|n| {
+                        n.get("id")
+                            .and_then(Value::as_i64)
+                            .is_some_and(|i| keep.contains(&i))
+                    })
+                    .filter_map(|n| {
+                        let bn = n.get("backendNodeId").and_then(Value::as_i64)?;
+                        counter += 1;
+                        let r = format!("e{counter}");
+                        let hit = n
+                            .get("id")
+                            .and_then(Value::as_i64)
+                            .is_some_and(|i| hit_ids.contains(&i));
+                        refmap.insert(r.clone(), bn);
+                        Some(json!({
+                            "ref": r, "hit": hit,
+                            "id": n.get("id"), "role": n.get("role"),
+                            "name": n.get("name"), "value": n.get("value"),
+                            "checked": n.get("checked"), "disabled": n.get("disabled"),
+                            "backendNodeId": bn,
+                        }))
+                    })
+                    .collect();
+                let count = kept
+                    .iter()
+                    .filter(|n| n.get("hit") == Some(&json!(true)))
+                    .count();
+                *self.refs.lock().await = Some(RefTable {
+                    session_id: sid.unwrap_or_default(),
+                    generation,
+                    map: refmap,
+                });
+                Ok(json!({ "url": url, "title": title, "query": q, "count": count, "nodes": kept }))
+            }
+            // ---- 页面可观测性三件（#37）----
+            "console" => {
+                // #37：控制台分级检索。Runtime 域随 tab 入口自动开（开域前
+                // 的旧消息收不到）；缓冲环形 1000 条，超量挤老
+                let _ = self.session.call("Runtime.enable", json!({})).await;
+                let opts = argv.first().cloned().unwrap_or(json!({}));
+                let since = opts.get("since").and_then(Value::as_u64).unwrap_or(0);
+                let min_level = opts
+                    .get("minLevel")
+                    .and_then(Value::as_str)
+                    .unwrap_or("verbose");
+                let rank = |l: &str| match l {
+                    "error" | "assert" => 0,
+                    "warning" => 1,
+                    "log" | "info" => 2,
+                    "debug" => 3,
+                    _ => 4,
+                };
+                let min_rank = rank(min_level);
+                let evs = self
+                    .session
+                    .peek_events_since("Runtime.consoleAPICalled", since, 500)
+                    .await;
+                let rows: Vec<Value> = evs
+                    .iter()
+                    .filter_map(|e| {
+                        let p = &e["params"];
+                        let level = p.get("type").and_then(Value::as_str).unwrap_or("log");
+                        if rank(level) > min_rank {
+                            return None;
+                        }
+                        let text = p
+                            .get("args")
+                            .and_then(Value::as_array)
+                            .map(|a| {
+                                a.iter()
+                                    .filter_map(|v| v.get("value"))
+                                    .map(|v| {
+                                        v.as_str()
+                                            .map(str::to_string)
+                                            .unwrap_or_else(|| v.to_string())
+                                    })
+                                    .collect::<Vec<_>>()
+                                    .join(" ")
+                            })
+                            .unwrap_or_default();
+                        Some(json!({ "seq": e.get("seq"), "level": level, "text": text }))
+                    })
+                    .collect();
+                Ok(json!({ "count": rows.len(), "messages": rows }))
+            }
+            "jsErrors" => {
+                // #37：未捕获异常（exceptionThrown 本就是未捕获面）
+                let _ = self.session.call("Runtime.enable", json!({})).await;
+                let since = argv
+                    .first()
+                    .and_then(|v| v.get("since"))
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0);
+                let evs = self
+                    .session
+                    .peek_events_since("Runtime.exceptionThrown", since, 200)
+                    .await;
+                let rows: Vec<Value> = evs
+                    .iter()
+                    .map(|e| {
+                        let x = &e["params"]["exceptionDetails"];
+                        let desc = x
+                            .pointer("/exception/description")
+                            .and_then(Value::as_str)
+                            .unwrap_or_else(|| x.get("text").and_then(Value::as_str).unwrap_or(""));
+                        json!({
+                            "seq": e.get("seq"), "text": desc,
+                            "url": x.get("url"), "line": x.get("lineNumber"),
+                        })
+                    })
+                    .collect();
+                Ok(json!({ "count": rows.len(), "errors": rows }))
+            }
+            "requests" => {
+                // #37：网络响应摘要列表（Network 域随 tab 入口自动开）；
+                // filter 是 url 子串。环形 1000 条，超量挤老
+                let opts = argv.first().cloned().unwrap_or(json!({}));
+                let since = opts.get("since").and_then(Value::as_u64).unwrap_or(0);
+                let filter = opts.get("filter").and_then(Value::as_str).unwrap_or("");
+                let evs = self
+                    .session
+                    .peek_events_since("Network.responseReceived", since, 1000)
+                    .await;
+                let mut rows: Vec<Value> = Vec::new();
+                for e in &evs {
+                    let p = &e["params"];
+                    let resp = &p["response"];
+                    let url = resp.get("url").and_then(Value::as_str).unwrap_or("");
+                    if !filter.is_empty() && !url.contains(filter) {
+                        continue;
+                    }
+                    rows.push(json!({
+                        "index": rows.len(),
+                        "requestId": p.get("requestId"),
+                        "url": url,
+                        "status": resp.get("status"),
+                        "type": p.get("type"),
+                        "bytes": resp.get("encodedDataLength"),
+                    }));
+                }
+                Ok(json!({ "count": rows.len(), "requests": rows }))
+            }
+            "requestDetail" => {
+                // #37：单条详情。index 是 since 窗内（未过滤）序号；也可直
+                // 接给 requestId（取最新一条）。body 另走 responseBody
+                let since = argv
+                    .get(1)
+                    .and_then(|v| v.get("since"))
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0);
+                let evs = self
+                    .session
+                    .peek_events_since("Network.responseReceived", since, 1000)
+                    .await;
+                let hit = match argv.first() {
+                    Some(Value::Number(n)) => n
+                        .as_u64()
+                        .and_then(|i| evs.get(i as usize).cloned()),
+                    Some(v) => v.as_str().and_then(|rid| {
+                        evs.iter()
+                            .rev()
+                            .find(|e| e["params"]["requestId"] == json!(rid))
+                            .cloned()
+                    }),
+                    _ => None,
+                }
+                .ok_or_else(|| anyhow!(
+                    "requestDetail 没找到目标（index 越界或 requestId 不在缓冲）；下一步：先 requests() 看列表（环形 1000 条，老事件可能被挤掉）"
+                ))?;
+                let p = &hit["params"];
+                let resp = &p["response"];
+                Ok(json!({
+                    "requestId": p.get("requestId"),
+                    "url": resp.get("url"),
+                    "status": resp.get("status"),
+                    "type": p.get("type"),
+                    "mimeType": resp.get("mimeType"),
+                    "headers": resp.get("headers"),
+                    "bytes": resp.get("encodedDataLength"),
+                    "bodyHint": "body 走 responseBody(requestId)",
+                }))
+            }
+            // ---- 页面诊断七判（#49）：结构化判读 {verdict, evidence, suggestion} ----
+            "detect" => {
+                // 页内探针一次打包（readyState/title/正文长/节点数/密码框），
+                // 网络信号取事件缓冲（403/429/503/失败计数）
+                let probe = self
+                    .session
+                    .call(
+                        "Runtime.evaluate",
+                        json!({
+                            "expression": r#"JSON.stringify((() => {
+                                const b = document.body;
+                                const txt = b ? (b.innerText || '') : '';
+                                return {
+                                    readyState: document.readyState,
+                                    title: document.title || '',
+                                    textLen: txt.length,
+                                    nodeCount: document.querySelectorAll('*').length,
+                                    hasPassword: !!document.querySelector('input[type=password]'),
+                                };
+                            })())"#,
+                            "returnByValue": true
+                        }),
+                    )
+                    .await;
+                let p: Value = probe
+                    .ok()
+                    .and_then(|v| {
+                        v.pointer("/result/value")
+                            .and_then(Value::as_str)
+                            .and_then(|t| serde_json::from_str(t).ok())
+                    })
+                    .unwrap_or(json!({}));
+                let title = p
+                    .get("title")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_lowercase();
+                let ready = p.get("readyState").and_then(Value::as_str).unwrap_or("");
+                let text_len = p.get("textLen").and_then(Value::as_u64).unwrap_or(0);
+                let node_count = p.get("nodeCount").and_then(Value::as_u64).unwrap_or(0);
+                let has_password = p
+                    .get("hasPassword")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                let statuses = self
+                    .session
+                    .peek_events_since("Network.responseReceived", 0, 1000)
+                    .await;
+                let code = |e: &Value| e.pointer("/params/response/status").and_then(Value::as_u64);
+                let c403 = statuses.iter().filter(|e| code(e) == Some(403)).count();
+                let c429 = statuses.iter().filter(|e| code(e) == Some(429)).count();
+                let c503 = statuses.iter().filter(|e| code(e) == Some(503)).count();
+                let failed = self
+                    .session
+                    .peek_events_since("Network.loadingFailed", 0, 200)
+                    .await
+                    .len();
+                let mut evidence: Vec<String> = Vec::new();
+                let title_disp = p.get("title").cloned().unwrap_or(json!(""));
+                evidence.push(format!("title={title_disp}"));
+                evidence.push(format!("readyState={ready}"));
+                evidence.push(format!("bodyTextLen={text_len}, nodeCount={node_count}"));
+                if c403 + c429 + c503 + failed > 0 {
+                    evidence.push(format!(
+                        "network: 403x{c403}, 429x{c429}, 503x{c503}, failedx{failed}"
+                    ));
+                }
+                let challenge_kw = [
+                    "just a moment",
+                    "attention required",
+                    "checking your browser",
+                    "verify you are human",
+                    "challenge",
+                ];
+                let challenge_hit = challenge_kw.iter().any(|k| title.contains(k));
+                let (verdict, suggestion) = if challenge_hit && (c403 + c503 > 0 || text_len < 600)
+                {
+                    (
+                        "challenged",
+                        "人机挑战页：等几秒复测 detect()，或换附着态人工过验证；routeMock 不可绕真挑战",
+                    )
+                } else if c429 > 0 {
+                    (
+                        "rate-limited",
+                        "资源限流：放缓节奏或稍后重试；requests({filter}) 看命中端点",
+                    )
+                } else if c403 > 0 {
+                    (
+                        "blocked",
+                        "被拒（403）：换 UA/出口或检查目标权限；requestDetail 看是哪条",
+                    )
+                } else if failed > 0 && ready != "complete" {
+                    (
+                        "stalled",
+                        "加载停滞：waitLoad(10) 再试，requests() 看卡住的请求",
+                    )
+                } else if has_password && text_len < 2000 {
+                    (
+                        "login-wall",
+                        "登录墙：先补登录态（storageState 或 cookie 注入）再取数据",
+                    )
+                } else if ready == "complete" && text_len < 15 && node_count < 10 {
+                    (
+                        "blank",
+                        "空白页：等渲染 waitJs(\"document.body.children.length > 1\")，或 jsErrors() 看渲染炸在哪",
+                    )
+                } else if ready != "complete" {
+                    ("loading", "仍在加载：goto/waitLoad 收尾后复测")
+                } else {
+                    ("ok", "页面正常：snapshot()/findRefs() 取结构")
+                };
+                Ok(json!({
+                    "verdict": verdict,
+                    "evidence": evidence,
+                    "suggestion": suggestion,
+                }))
             }
             // ---- 交互动词补全（#23）与运营面（#25.2/#25.3）----
             "hoverRef" => {
@@ -1961,6 +2443,10 @@ fn decode_response_body(b: &Value) -> Value {
 /// watcher 兜底。
 pub(crate) async fn ensure_page_enabled(session: &Session, sid: &str) {
     let _ = session.call_on("Page.enable", json!({}), sid).await;
+    // #37 可观测三件自动开域：console/jsErrors 要 Runtime、requests 要
+    // Network。幂等；晚开域之前的旧事件收不到（自开域后起算）
+    let _ = session.call_on("Runtime.enable", json!({}), sid).await;
+    let _ = session.call_on("Network.enable", json!({}), sid).await;
 }
 
 /// 字符串方法面清单（#21）：CTA 文案由此派生，surface 目录描述由测试绑定；
@@ -2039,6 +2525,13 @@ fn str_arg<'a>(argv: &'a [Value], i: usize, who: &str) -> Result<&'a str> {
             preview(argv.get(i).unwrap_or(&Value::Null))
         )
     })
+}
+
+/// AX 节点 id/childIds 归一解析（#36）：真 chrome 回执是数字串（"2"），
+/// 假对端与文档示例是数字，两形都吃。
+fn ax_id(x: &Value) -> Option<i64> {
+    x.as_i64()
+        .or_else(|| x.as_str().and_then(|s| s.parse().ok()))
 }
 
 /// wait 类 timeout 秒值换毫秒（#51 统一口径）：不小于 1000 视为毫秒误写，
@@ -2246,7 +2739,7 @@ const PREVIEW_HEAD_ITEMS: usize = 8;
 /// 全局函数 CTA 清单（#33 G6 单一真相）：「未知函数」提示由此派生，
 /// `global_cta_covers_catalog` 测试把它与 surface 目录的 Global 条目绑死；
 /// 增删全局必须同步这里（value-methods 是方法面族条目，不在此列）。
-const GLOBALS_CTA: &str = "listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/hostFunctions()/snapshot()/screenshot(path?, full?)/pdf(path?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/goto(url,opts?)/goBack(delta?)/goForward(delta?)/reload(opts?)/clickAt(x,y)/fillInput(sel,text,submit?)/clickRef(ref,opts?)/checkRef(ref)/uncheckRef(ref)/fillRef(ref,text,submit?)/selectOption(ref,value)/pressKey(key)/dialogStatus()/dialogAccept(text?)/dialogDismiss()/routeBlock(pattern)/routeMock(pattern,body,opts?)/routeClear()/waitLoad(s?)/waitIdle(s?)/waitForResponse(pattern,s?)/responseBody(requestId)/pageEval(js)/hoverRef(ref)/hoverAt(x,y)/dblclickRef(ref)/dragRef(src,dst)/keydown(key)/keyup(key)/typeRef(ref,text)/emulate(opts)/setInitScript(code)/exportStorageState()/importStorageState(state)/JSON.parse(string)/JSON.stringify(value,indent?)/recordStart(opts?)/recordStop()/chromeInstall(opts?)/chromeList()/chromeUse(version)/chromeUpdate()/chromeRemove(version)/chromeDoctor()/print(x)";
+const GLOBALS_CTA: &str = "listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/hostFunctions()/snapshot(opts?)/findRefs(q,opts?)/console(opts?)/jsErrors(since?)/requests(opts?)/requestDetail(idxOrId,opts?)/detect()/screenshot(path?, full?)/pdf(path?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/goto(url,opts?)/goBack(delta?)/goForward(delta?)/reload(opts?)/clickAt(x,y)/fillInput(sel,text,submit?)/clickRef(ref,opts?)/checkRef(ref)/uncheckRef(ref)/fillRef(ref,text,submit?)/selectOption(ref,value)/pressKey(key)/dialogStatus()/dialogAccept(text?)/dialogDismiss()/routeBlock(pattern)/routeMock(pattern,body,opts?)/routeClear()/waitLoad(s?)/waitIdle(s?)/waitForResponse(pattern,s?)/responseBody(requestId)/pageEval(js)/hoverRef(ref)/hoverAt(x,y)/dblclickRef(ref)/dragRef(src,dst)/keydown(key)/keyup(key)/typeRef(ref,text)/emulate(opts)/setInitScript(code)/exportStorageState()/importStorageState(state)/JSON.parse(string)/JSON.stringify(value,indent?)/recordStart(opts?)/recordStop()/chromeInstall(opts?)/chromeList()/chromeUse(version)/chromeUpdate()/chromeRemove(version)/chromeDoctor()/print(x)";
 
 /// 容器预览：头部 JSON 截断（留尾注位），超帽尾注总项数；小容器输出
 /// 与全量形一致。不与 [`trunc_preview`] 叠用（双省略号）。
