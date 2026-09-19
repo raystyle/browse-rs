@@ -761,6 +761,32 @@ l`.length === 3].join(\"|\")", returnByValue:true})).result.value"#;
         .await
         .expect("localClear");
 
+    // ---- #40 a11y 媒质仿真族 ----
+    // dark 生效 + print 媒质 + clear 还原（matchMedia 侧证）
+    host.eval_snippet(r#"await goto("data:text/html,<h1>em</h1>", {timeout: 10})"#)
+        .await
+        .expect("goto 媒质页");
+    host.eval_snippet(r#"await emulateMedia({colorScheme: "dark", media: "print"})"#)
+        .await
+        .expect("emulateMedia");
+    let mq = host
+        .eval_snippet(
+            r#"return (await session.Runtime.evaluate({expression:"[matchMedia('(prefers-color-scheme: dark)').matches, matchMedia('print').matches].join('|')", returnByValue:true})).result.value"#,
+        )
+        .await
+        .expect("读 matchMedia");
+    assert_eq!(mq, json!("true|true"), "dark 加 print 应双双生效: {mq}");
+    host.eval_snippet("await emulateMediaClear()")
+        .await
+        .expect("emulateMediaClear");
+    let mq2 = host
+        .eval_snippet(
+            r#"return (await session.Runtime.evaluate({expression:"matchMedia('(prefers-color-scheme: dark)').matches", returnByValue:true})).result.value"#,
+        )
+        .await
+        .expect("读还原后 matchMedia");
+    assert_eq!(mq2, json!(false), "clear 后应回 stock: {mq2}");
+
     // screenshot：存文件、字节数为正、清场
     let shot = host
         .eval_snippet("return await screenshot()")

@@ -911,6 +911,49 @@
       "output": "runtime JSON（回值随页面与 CDP 而定）",
       "type": "object"
     },
+    "emulateMedia": {
+      "description": "emulateMedia(opts) a11y 媒质仿真族（#40）：Emulation.setEmulatedMedia features 面，五参任给其一以上；页内 matchMedia 感知；与 emulate({viewport,mobile,userAgent}) 并列成族；还原走 emulateMediaClear()。",
+      "example": "await emulateMedia({colorScheme: \"dark\", media: \"print\"})",
+      "input": {
+        "properties": {
+          "colorScheme": {
+            "description": "缺省 dark/light",
+            "type": "string"
+          },
+          "forcedColors": {
+            "description": "缺省 active/none",
+            "type": "string"
+          },
+          "media": {
+            "description": "缺省 screen/print",
+            "type": "string"
+          },
+          "prefersContrast": {
+            "description": "缺省 more/less/no-preference",
+            "type": "string"
+          },
+          "reducedMotion": {
+            "description": "缺省 reduce/no-preference",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "emulateMediaClear": {
+      "description": "emulateMediaClear() 还原媒质仿真（#40）：五特征与媒质全部回 stock。",
+      "example": "await emulateMediaClear()",
+      "input": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
     "exportStorageState": {
       "description": "exportStorageState() 导出会话态（#25.3）：cookies 全量加当前页 origin 的 localStorage；多 origin 逐个切 tab 再导。",
       "example": "return await exportStorageState()",

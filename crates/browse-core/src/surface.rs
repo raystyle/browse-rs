@@ -901,6 +901,33 @@ pub const COMMANDS: &[CmdSpec] = &[
         example: r#"await typeRef("e7", "hello")"#,
     },
     CmdSpec {
+        name: "emulateMedia",
+        kind: CmdKind::Global,
+        signature: "emulateMedia(opts)",
+        args: &[
+            arg!("colorScheme", "string", false, "dark/light"),
+            arg!("reducedMotion", "string", false, "reduce/no-preference"),
+            arg!("forcedColors", "string", false, "active/none"),
+            arg!(
+                "prefersContrast",
+                "string",
+                false,
+                "more/less/no-preference"
+            ),
+            arg!("media", "string", false, "screen/print"),
+        ],
+        description: "a11y 媒质仿真族（#40）：Emulation.setEmulatedMedia features 面，五参任给其一以上；页内 matchMedia 感知；与 emulate({viewport,mobile,userAgent}) 并列成族；还原走 emulateMediaClear()。",
+        example: "await emulateMedia({colorScheme: \"dark\", media: \"print\"})",
+    },
+    CmdSpec {
+        name: "emulateMediaClear",
+        kind: CmdKind::Global,
+        signature: "emulateMediaClear()",
+        args: &[],
+        description: "还原媒质仿真（#40）：五特征与媒质全部回 stock。",
+        example: "await emulateMediaClear()",
+    },
+    CmdSpec {
         name: "emulate",
         kind: CmdKind::Global,
         signature: "emulate(opts)",

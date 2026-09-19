@@ -252,6 +252,66 @@ pub async fn wait_settled(s: &Session, since: u64, grace_ms: u64, budget_ms: u64
     }
 }
 
+/// a11y 媒质仿真族（#40）：`Emulation.setEmulatedMedia` 的 features 面。
+/// `opts` 任给其一：`colorScheme`（dark/light）、`reducedMotion`
+/// （reduce/no-preference）、`forcedColors`（active/none）、`prefersContrast`
+/// （more/less/no-preference）、`media`（screen/print）。页内以
+/// `matchMedia("(prefers-color-scheme: dark)")` 等感知；还原走
+/// [`emulate_media_clear`]。
+///
+/// # Errors
+///
+/// 未连接；opts 一项都没有；CDP 拒绝（枚举值写错原样透传，守卫 CTA 指路）。
+pub async fn emulate_media(s: &Session, opts: &Value) -> Result<Value> {
+    let mut params = json!({});
+    let mut features: Vec<Value> = Vec::new();
+    let mut push = |name: &str, v: Option<&str>| {
+        if let Some(v) = v {
+            features.push(json!({ "name": name, "value": v }));
+        }
+    };
+    push(
+        "prefers-color-scheme",
+        opts.get("colorScheme").and_then(Value::as_str),
+    );
+    push(
+        "prefers-reduced-motion",
+        opts.get("reducedMotion").and_then(Value::as_str),
+    );
+    push(
+        "forced-colors",
+        opts.get("forcedColors").and_then(Value::as_str),
+    );
+    push(
+        "prefers-contrast",
+        opts.get("prefersContrast").and_then(Value::as_str),
+    );
+    if let Some(m) = opts.get("media").and_then(Value::as_str) {
+        params["media"] = json!(m);
+    }
+    if !features.is_empty() {
+        params["features"] = json!(features);
+    }
+    if params.as_object().is_some_and(serde_json::Map::is_empty) {
+        bail!(
+            "emulateMedia 至少给一项；下一步：emulateMedia({{colorScheme: \"dark\"}}) 或 {{media: \"print\"}}（colorScheme/reducedMotion/forcedColors/prefersContrast/media 五选一以上）"
+        );
+    }
+    s.call("Emulation.setEmulatedMedia", params).await?;
+    Ok(json!(true))
+}
+
+/// 还原媒质仿真（#40）：`Emulation.setEmulatedMedia` 空参，五特征与媒质
+/// 全部回 stock。
+///
+/// # Errors
+///
+/// 未连接或 CDP 失败。
+pub async fn emulate_media_clear(s: &Session) -> Result<Value> {
+    s.call("Emulation.setEmulatedMedia", json!({})).await?;
+    Ok(json!(true))
+}
+
 /// 列 cookie（#42）：`Network.getCookies`。无参是当前页 URL 作用域
 /// （CDP 按活动 target 的 URL 解析，非全 jar，实弹口径）；给了 domain
 /// 则按该域 http/https 两 URL 显式过滤。回 cookie 简表数组（原生字段）。

@@ -24,6 +24,8 @@
 - `dblclick_ref` — 双击短 ref 元素（#23）：press/release 两轮，clickCount 递增成双击。
 - `drag_ref` — 拖拽：源 ref 中心按下，分步移到目标 ref 中心松开（#23）。
 - `emulate` — 视口与 UA 仿真档位（#24）：`{viewport:{width,height}, mobile, userAgent,
+- `emulate_media` — a11y 媒质仿真族（#40）：`Emulation.setEmulatedMedia` 的 features 面。
+- `emulate_media_clear` — 还原媒质仿真（#40）：`Emulation.setEmulatedMedia` 空参，五特征与媒质
 - `export_storage_state` — 导出会话态（#25.3）：cookies 全量加当前页 origin 的 localStorage。
 - `fill_input` — 按 CSS 选择器填输入框：focus -> 全选（commands，不发 Ctrl+A）-> 可选
 - `fill_ref` — 按短 ref 填输入框：objectId 上 focus -> 探测控件（SELECT/readOnly 拒收
