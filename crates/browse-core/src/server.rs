@@ -372,11 +372,9 @@ function render(h){
 const es = new EventSource('/dashboard/sse');
 es.onmessage = e => { const h = JSON.parse(e.data); render(h);
   const d = document.getElementById('evt');
-  d.textContent = new Date().toLocaleTimeString()+'  '+JSON.stringify(h)+'
-'+d.textContent;
+  d.textContent = new Date().toLocaleTimeString()+'  '+JSON.stringify(h)+'\n'+d.textContent;
 };
-es.onerror = () => { document.getElementById('evt').textContent = 'SSE 断线，自动重连中…
-'+document.getElementById('evt').textContent; };
+es.onerror = () => { document.getElementById('evt').textContent = 'SSE 断线，自动重连中…' + '\n' + document.getElementById('evt').textContent; };
 </script></body></html>"#;
 
 async fn health_handler(State(st): State<AppState>) -> impl IntoResponse {
@@ -495,5 +493,39 @@ mod tests {
         std::fs::write(&f, "").unwrap();
         crate::js_host::load_secrets(f.to_str().unwrap()).expect("清仓");
         std::fs::remove_dir_all(&dir).ok();
+    }
+}
+
+#[cfg(test)]
+mod dashboard_tests {
+    /// #54 评审 F1 回归锁：内联脚本里不得出现跨行裸换行的单引号串（JS 单引号
+    /// 串内换行是语法错，曾致看板整段脚本不执行、表格与事件流全空）。
+    #[test]
+    fn dashboard_script_no_raw_newlines_in_strings() {
+        let script = super::DASHBOARD_HTML
+            .split_once("<script>")
+            .and_then(|(_, b)| b.split_once("</script>"))
+            .map(|(a, _)| a)
+            .expect("应能抽出 script 段");
+        let lines: Vec<&str> = script.lines().collect();
+        for (i, line) in lines.iter().enumerate() {
+            if line.matches('\'').count() % 2 == 0 {
+                continue; // 本行单引号配平：无跨行串
+            }
+            // 奇数个单引号：要么本行是开串（下一行续），要么是闭串（上一行开）。
+            // 合法集合只有两类：本行以字符串字面量收尾（右上一步是引号）——
+            // 即「串在同一行闭合」被上面拦掉了；剩下的必须是显式 \n 拼接形。
+            let trimmed = line.trim_end();
+            let ok_continuation = trimmed.ends_with("+\\n'")
+                || trimmed.ends_with("+ '\\n' +")
+                || trimmed.contains("'\\n'+")
+                || trimmed.contains("+ '\\n' +");
+            if !ok_continuation {
+                panic!(
+                    "script 第 {} 行疑似跨行裸换行字符串（JS 语法错）：{line}",
+                    i + 1
+                );
+            }
+        }
     }
 }
