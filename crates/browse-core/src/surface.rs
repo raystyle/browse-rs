@@ -1363,6 +1363,11 @@ pub fn render_schema() -> Value {
 pub fn render_manual() -> String {
     let mut out = String::from("# browse\n\n");
     out.push_str(&format!("版本 {}。\n", env!("CARGO_PKG_VERSION")));
+
+    // 意图路由表（#46）：想做什么用什么，一行一带；细节下钻 interaction 层
+    out.push_str(
+        "\n意图路由（想做什么用什么；机制细节下钻 docs/skills/interaction/，HTTP 契约 docs/guides/http-api.md）：\n  去页面并等可用 goto(url,opts)；等加载 waitLoad(s)；等导航事件 waitFor(frameNavigated,s)\n  找元素 findRefs(q)；拿结构 snapshot({depth}) 或 {ref} 子树；点击/填 clickRef/fillRef（ref 来自最近快照或 findRefs）\n  取回值/正文 pageEval(js) 或 session.Runtime.evaluate；多 tab listPageTargets/switchTab/currentTab\n  hover 菜单 hoverRef；右键双击 clickRef(ref,{button,clickCount})；滚轮 mouseWheel；拖拽 mouseDown-Move-Up 手拼\n  传文件 dropFiles；下文件 裸 Page.navigate 加 downloads()/downloadPath()；等特定响应 waitForResponse(pattern,s)\n  页面打不开/登不上 detect() 七判；console 错误 console({minLevel});JS 异常 jsErrors();请求对账 requests()/requestDetail()\n  仿真 emulate({viewport,UA}) / emulateMedia({colorScheme});复用片段 browse snippets list/show；门外语言 POST /eval\n",
+    );
     out.push_str(
         "定位：给 agent（也给人）的浏览器驾驶 CLI；JS 方言片段驱动 clean-chrome，\
          常驻 daemon 会话跨命令存活。\n\n",
