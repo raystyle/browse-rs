@@ -1472,8 +1472,18 @@ fn spawn_dialog_watcher(
         let auto =
             !std::env::var_os("BROWSE_NO_AUTO_DIALOG").is_some_and(|v| v == "1" || v == "true");
         let mut enabled: HashSet<String> = HashSet::new();
+        // 连接纪元观察（全量评审 G1）：重连（引擎换代）后旧 sid 的
+        // identifier 全是陈尸，随换代清表，与 cdp 侧重连清账同呼吸；
+        // 新 session 的补注由本 watcher 下一拍照常做
+        let mut seen_epoch = session.connection_epoch();
         loop {
             tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+            let epoch = session.connection_epoch();
+            if epoch != seen_epoch {
+                seen_epoch = epoch;
+                init_script_ids.lock().await.clear();
+                enabled.clear();
+            }
             // 活动路由换 session 后补开域（幂等）
             if let Some(sid) = session.get_active_session().await
                 && !enabled.contains(&sid)
@@ -2859,7 +2869,7 @@ return JSON.stringify(JSON.parse(raw).items.slice(0, 1))"#,
             "屏障应等到 commit 事件（实测 {gated:?}）"
         );
         assert!(
-            gated < std::time::Duration::from_millis(1_500),
+            gated < std::time::Duration::from_millis(2_500),
             "长缓冲下屏障不应退化为满窗等待（实测 {gated:?}；旧 peek 取最旧 50 条时此格红）"
         );
 

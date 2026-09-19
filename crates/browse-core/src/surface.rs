@@ -622,7 +622,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "emulate(opts)",
         args: &[arg!("opts", "object", true)],
-        description: "视口与 UA 仿真（#24）：viewport 加 mobile 加 userAgent 全可省；mobile 档同站更省 token。",
+        description: "视口与 UA 仿真（#24）：viewport 加 mobile 加 userAgent 全可省；mobile 档同站更省 token；userAgent 只覆写 UA 字符串，UA-CH 高熵字段未动（引擎级覆写是 #28 范围）。",
         example: "return await emulate({viewport:{width:390,height:844}, mobile:true})",
     },
     CmdSpec {

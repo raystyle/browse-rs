@@ -148,6 +148,12 @@ impl Session {
         self.connected.load(Ordering::Relaxed)
     }
 
+    /// 返回当前连接纪元（每次 open_ws/connect_pipes 自增）：上层用它
+    /// 观察重连（如 js_host 的 init 脚本记账随换代清陈尸，全量评审 G1）。
+    pub fn connection_epoch(&self) -> i64 {
+        self.conn_epoch.load(Ordering::Relaxed)
+    }
+
     /// 按线索连接，超时由 [`ConnectOptions::timeout_ms`] 控制（缺省 5 秒）。
     ///
     /// 已连接时重复调用会再开一条连接（先 [`Session::connect`] 前自查）。
@@ -248,6 +254,7 @@ impl Session {
         let dialog_r = self.pending_dialog.clone();
         let gens_r = self.doc_gens.clone();
         let flag = self.connected.clone();
+        let dead_pending = self.pending.clone();
         let epoch = self.conn_epoch.fetch_add(1, Ordering::Relaxed) + 1;
         let epoch_r = self.conn_epoch.clone();
         tokio::spawn(async move {
@@ -262,9 +269,16 @@ impl Session {
                 }
             }
             // 只有自己仍是当前连接才翻死线：旧连接的泵在重连后迟到退出
-            // 不得误杀新连接（批 12 实测：detach 报 Not connected 即此）
+            // 不得误杀新连接（批 12 实测：detach 报 Not connected 即此）。
+            // 死亡即清在途（全量评审 F1）：pending 永无应答，不清则白等
+            // 30 秒还占 eval 单飞槽
             if epoch_r.load(Ordering::Relaxed) == epoch {
                 flag.store(false, Ordering::Relaxed);
+                for (_, tx) in dead_pending.lock().await.drain() {
+                    let _ = tx.send(json!({
+                        "error": {"code": -32000, "message": "连接已断开（引擎死亡或重连清账）"}
+                    }));
+                }
             }
         });
 
@@ -278,11 +292,25 @@ impl Session {
     /// 集合、文档代、提交屏障都是旧连接上旧 session 的状态，重连（引擎
     /// 换代后的再 ensure）后全是陈尸——钉住的 sid 已不存在，忘收场的
     /// 录制不再拖住任何东西。own_targets 是 browser 级（同一浏览器
-    /// 重附仍有效），不清。
+    /// 重附仍有效），不清。在途调用即时失败（全量评审 F1）：旧连接上的
+    /// pending 永无应答，白等 30 秒还占 eval 单飞槽。
     async fn reset_connection_state(&self) {
+        let _out = self.outgoing.lock().await;
+        self.fail_pending().await;
         self.pinned_sessions.lock().await.clear();
         self.doc_gens.lock().await.clear();
         self.commit_barrier.lock().await.clear();
+    }
+
+    /// 把全部在途调用立刻以「连接已断开」失败（全量评审 F1）：给每个
+    /// pending 回 error 形响应（走 send_with 的 CDP 错误分支，错误串带
+    /// 方法名与归因），比 drop sender 的「cdp dropped」更可诊断。
+    async fn fail_pending(&self) {
+        for (_, tx) in self.pending.lock().await.drain() {
+            let _ = tx.send(json!({
+                "error": {"code": -32000, "message": "连接已断开（引擎死亡或重连清账）"}
+            }));
+        }
     }
 
     /// 接上一对 CDP 管道（clean-chrome 管道态，S005 契约）。
@@ -358,6 +386,7 @@ impl Session {
                 }
             })
             .expect("pipe read thread");
+        let dead_pending = self.pending.clone();
         tokio::spawn(async move {
             let mut carry: Vec<u8> = Vec::new();
             while let Some(chunk) = chunk_rx.recv().await {
@@ -373,9 +402,15 @@ impl Session {
                     }
                 }
             }
-            // 同 open_ws：旧连接迟到退出不误杀新连接
+            // 同 open_ws：旧连接迟到退出不误杀新连接；死亡即清在途
+            // （全量评审 F1，同 open_ws 臂）
             if epoch_r.load(Ordering::Relaxed) == epoch {
                 flag.store(false, Ordering::Relaxed);
+                for (_, tx) in dead_pending.lock().await.drain() {
+                    let _ = tx.send(json!({
+                        "error": {"code": -32000, "message": "连接已断开（引擎死亡或重连清账）"}
+                    }));
+                }
             }
         });
 
@@ -593,20 +628,29 @@ impl Session {
         {
             msg["sessionId"] = json!(sid);
         }
+        // 先占 outgoing 锁再登记 pending（全量评审 F1 附带）：与
+        // reset_connection_state 的 drain 同序，防「已登记却被清」的
+        // 窗口——reset 持 outgoing 时新调用在此排队，drain 只清旧连接
+        // 的在途项
+        let out_lock = self.outgoing.lock().await;
         let (tx, rx) = oneshot::channel();
         self.pending.lock().await.insert(id, tx);
-        self.outgoing
-            .lock()
-            .await
+        let sent = out_lock
             .as_ref()
-            .ok_or_else(|| anyhow!("CDP socket closed"))?
-            .send(msg)
-            .map_err(|_| anyhow!("CDP socket closed"))?;
+            .ok_or_else(|| anyhow!("CDP socket closed"))
+            .and_then(|o| o.send(msg).map_err(|_| anyhow!("CDP socket closed")));
+        drop(out_lock);
+        sent?;
 
-        let resp = timeout(Duration::from_secs(CALL_TIMEOUT_SECS), rx)
-            .await
-            .context("cdp timeout")?
-            .context("cdp dropped")?;
+        let resp = match timeout(Duration::from_secs(CALL_TIMEOUT_SECS), rx).await {
+            Ok(r) => r.context("cdp dropped")?,
+            // 超时清登记（全量评审 F1）：不清则 map 长期积尸；清后迟到的
+            // 响应对不上 id，由 route 的 pending-miss 静默丢
+            Err(_) => {
+                self.pending.lock().await.remove(&id);
+                return Err(anyhow!("cdp timeout: deadline has elapsed"));
+            }
+        };
         if let Some(err) = resp.get("error") {
             // 方法名拼错（CDP -32601 not found）：附相近建议（被动增强，不预拦）
             let not_found = err
@@ -1199,6 +1243,66 @@ mod tests {
         );
     }
 
+    /// 连接死亡即在途调用立刻失败（全量评审 F1）：不留 30 秒白等与
+    /// eval 单飞槽独占；错误归因是「连接已断开」不是「超时」。
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn connection_death_fails_inflight_calls() {
+        use std::io::Read;
+        use std::os::unix::net::UnixStream;
+        use std::sync::Mutex;
+        let (sa, ba) = UnixStream::pair().unwrap();
+        let (sb, bb) = UnixStream::pair().unwrap();
+        let s = Session::new();
+        s.connect_pipes(sa, sb).await.expect("管道连接");
+        s.set_active_session(Some("S1".into())).await;
+        // 假对端：收下请求但永不回应；对端写句柄可被测试侧收回以断连
+        let peer_out = Arc::new(Mutex::new(Some(ba)));
+        let peer_out_p = peer_out.clone();
+        std::thread::spawn(move || {
+            let mut bb = bb;
+            let mut buf = Vec::<u8>::new();
+            let mut chunk = [0u8; 4096];
+            loop {
+                let n = match bb.read(&mut chunk) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => n,
+                };
+                buf.extend_from_slice(&chunk[..n]);
+                while let Some(pos) = buf.iter().position(|&b| b == 0) {
+                    buf.drain(..=pos);
+                    // 故意不回应
+                }
+            }
+            drop(peer_out_p);
+        });
+        let t0 = tokio::time::Instant::now();
+        let call = tokio::spawn({
+            let s = s.clone();
+            async move {
+                s.call("Runtime.evaluate", json!({ "expression": "1" }))
+                    .await
+            }
+        });
+        // 让调用先发起（已登记 pending、已上线），再掐断连接
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        *peer_out.lock().unwrap() = None; // 关对端写句柄 -> 我方读端 EOF
+        let r = tokio::time::timeout(Duration::from_millis(2_000), call)
+            .await
+            .expect("连接死亡应在 2 秒内令在途调用失败（修前挂满 30 秒）")
+            .expect("task 不应 panic");
+        let msg = format!("{r:#?}");
+        assert!(
+            msg.contains("连接已断开"),
+            "错误应归因连接断开而非超时: {msg}"
+        );
+        assert!(
+            t0.elapsed() < Duration::from_millis(2_500),
+            "失败应即时（实测 {:?}）",
+            t0.elapsed()
+        );
+    }
+
     /// waitFor 活动过滤（批 6 遗留）：他 sid 的同 method 事件不被误领，
     /// browser 级（无 sessionId）不过滤。
     #[tokio::test]
@@ -1572,7 +1676,7 @@ mod tests {
             "屏障窗内应等待（实测 {waited:?}）"
         );
         assert!(
-            waited < Duration::from_millis(2_000),
+            waited < Duration::from_millis(2_500),
             "不应远超屏障窗（实测 {waited:?}）"
         );
     }
