@@ -1457,6 +1457,34 @@ return await responseBody(evs[0].params.requestId)"#,
     host.eval_snippet(&format!(r#"await switchTab("{rec_tid}")"#))
         .await
         .expect("切回录制 tab");
+    // #58 回归锁：同会话紧接的第二次 recordStart 不零帧（修前竞态必现，
+    // 垫拍修法见 record.rs 注释）
+    let rec3 = host
+        .eval_snippet("return await recordStart()")
+        .await
+        .expect("recordStart 3（同会话紧接）");
+    assert!(rec3.get("dir").is_some(), "{rec3}");
+    host.eval_snippet(r#"await session.Page.navigate({url:"data:text/html,<h3>rec3</h3>"})"#)
+        .await
+        .expect("录制中导航 3");
+    host.eval_snippet(
+        r#"await session.waitJs("document.body && document.body.innerText.includes('rec3')", 5)"#,
+    )
+    .await
+    .expect("等 rec3");
+    let stopped3 = host
+        .eval_snippet("return await recordStop()")
+        .await
+        .expect("recordStop 3");
+    let frames3 = stopped3.get("frames").and_then(Value::as_u64).unwrap_or(0);
+    assert!(
+        frames3 >= 1,
+        "同会话二录应至少一帧（#58 修前零帧）: {stopped3}"
+    );
+    if let Some(d3) = stopped3.get("dir").and_then(Value::as_str) {
+        let _ = tokio::fs::remove_dir_all(d3).await;
+    }
+
     // 没在录时 recordStop：错误带 CTA
     let no_rec = host.eval_snippet("await recordStop()").await;
     assert!(

@@ -53,6 +53,16 @@ impl Recorder {
 ///
 /// 未连接、`Page.startScreencast` 失败、目录建不出来。
 pub async fn start(s: Arc<Session>, opts: &Value) -> Result<Recorder> {
+    // 同会话重启垫拍（#58 实证 workaround）：recordStop 后紧接的第二次
+    // startScreencast 会零帧（竞态非恒定，插一次会话往返即活：r1=6 加拍
+    // 后 r2=2；换 tab 恒活），机理未定谳（疑 Chrome 侧订阅状态机），垫
+    // 一次廉价往返把竞态窗口关掉
+    let _ = s
+        .call(
+            "Runtime.evaluate",
+            json!({ "expression": "1", "returnByValue": true }),
+        )
+        .await;
     let mut params = json!({ "format": "png", "everyNthFrame": 1 });
     for k in ["everyNthFrame", "maxWidth", "maxHeight"] {
         if let Some(v) = opts.get(k) {
