@@ -2737,6 +2737,229 @@ return JSON.stringify(JSON.parse(raw).items.slice(0, 1))"#,
         let _ = std::fs::remove_file(&tmp);
     }
 
+    /// 提交屏障（#34 根因级）：跨文档 navigate（回执带 loaderId）后首个
+    /// 页面级调用等主框架 frameNavigated 再放行；同文档导航（无 loaderId）
+    /// 不设屏障；屏障满足后只等一次；超时放行不报错；detach 清 session
+    /// 记账（批 10 遗留）。
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn commit_barrier_gates_navigations() {
+        use std::io::{Read, Write};
+        use std::os::unix::net::UnixStream;
+        use std::sync::Mutex;
+        let (sa, ba) = UnixStream::pair().unwrap();
+        let (sb, bb) = UnixStream::pair().unwrap();
+        let session = cdp::Session::new();
+        session.connect_pipes(sa, sb).await.expect("管道连接");
+        session.set_active_session(Some("S1".into())).await;
+        let host = JsHost::new(session.clone());
+
+        let peer_out = Arc::new(Mutex::new(ba));
+        let peer_out_p = peer_out.clone();
+        std::thread::spawn(move || {
+            let mut bb = bb;
+            let mut buf = Vec::<u8>::new();
+            let mut chunk = [0u8; 4096];
+            loop {
+                let n = match bb.read(&mut chunk) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => n,
+                };
+                buf.extend_from_slice(&chunk[..n]);
+                while let Some(pos) = buf.iter().position(|&b| b == 0) {
+                    let frame: Vec<u8> = buf.drain(..=pos).collect();
+                    let Ok(v) = serde_json::from_slice::<Value>(&frame[..frame.len() - 1]) else {
+                        continue;
+                    };
+                    let Some(id) = v.get("id").cloned() else {
+                        continue;
+                    };
+                    let url = v
+                        .pointer("/params/url")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string();
+                    // 片段导航（#x）无 loaderId；跨文档带
+                    let resp = if v.get("method").and_then(Value::as_str) == Some("Page.navigate")
+                        && !url.contains('#')
+                    {
+                        json!({"id": id, "result": {
+                            "frameId": "F1", "loaderId": "L1", "isDownload": false
+                        }})
+                    } else {
+                        json!({"id": id, "result": {}})
+                    };
+                    if let Ok(mut out) = peer_out_p.lock() {
+                        let _ = out.write_all(serde_json::to_string(&resp).unwrap().as_bytes());
+                        let _ = out.write_all(&[0]);
+                    }
+                }
+            }
+        });
+        let commit_after = |ms: u64| {
+            let peer_out = peer_out.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
+                if let Ok(mut out) = peer_out.lock() {
+                    let ev = json!({"method": "Page.frameNavigated",
+                        "params": {"frame": {"id": "F1"}}, "sessionId": "S1"});
+                    let _ = out.write_all(serde_json::to_string(&ev).unwrap().as_bytes());
+                    let _ = out.write_all(&[0]);
+                }
+            })
+        };
+
+        // 长会话回归锁（评审 F）：预灌 60 条旧主框架导航事件（seq 小于
+        // 水位），屏障必须仍被 300ms 后的新 commit 满足——首版 peek 取
+        // 最旧 50 条在此永久出窗、白等满窗（生产 5 秒/导航）
+        for i in 0..60 {
+            let mut out = peer_out.lock().unwrap();
+            let ev = json!({"method": "Page.frameNavigated",
+                "params": {"frame": {"id": "F1"}}, "sessionId": "S1", "pad": i});
+            let _ = out.write_all(serde_json::to_string(&ev).unwrap().as_bytes());
+            let _ = out.write_all(&[0]);
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+
+        // 跨文档导航：Page.enable 被闸到 300ms 后的 commit 事件才放行
+        let releaser = commit_after(300);
+        let t0 = tokio::time::Instant::now();
+        host.eval_snippet(
+            r#"await session.Page.navigate({url:"http://cross.test/a"}); await session.Page.enable({})"#,
+        )
+        .await
+        .expect("跨文档导航后页面调用");
+        let gated = t0.elapsed();
+        releaser.await.unwrap();
+        assert!(
+            gated >= std::time::Duration::from_millis(250),
+            "屏障应等到 commit 事件（实测 {gated:?}）"
+        );
+        assert!(
+            gated < std::time::Duration::from_millis(1_500),
+            "长缓冲下屏障不应退化为满窗等待（实测 {gated:?}；旧 peek 取最旧 50 条时此格红）"
+        );
+
+        // 屏障满足后只等一次：紧接着的调用不再等
+        let t0 = tokio::time::Instant::now();
+        host.eval_snippet(r#"await session.Page.enable({})"#)
+            .await
+            .expect("第二次页面调用");
+        assert!(
+            t0.elapsed() < std::time::Duration::from_millis(200),
+            "屏障清水位后不应再等（实测 {:?}）",
+            t0.elapsed()
+        );
+
+        // 同文档导航（fragment）：无 loaderId 不设屏障，立即放行
+        let t0 = tokio::time::Instant::now();
+        host.eval_snippet(
+            r#"await session.Page.navigate({url:"http://cross.test/a#frag"}); await session.Page.enable({})"#,
+        )
+        .await
+        .expect("同文档导航后页面调用");
+        assert!(
+            t0.elapsed() < std::time::Duration::from_millis(300),
+            "fragment 导航不应设屏障（实测 {:?}）",
+            t0.elapsed()
+        );
+    }
+
+    /// 换靶 detach 清 session 记账（批 10 遗留）：doc_gens 与提交屏障不随
+    /// 陈旧 sid 累积；重附得新 sid 代从 0 起（旧 ref 本就因 sid 变化作废）。
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn detach_cleans_session_accounting() {
+        use std::io::{Read, Write};
+        use std::os::unix::net::UnixStream;
+        use std::sync::Mutex;
+        let (sa, ba) = UnixStream::pair().unwrap();
+        let (sb, bb) = UnixStream::pair().unwrap();
+        let session = cdp::Session::new();
+        session.connect_pipes(sa, sb).await.expect("管道连接");
+        // attach/detach 都由 use_target 发，假对端按调用序发新 sessionId
+        let attach_n = Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let seen_detach = Arc::new(Mutex::new(Vec::<String>::new()));
+        let peer_out = Arc::new(Mutex::new(ba));
+        let (attach_p, detach_p, peer_out_p) =
+            (attach_n.clone(), seen_detach.clone(), peer_out.clone());
+        std::thread::spawn(move || {
+            let mut bb = bb;
+            let mut buf = Vec::<u8>::new();
+            let mut chunk = [0u8; 4096];
+            loop {
+                let n = match bb.read(&mut chunk) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => n,
+                };
+                buf.extend_from_slice(&chunk[..n]);
+                while let Some(pos) = buf.iter().position(|&b| b == 0) {
+                    let frame: Vec<u8> = buf.drain(..=pos).collect();
+                    let Ok(v) = serde_json::from_slice::<Value>(&frame[..frame.len() - 1]) else {
+                        continue;
+                    };
+                    let Some(id) = v.get("id").cloned() else {
+                        continue;
+                    };
+                    let method = v.get("method").and_then(Value::as_str).unwrap_or("");
+                    let resp = match method {
+                        "Target.attachToTarget" => {
+                            let n = attach_p.fetch_add(1, Ordering::Relaxed);
+                            json!({"id": id, "result": {"sessionId": format!("S{}", n + 1)}})
+                        }
+                        "Target.detachFromTarget" => {
+                            let sid = v
+                                .pointer("/params/sessionId")
+                                .and_then(Value::as_str)
+                                .unwrap_or("")
+                                .to_string();
+                            detach_p.lock().unwrap().push(sid);
+                            json!({"id": id, "result": {}})
+                        }
+                        "Page.navigate" => {
+                            json!({"id": id, "result": {"frameId": "F1", "loaderId": "L1"}})
+                        }
+                        _ => json!({"id": id, "result": {}}),
+                    };
+                    if let Ok(mut out) = peer_out_p.lock() {
+                        let _ = out.write_all(serde_json::to_string(&resp).unwrap().as_bytes());
+                        let _ = out.write_all(&[0]);
+                    }
+                }
+            }
+        });
+        let send_event = |ev: Value| {
+            let mut out = peer_out.lock().unwrap();
+            let _ = out.write_all(serde_json::to_string(&ev).unwrap().as_bytes());
+            let _ = out.write_all(&[0]);
+        };
+
+        let s1 = session.use_target("T1").await.expect("attach T1");
+        assert_eq!(s1, "S1");
+        // S1 上跑一次跨文档导航（同步计数 1 加屏障水位入账）
+        session
+            .call("Page.navigate", json!({ "url": "http://a.test/" }))
+            .await
+            .expect("navigate");
+        send_event(json!({"method": "Page.frameNavigated",
+            "params": {"frame": {"id": "F1"}}, "sessionId": "S1"}));
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+        assert_eq!(session.doc_generation("S1").await, 2, "同步加事件双计数");
+
+        // 换靶：detach S1，记账随清
+        let s2 = session.use_target("T2").await.expect("attach T2");
+        assert_eq!(s2, "S2");
+        assert_eq!(
+            session.doc_generation("S1").await,
+            0,
+            "detach 后旧 sid 记账应清"
+        );
+        assert!(
+            seen_detach.lock().unwrap().iter().any(|s| s == "S1"),
+            "detachFromTarget 应已发出"
+        );
+    }
+
     /// 密钥命名空间与脱敏（#25.4）：dotenv 加载、secrets.<NAME> 取值、
     /// 渲染与报错回显面具；值含密钥即整值换 ***（保守全换）。
     #[tokio::test]

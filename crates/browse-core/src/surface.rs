@@ -383,7 +383,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("full", "boolean", false, "false"),
             arg!("opts", "object", false, "{format,quality,ifChanged}"),
         ],
-        description: "页内截图存文件；opts（#24）：format png/jpeg、quality（jpeg 1-100 缺省 80）、ifChanged（与既有文件逐字节相同即 skipped，省读回不省拍摄；字节可比性限同一引擎二进制）。回 {path,bytes,skipped}。同片段 navigate 后首个动作有提交窗竞态（#34），本函数与 snapshot 内建 Not attached 有界重试（至多 2 秒），其余出口自管时序。",
+        description: "页内截图存文件；opts（#24）：format png/jpeg、quality（jpeg 1-100 缺省 80）、ifChanged（与既有文件逐字节相同即 skipped，省读回不省拍摄；字节可比性限同一引擎二进制）。回 {path,bytes,skipped}。同片段 navigate 后的提交窗竞速由 host 层统一等提交（#34 根因级，页面级调用闸到主框架 frameNavigated），本函数另内建 Not attached 有界重试兜底。",
         example: r#"return await screenshot(null, false, {ifChanged: true})"#,
     },
     CmdSpec {

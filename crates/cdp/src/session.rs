@@ -21,6 +21,13 @@ const EVENT_BUFFER_CAP: usize = 1000;
 /// 单条 CDP 调用的超时秒数，到点报 `cdp timeout`。
 const CALL_TIMEOUT_SECS: u64 = 30;
 
+/// 提交屏障等待窗毫秒（#34 根因级）：navigate 回执后等主框架
+/// frameNavigated 的上限；测试态收短防拖慢单测。
+#[cfg(test)]
+const BARRIER_WAIT_MS: u64 = 600;
+#[cfg(not(test))]
+const BARRIER_WAIT_MS: u64 = 5_000;
+
 /// 这些前缀的域走 browser 端点，调用时不附 `sessionId`。
 const BROWSER_METHODS: &[&str] = &[
     "Browser.",
@@ -93,6 +100,10 @@ pub struct Session {
     /// （pushState 走 navigatedWithinDocument）与 iframe 导航不递增。
     /// 快照引用表的代际失效由它支撑，页面侧零写入。
     doc_gens: Arc<Mutex<HashMap<String, u64>>>,
+    /// 提交屏障水位（#34 根因级）：sessionId -> 设屏时的事件 seq。
+    /// 跨文档 navigate 回执后记录，后续页面级 [`Session::call`] 等
+    /// 水位后的主框架 frameNavigated 再放行；满足或超时即清。
+    commit_barrier: Arc<Mutex<HashMap<String, u64>>>,
 }
 
 impl Session {
@@ -120,6 +131,7 @@ impl Session {
             pending_dialog: Arc::new(Mutex::new(None)),
             pinned_sessions: Arc::new(Mutex::new(HashSet::new())),
             doc_gens: Arc::new(Mutex::new(HashMap::new())),
+            commit_barrier: Arc::new(Mutex::new(HashMap::new())),
         })
     }
 
@@ -346,6 +358,20 @@ impl Session {
     /// - CDP 返回 error、或 30 秒超时。
     pub async fn call(&self, method: &str, params: Value) -> Result<Value> {
         self.guard(method, &params).await?;
+        // 提交屏障（#34 根因级）：页面级调用先等上一次 navigate 的提交
+        // 落定（navigate 自身与 browser 级方法跳过），让 call() 面看到
+        // 的是提交后的世界；详见 [`Session::await_commit_barrier`]
+        if method != "Page.navigate" && !is_browser_method(method) {
+            self.await_commit_barrier().await;
+        }
+        // navigate 的事件水位在 send 前取：响应续体可能晚于 commit 事件
+        // 被调度，send 后再取会把已到的 commit 盖在水位下，屏障永远
+        // 不满足、每次导航白等满窗
+        let pre_mark = if method == "Page.navigate" {
+            Some(self.last_seq().await)
+        } else {
+            None
+        };
         let v = self.send(method, params).await?;
         if method == "Target.createTarget"
             && let Some(id) = v.get("targetId").and_then(Value::as_str)
@@ -359,9 +385,83 @@ impl Session {
         if method == "Page.navigate"
             && let Some(sid) = self.session_id.lock().await.clone()
         {
-            *self.doc_gens.lock().await.entry(sid).or_insert(0u64) += 1;
+            *self
+                .doc_gens
+                .lock()
+                .await
+                .entry(sid.clone())
+                .or_insert(0u64) += 1;
+            // 跨文档导航（回执带 loaderId、无 errorText、非下载）设提交屏障
+            // 水位：后续页面级 call() 等水位后的主框架 frameNavigated 再
+            // 放行。同文档导航（fragment）无 loaderId 不设屏障；失败导航
+            // （errorText）没有提交不设；下载型导航（isDownload）不换文档
+            // 也没有 commit 事件可等，不设（评审 G2，白等满窗）。
+            let cross_doc = v
+                .get("loaderId")
+                .and_then(Value::as_str)
+                .is_some_and(|s| !s.is_empty())
+                && v.get("errorText")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .is_empty()
+                && !v
+                    .get("isDownload")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+            if cross_doc && let Some(mark) = pre_mark {
+                self.commit_barrier.lock().await.insert(sid, mark);
+            }
         }
         Ok(v)
+    }
+
+    /// 等待活动 session 的导航提交落定（#34 根因级）：`Page.navigate` 的
+    /// 回执先于提交完成，提交窗内的页面级命令要么被拒（captureScreenshot
+    /// 的 Not attached）要么落在旧文档（evaluate 的旧 title）。屏障条件是
+    /// 水位（navigate 发出前的事件 seq）之后出现该 session 的主框架
+    /// `Page.frameNavigated`（commit 信号）。连续导航的前一次提交若恰好
+    /// 落在水位后可能提前放行（保守方向，js_host 出口级重试仍兜底）。
+    ///
+    /// 覆盖面是全部经 [`Session::call`] 的页面级方法（含 waitJs/waitLoad
+    /// 等轮询谓词的首拍与每拍）。有界等待（[`BARRIER_WAIT_MS`]，25ms
+    /// 轮询），超时放行不报错、留一行 daemon.log（保守：不比无屏障差，
+    /// js_host 的出口级重试仍兜底）；满足或超时后清水位，同一窗口只等
+    /// 一次。只挂 [`Session::call`]（用户路径）；watcher 走
+    /// [`Session::call_on`] 不等（route 应答 requestPaused 不能被拖住）。
+    async fn await_commit_barrier(&self) {
+        let Some(sid) = self.session_id.lock().await.clone() else {
+            return;
+        };
+        let Some(mark) = self.commit_barrier.lock().await.get(&sid).copied() else {
+            return;
+        };
+        let deadline = tokio::time::Instant::now() + Duration::from_millis(BARRIER_WAIT_MS);
+        let landed = loop {
+            // 必须用 since 游标取（评审 F：peek 取最旧 N 条，长会话里缓冲
+            // 攒下几十次导航后新 commit 永远出窗，屏障名存实亡、每次
+            // 导航白等满窗）；since 语义正是 seq > mark
+            let landed = self
+                .peek_events_since("Page.frameNavigated", mark, 16)
+                .await
+                .iter()
+                .any(|e| {
+                    e.get("sessionId").and_then(Value::as_str) == Some(sid.as_str())
+                        && e.pointer("/params/frame/parentId").is_none()
+                });
+            if landed || tokio::time::Instant::now() >= deadline {
+                break landed;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        };
+        if !landed {
+            // 超时留痕（评审 G1）：现场表现为「某些调用偶尔慢」，不留痕
+            // 无从归因；daemon.log 可查
+            eprintln!(
+                "[browse] 提交屏障超时放行（sid {}，水位 seq {mark}，窗 {BARRIER_WAIT_MS}ms 没有 main-frame frameNavigated；常见因：Page 域未开或下载型导航）",
+                &sid[..sid.len().min(8)]
+            );
+        }
+        self.commit_barrier.lock().await.remove(&sid);
     }
 
     async fn guard(&self, method: &str, params: &Value) -> Result<()> {
@@ -527,6 +627,11 @@ impl Session {
                     &old_sid[..old_sid.len().min(8)]
                 );
             }
+            // 已 detach 的 session 记账随清（批 10 遗留）：doc_gens 与提交
+            // 屏障不再累积陈旧 sid；重附会得新 sid，代从 0 重计（旧 ref
+            // 本就因 sid 变化作废，无误伤）
+            self.doc_gens.lock().await.remove(&old_sid);
+            self.commit_barrier.lock().await.remove(&old_sid);
         }
         *self.target_id.lock().await = Some(target_id.to_string());
         Ok(sid)
@@ -1198,5 +1303,70 @@ mod tests {
         assert!(host_matches("a.x.com", "x.com"));
         assert!(!host_matches("ax.com", "x.com"));
         assert!(!host_matches("x.com.evil.io", "x.com"));
+    }
+
+    /// 提交屏障超时放行（#34 根因级）：跨文档 navigate 后 commit 事件
+    /// 永不到（Page 域未开的场），页面级调用在屏障窗（本 crate 测试态
+    /// 600ms，cfg(test) 跨 crate 不生效故测在 cdp）耗尽后照常发出不报错。
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn commit_barrier_timeout_proceeds() {
+        use std::io::{Read, Write};
+        use std::os::unix::net::UnixStream;
+        use std::sync::Mutex;
+        let (sa, ba) = UnixStream::pair().unwrap();
+        let (sb, bb) = UnixStream::pair().unwrap();
+        let s = Session::new();
+        s.connect_pipes(sa, sb).await.expect("管道连接");
+        s.set_active_session(Some("S1".into())).await;
+        let peer_out = Arc::new(Mutex::new(ba));
+        let peer_out_p = peer_out.clone();
+        std::thread::spawn(move || {
+            let mut bb = bb;
+            let mut buf = Vec::<u8>::new();
+            let mut chunk = [0u8; 4096];
+            loop {
+                let n = match bb.read(&mut chunk) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => n,
+                };
+                buf.extend_from_slice(&chunk[..n]);
+                while let Some(pos) = buf.iter().position(|&b| b == 0) {
+                    let frame: Vec<u8> = buf.drain(..=pos).collect();
+                    let Ok(v) = serde_json::from_slice::<Value>(&frame[..frame.len() - 1]) else {
+                        continue;
+                    };
+                    let Some(id) = v.get("id").cloned() else {
+                        continue;
+                    };
+                    // navigate 恒带 loaderId；永不发 commit 事件
+                    let resp = if v.get("method").and_then(Value::as_str) == Some("Page.navigate") {
+                        json!({"id": id, "result": {"frameId": "F1", "loaderId": "L1"}})
+                    } else {
+                        json!({"id": id, "result": {}})
+                    };
+                    if let Ok(mut out) = peer_out_p.lock() {
+                        let _ = out.write_all(serde_json::to_string(&resp).unwrap().as_bytes());
+                        let _ = out.write_all(&[0]);
+                    }
+                }
+            }
+        });
+        s.call("Page.navigate", json!({ "url": "http://stuck.test/" }))
+            .await
+            .expect("navigate");
+        let t0 = tokio::time::Instant::now();
+        s.call("Page.enable", json!({}))
+            .await
+            .expect("屏障耗尽后应放行");
+        let waited = t0.elapsed();
+        assert!(
+            waited >= Duration::from_millis(550),
+            "屏障窗内应等待（实测 {waited:?}）"
+        );
+        assert!(
+            waited < Duration::from_millis(2_000),
+            "不应远超屏障窗（实测 {waited:?}）"
+        );
     }
 }
