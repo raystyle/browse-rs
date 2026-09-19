@@ -401,9 +401,11 @@ l`.length === 3].join(\"|\")", returnByValue:true})).result.value"#;
         "旧毫秒习惯值应带混用告警: {wl_ms}"
     );
     // clickRef waitNav（#19，评审 F2 补断言）：链接型点击后回执是对象形，
-    // waitLoad.readyState 必须可见（修前布尔面附不上键、特性端到端不可见）
+    // waitLoad.readyState 必须可见（修前布尔面附不上键、特性端到端不可见）。
+    // 链接目标走 routeMock 的 http 假域——Chrome 禁止顶级跳转 data: URL
+    // （点击被拦停在源页，(c) 的 title 断言当场实锤过这个测试设计坑）
     host.eval_snippet(
-        r#"await goto("data:text/html,<a href='data:text/html,<title>waitnav-target</title><h1>t</h1>'>go</a>")"#,
+        r#"await routeMock("http://waitnav.test/*", "<title>waitnav-target</title><h1>t</h1>", {contentType: "text/html"}); await goto("data:text/html,<a href='http://waitnav.test/t'>go</a>")"#,
     )
     .await
     .expect("goto 链接页");
@@ -436,6 +438,19 @@ l`.length === 3].join(\"|\")", returnByValue:true})).result.value"#;
         wnav.get("clicked"),
         Some(&json!(true)),
         "clicked 基座在: {wnav}"
+    );
+    // 评审二轮 F4(c)：readyState 旧文档同样满足，压不出早返——必须再读
+    // 导航后文档标记（title 变成目标页才证明真等了新文档）
+    let wnav_title = host
+        .eval_snippet(
+            r#"return (await session.Runtime.evaluate({expression:"document.title", returnByValue:true})).result.value"#,
+        )
+        .await
+        .expect("读 waitNav 后 title");
+    assert_eq!(
+        wnav_title,
+        json!("waitnav-target"),
+        "waitNav 后应在新文档（早返旧文档即红）: {wnav_title}"
     );
 
     // checkRef/uncheckRef：防呆幂等（#39）

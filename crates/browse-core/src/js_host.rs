@@ -1195,13 +1195,16 @@ impl JsHost {
                 ))?;
                 self.assert_no_dialog().await?;
                 let bn = self.lookup_ref(r).await?;
+                let opts = argv.get(1).cloned().unwrap_or(json!({}));
+                // 点击可能触发用户侧导航（无提交屏障背书）：点前记事件水位
+                // 供 waitNav 的有界提交等待（评审二轮 F4）
+                let nav_since = self.session.last_seq().await;
                 let mut out = crate::semantic::click_ref(&self.session, bn).await?;
                 // waitNav（#19）：链接型点击后自动等导航稳定，免点击加
-                // waitLoad 两步；同文档锚点与纯 JS 按钮等已加载页立即返回。
-                // clickRef 基础回执是裸 true（布尔面），waitNav 在位时显式
-                // 构造对象形 {clicked, waitLoad[, timeoutWarning]}（评审 F2：
-                // 布尔面附不上键，静默丢弃即特性不可见）
-                let opts = argv.get(1).cloned().unwrap_or(json!({}));
+                // waitLoad 两步；同文档锚点与纯 JS 按钮等已加载页 grace 窗
+                // 后返回。clickRef 基础回执是裸 true（布尔面），waitNav 在位
+                // 时显式构造对象形 {clicked, waitLoad[, timeoutWarning]}（评审
+                // F2：布尔面附不上键，静默丢弃即特性不可见）
                 if opts.get("waitNav").and_then(Value::as_bool) == Some(true) {
                     let (ms, warn) = match opts.get("timeout") {
                         None | Some(Value::Null) => secs_to_ms(10),
@@ -1212,7 +1215,9 @@ impl JsHost {
                             )
                         })?,
                     };
-                    let wl = crate::semantic::wait_load(&self.session, ms).await?;
+                    let wl =
+                        crate::semantic::wait_settled(&self.session, nav_since, 2_000.min(ms), ms)
+                            .await?;
                     let mut o = serde_json::Map::new();
                     o.insert("clicked".to_string(), out.clone());
                     o.insert("waitLoad".to_string(), wl);

@@ -454,7 +454,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("url", "string", true),
             arg!("opts", "object", false, "{timeout:15}"),
         ],
-        description: "一步导航（#19）：navigate 加 waitLoad 一体收尾，可选 waitIdle: true（或秒数）再等网络静默，回 {url,title,elapsedMs}；已加载页立即返回。替代 navigate 加 waitFor(loadEventFired) 组合——后者事件已发再注册即假超时（竞速窗），本函数走 readyState 轮询无此窗。timeout 秒口径（#51）。",
+        description: "一步导航（#19）：navigate 加 waitLoad 一体收尾，可选 waitIdle: true（或秒数）再等网络静默，回 {url,title,elapsedMs}；已加载页立即返回。替代 navigate 加 waitFor(loadEventFired) 组合（后者事件已发再注册即假超时，竞速窗），本函数走 readyState 轮询无此窗。timeout 秒口径（#51）。",
         example: "return await goto(\"https://example.com\", {waitIdle: true})",
     },
     CmdSpec {
@@ -628,7 +628,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "waitLoad(s?)",
         args: &[arg!("s", "number", false, "10")],
-        description: "等 document.readyState 到 complete（已加载立即返回）。timeout 秒口径（#51）：大于 3600 视为毫秒误写，告警并按毫秒换算（封顶 600 秒）；1000 至 3600 按秒直解不告警（2000 即 33 分钟），子分钟等待直写个位数秒，旧毫秒习惯值等价迁移；1000 至 3600 按秒直解不告警（2000 即 33 分钟），子分钟等待直写个位数秒。",
+        description: "等 document.readyState 到 complete（已加载立即返回）。timeout 秒口径（#51）：大于 3600 视为毫秒误写，告警并按毫秒换算（封顶 600 秒）；1000 至 3600 按秒直解不告警（2000 即 33 分钟），子分钟等待直写个位数秒；1000 至 3600 按秒直解不告警（2000 即 33 分钟），子分钟等待直写个位数秒，旧毫秒习惯值等价迁移。",
         example: "await waitLoad(8)",
     },
     CmdSpec {

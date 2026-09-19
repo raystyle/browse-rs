@@ -40,4 +40,5 @@
 - `type_ref` — 真实按键序列输入（#23）：focus 后逐字符 keyDown(text)+keyUp，
 - `wait_idle` — 等 network 静默：从调用时刻起观察 `Network.requestWillBeSent` 与
 - `wait_load` — 等页面 load 完成：先宽容地等一次 frameNavigated（导航可能已完成，
+- `wait_settled` — 等导航落定（评审二轮 F4）：reload、历史跳、点击后导航的通用收尾。
 

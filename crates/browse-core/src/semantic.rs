@@ -157,12 +157,15 @@ async fn history_jump(s: &Session, delta: i64) -> Result<Value> {
     let entry_id = entry.get("id").and_then(Value::as_i64).ok_or_else(|| anyhow!(
         "历史条目缺 id 字段（entryId 是不透明整数，不可用索引顶替）；下一步：裸调 session.Page.getNavigationHistory 看回执形态"
     ))?;
+    let since = s.last_seq().await;
     s.call(
         "Page.navigateToHistoryEntry",
         json!({ "entryId": entry_id }),
     )
     .await?;
-    wait_load(s, 15_000).await?;
+    // 历史跳无提交屏障背书（屏障只认 Page.navigate），走有界提交等待
+    // （评审二轮 F4）：同文档 fragment 跳无导航事件，grace 后即返回
+    wait_settled(s, since, 2_000, 15_000).await?;
     let tab = current_tab(s).await?;
     Ok(json!({
         "steps": to - idx,
@@ -178,9 +181,11 @@ async fn history_jump(s: &Session, delta: i64) -> Result<Value> {
 /// reload 调用失败或加载预算内 readyState 未到 complete。
 pub async fn reload(s: &Session, ignore_cache: bool) -> Result<Value> {
     let t0 = std::time::Instant::now();
+    let since = s.last_seq().await;
     s.call("Page.reload", json!({ "ignoreCache": ignore_cache }))
         .await?;
-    wait_load(s, 20_000).await?;
+    // reload 无提交屏障背书，走有界提交等待（评审二轮 F4）
+    wait_settled(s, since, 2_000, 20_000).await?;
     let tab = current_tab(s).await?;
     Ok(json!({
         "ignoredCache": ignore_cache,
@@ -188,6 +193,55 @@ pub async fn reload(s: &Session, ignore_cache: bool) -> Result<Value> {
         "title": tab.get("title"),
         "elapsedMs": t0.elapsed().as_millis() as u64,
     }))
+}
+
+/// 等导航落定（评审二轮 F4）：reload、历史跳、点击后导航的通用收尾。
+/// 先在 grace 窗内探「提交已在途」（自 since 起 frameStartedLoading 或
+/// frameNavigated 有新事件），在途则走 [`wait_load`] 等收尾并标
+/// settled=nav；grace 窗内无导航迹象即标 settled=no-nav 返回（同文档
+/// fragment 与纯 JS 按钮不误等）。通用 waitLoad() 不经本函数（保持已
+/// 加载页立即返回）；提交屏障只护 Page.navigate，本函数补其余导航面。
+///
+/// # Errors
+///
+/// 在途路径下 wait_load 预算内未到 complete。
+pub async fn wait_settled(s: &Session, since: u64, grace_ms: u64, budget_ms: u64) -> Result<Value> {
+    let grace_deadline = tokio::time::Instant::now() + Duration::from_millis(grace_ms);
+    loop {
+        let started = s
+            .peek_events_since("Page.frameStartedLoading", since, 10)
+            .await
+            .len()
+            + s.peek_events_since("Page.frameNavigated", since, 10)
+                .await
+                .len();
+        if started > 0 {
+            let mut r = wait_load(s, budget_ms).await?;
+            if let Some(o) = r.as_object_mut() {
+                o.insert("settled".to_string(), json!("nav"));
+            }
+            return Ok(r);
+        }
+        if tokio::time::Instant::now() >= grace_deadline {
+            // 无导航迹象：原文档照旧，readyState 即真态，不构成早返误判
+            let r = s
+                .call(
+                    "Runtime.evaluate",
+                    json!({ "expression": "document.readyState", "returnByValue": true }),
+                )
+                .await;
+            let rs = r
+                .ok()
+                .and_then(|v| {
+                    v.pointer("/result/value")
+                        .and_then(Value::as_str)
+                        .map(str::to_string)
+                })
+                .unwrap_or_default();
+            return Ok(json!({ "readyState": rs, "settled": "no-nav" }));
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
 }
 
 /// 勾选/取消复选框（#39）：读元素 checked 实态，与目标态不一致才点击

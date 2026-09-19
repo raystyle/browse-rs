@@ -453,6 +453,11 @@
       "docs": "等页面 load 完成：先宽容地等一次 frameNavigated（导航可能已完成，\n超时忽略），再等 `document.readyState === 'complete'`。\n\n已加载页面立即返回。\n\n# Errors\n\n`ms` 内 readyState 不到 complete。"
     },
     {
+      "path": "browse_core::semantic::wait_settled",
+      "kind": "function",
+      "docs": "等导航落定（评审二轮 F4）：reload、历史跳、点击后导航的通用收尾。\n先在 grace 窗内探「提交已在途」（自 since 起 frameStartedLoading 或\nframeNavigated 有新事件），在途则走 [`wait_load`] 等收尾并标\nsettled=nav；grace 窗内无导航迹象即标 settled=no-nav 返回（同文档\nfragment 与纯 JS 按钮不误等）。通用 waitLoad() 不经本函数（保持已\n加载页立即返回）；提交屏障只护 Page.navigate，本函数补其余导航面。\n\n# Errors\n\n在途路径下 wait_load 预算内未到 complete。"
+    },
+    {
       "path": "browse_core::server",
       "kind": "module",
       "docs": "daemon 的 HTTP API：常驻会话 + 方言求值 + 引擎生命周期。\n\n移植自 browser-harness-rs `src/server.rs`（POST /eval、GET /health、\nPOST /quit 三端点保留），新增 `/engine/up` 与求值前的懒引擎策略：\n\n- 求值前未连接且片段里没有 `session.connect` -> 自动 [`crate::Engine::ensure`]；\n  片段自带 `session.connect` 则不预连（显式意图优先，ADR-0004）。\n- 求值撞上「Not connected」再兜底 ensure + 重试一次（覆盖先语句后连接的写法）。\n- 单飞槽：同一时刻只跑一条片段，后来者排队（不拒 429）。\n- `/eval` 超时默认 300 秒（`BROWSE_EVAL_TIMEOUT`，单位秒）。"
