@@ -48,6 +48,13 @@ pub struct EngineUpRequest {
     pub pipe: bool,
     /// spawn 引擎的自定义 profile（user-data-dir；缺省用固定 engine-profile）。
     pub profile: Option<String>,
+    /// 引擎代理（`--proxy-server`，#25.5）。
+    pub proxy: Option<String>,
+    /// 代理旁路清单（`--proxy-bypass-list`，#25.5）。
+    pub proxy_bypass: Option<String>,
+    /// 隔离态 profile：引擎退出即删（#25.3 拆出）。
+    #[serde(default)]
+    pub isolated: bool,
 }
 
 /// HTTP daemon 的运行面聚合：宿主、引擎、缺省引擎意图、单飞槽与退出旗标。
@@ -64,6 +71,8 @@ pub struct Daemon {
     pub quit: Arc<AtomicBool>,
     /// daemon 启动时刻。
     pub started: Instant,
+    /// 最近活动时刻（#25.1 idle-timeout 判据）：eval/up 请求刷新。
+    pub last_activity: std::sync::Mutex<Instant>,
 }
 
 impl Daemon {
@@ -89,8 +98,19 @@ impl Daemon {
             eval_lock: tokio::sync::Mutex::new(()),
             quit: Arc::new(AtomicBool::new(false)),
             started: Instant::now(),
+            last_activity: std::sync::Mutex::new(Instant::now()),
         })
     }
+}
+
+/// 引擎闲置回收窗（#25.1）：`BROWSE_IDLE_TIMEOUT` 毫秒，缺省 1 小时，
+/// `0` 关闭。到期引擎退役（daemon 不退），下次求值懒拉起。
+fn idle_timeout() -> Duration {
+    std::env::var("BROWSE_IDLE_TIMEOUT")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .map(Duration::from_millis)
+        .unwrap_or(Duration::from_millis(3_600_000))
 }
 
 fn eval_timeout() -> Duration {
@@ -116,6 +136,49 @@ pub async fn serve(daemon: Arc<Daemon>, bind: &str) -> anyhow::Result<()> {
         .route("/engine/up", post(engine_up_handler))
         .route("/quit", post(quit_handler))
         .with_state(state);
+
+    // 闲置回收机（#25.1）：到期退引擎不退 daemon，下次求值自动拉起
+    {
+        let daemon = daemon.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_secs(5)).await;
+                let timeout = idle_timeout();
+                if timeout.is_zero() {
+                    continue;
+                }
+                let idle_for = daemon
+                    .last_activity
+                    .lock()
+                    .map(|t| t.elapsed())
+                    .unwrap_or(Duration::ZERO);
+                if idle_for < timeout || !daemon.host.session().is_connected() {
+                    continue;
+                }
+                // 与求值共用单飞槽（评审 F1）：不撕断在跑的求值，也防
+                // 「引擎退役 -> Not connected 兜底 -> 整段重放」的副作用重放；
+                // 拿到槽后二次确认（等槽期间可能刚来了求值）
+                let _slot = daemon.eval_lock.lock().await;
+                let still_idle = daemon
+                    .last_activity
+                    .lock()
+                    .map(|t| t.elapsed())
+                    .unwrap_or(Duration::ZERO);
+                if still_idle < timeout || !daemon.host.session().is_connected() {
+                    continue;
+                }
+                eprintln!(
+                    "{}",
+                    json!({
+                        "idleRetire": true,
+                        "idleMs": still_idle.as_millis() as u64,
+                        "note": "引擎闲置退役，下次求值自动拉起（BROWSE_IDLE_TIMEOUT 可调，0 关闭）",
+                    })
+                );
+                let _ = daemon.engine.shutdown().await;
+            }
+        });
+    }
 
     let listener = TcpListener::bind(bind).await?;
     eprintln!(
@@ -148,6 +211,11 @@ async fn eval_handler(
     State(st): State<AppState>,
     Json(req): Json<EvalRequest>,
 ) -> impl IntoResponse {
+    let _ = st
+        .daemon
+        .last_activity
+        .lock()
+        .map(|mut t| *t = Instant::now());
     let _slot = st.daemon.eval_lock.lock().await;
     let d = &st.daemon;
     if req.new_tab
@@ -213,16 +281,43 @@ async fn engine_up_handler(
     State(st): State<AppState>,
     Json(req): Json<EngineUpRequest>,
 ) -> impl IntoResponse {
+    let _ = st
+        .daemon
+        .last_activity
+        .lock()
+        .map(|mut t| *t = Instant::now());
     let spec = if let Some(ws) = req.ws {
         EngineSpec::Attach { ws_url: ws }
     } else if let Some(p) = req.port {
         EngineSpec::Port(p)
     } else {
-        EngineSpec::Auto {
-            chrome: req.chrome.map(Into::into),
-            headless: req.headless,
-            pipe: req.pipe,
-            profile: req.profile.map(Into::into),
+        // 缺字段回落 from_env（评审 F2）：消除「同一 BROWSE_PROXY/
+        // BROWSE_PROFILE 一会生效一会不生效」的旗标与 env 两态。走到本块
+        // 时请求必未显式给 ws/port：env 钉了 BROWSE_CDP_WS（Attach）则
+        // 钉死意图直通（不 panic，那是手册在册配置，二轮快核雷）
+        let env_spec = EngineSpec::from_env(None, false, false);
+        let (env_profile, env_proxy, env_bypass, env_ws) = match env_spec {
+            EngineSpec::Attach { ws_url } => (None, None, None, Some(ws_url)),
+            EngineSpec::Auto {
+                profile,
+                proxy,
+                proxy_bypass,
+                ..
+            } => (profile, proxy, proxy_bypass, None),
+            EngineSpec::Port(_) => (None, None, None, None),
+        };
+        if let Some(ws_url) = env_ws {
+            EngineSpec::Attach { ws_url }
+        } else {
+            EngineSpec::Auto {
+                chrome: req.chrome.map(Into::into),
+                headless: req.headless,
+                pipe: req.pipe,
+                profile: req.profile.map(Into::into).or(env_profile),
+                proxy: req.proxy.clone().or(env_proxy),
+                proxy_bypass: req.proxy_bypass.clone().or(env_bypass),
+                isolated: req.isolated,
+            }
         }
     };
     match st.daemon.engine.ensure(&spec).await {

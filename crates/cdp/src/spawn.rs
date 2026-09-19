@@ -154,7 +154,12 @@ fn engine_stdio(profile_dir: &Path) -> std::process::Stdio {
 /// # Errors
 ///
 /// spawn 失败（路径不是可执行文件等）。
-pub fn spawn_engine(chrome: &Path, profile_dir: &Path, headless: bool) -> Result<Child> {
+pub fn spawn_engine(
+    chrome: &Path,
+    profile_dir: &Path,
+    headless: bool,
+    extra_args: &[String],
+) -> Result<Child> {
     if let Some(parent) = profile_dir.parent() {
         std::fs::create_dir_all(parent).ok();
     }
@@ -173,6 +178,7 @@ pub fn spawn_engine(chrome: &Path, profile_dir: &Path, headless: bool) -> Result
     if headless {
         cmd.arg("--headless");
     }
+    cmd.args(extra_args);
     cmd.spawn()
         .with_context(|| format!("spawn {}", chrome.display()))
 }
@@ -236,6 +242,7 @@ pub fn spawn_engine_pipes(
     profile_dir: &Path,
     headless: bool,
     mode: PipeMode,
+    extra_args: &[String],
 ) -> Result<PipeEngine> {
     #[cfg(unix)]
     {
@@ -265,6 +272,7 @@ pub fn spawn_engine_pipes(
         if headless {
             cmd.arg("--headless");
         }
+        cmd.args(extra_args);
         // fork 后 exec 前：把两端布到固定 fd 3/4（clean-chrome POSIX 契约）。
         // 闭包里只有 dup2/close（async-signal-safe）
         unsafe {
@@ -334,6 +342,7 @@ pub fn spawn_engine_pipes(
         if headless {
             cmd.arg("--headless");
         }
+        cmd.args(extra_args);
         let child = cmd
             .spawn()
             .with_context(|| format!("spawn {} (pipes)", chrome.display()))?;

@@ -76,6 +76,10 @@ async fn main() -> Result<()> {
     let mut llms = false;
     let mut full = false;
     let mut repl = false;
+    let mut proxy: Option<String> = None;
+    let mut proxy_bypass: Option<String> = None;
+    let mut isolated = false;
+    let mut idle_timeout: Option<String> = None;
 
     let mut args = std::env::args().skip(1);
     let mut gen_surface: Option<String> = None;
@@ -103,6 +107,10 @@ async fn main() -> Result<()> {
             "--profile" => profile = Some(next("--profile")?),
             "--headless" => headless = true,
             "--pipe" => pipe = true,
+            "--proxy" => proxy = Some(next("--proxy")?),
+            "--proxy-bypass" => proxy_bypass = Some(next("--proxy-bypass")?),
+            "--isolated" => isolated = true,
+            "--idle-timeout" => idle_timeout = Some(next("--idle-timeout")?),
             "--json" => json = true,
             "--llms" => llms = true,
             "--repl" => repl = true,
@@ -248,8 +256,31 @@ async fn main() -> Result<()> {
 
     match mode {
         Mode::Up => {
-            client::ensure_daemon().await?;
-            let health = client::engine_up(headless, chrome, ws, port, pipe, profile).await?;
+            // 生命周期旗标随 daemon 环境注入（#25.1/#25.5）：只影响新拉起
+            // 的 daemon，已在跑的以启动时口径为准
+            let mut envs: Vec<(&str, String)> = Vec::new();
+            if let Some(t) = &idle_timeout {
+                envs.push(("BROWSE_IDLE_TIMEOUT", t.clone()));
+            }
+            if let Some(p) = &proxy {
+                envs.push(("BROWSE_PROXY", p.clone()));
+            }
+            if let Some(b) = &proxy_bypass {
+                envs.push(("BROWSE_PROXY_BYPASS", b.clone()));
+            }
+            client::ensure_daemon_with_env(&envs).await?;
+            let health = client::engine_up(client::UpParams {
+                headless,
+                chrome,
+                ws,
+                port,
+                pipe,
+                profile,
+                proxy,
+                proxy_bypass,
+                isolated,
+            })
+            .await?;
             print_health(&health, json);
             Ok(())
         }
@@ -384,7 +415,20 @@ async fn main() -> Result<()> {
                 }
                 return Ok(());
             }
-            run_eval(snippets, new_tab, ws, port, chrome, headless, pipe, profile).await
+            run_eval(
+                snippets,
+                new_tab,
+                ws,
+                port,
+                chrome,
+                headless,
+                pipe,
+                profile,
+                proxy,
+                proxy_bypass,
+                isolated,
+            )
+            .await
         }
     }
 }
@@ -410,11 +454,35 @@ async fn run_eval(
     headless: bool,
     pipe: bool,
     profile: Option<String>,
+    proxy: Option<String>,
+    proxy_bypass: Option<String>,
+    isolated: bool,
 ) -> Result<()> {
     client::ensure_daemon().await?;
-    // 显式连接意图先落引擎（up 面接受同样的旗标），再求值
-    if ws.is_some() || port.is_some() || chrome.is_some() || headless || pipe || profile.is_some() {
-        client::engine_up(headless, chrome, ws, port, pipe, profile).await?;
+    // 显式连接意图先落引擎（up 面接受同样的旗标），再求值；proxy 三旗标
+    // 同守卫透传（评审 F2：静默吞比报错更坑）
+    if ws.is_some()
+        || port.is_some()
+        || chrome.is_some()
+        || headless
+        || pipe
+        || profile.is_some()
+        || proxy.is_some()
+        || proxy_bypass.is_some()
+        || isolated
+    {
+        client::engine_up(client::UpParams {
+            headless,
+            chrome,
+            ws,
+            port,
+            pipe,
+            profile,
+            proxy,
+            proxy_bypass,
+            isolated,
+        })
+        .await?;
     }
     // 空片段的裸调用分支已在 Mode::Eval 臂前置处理（帮助体 / 管道 / --repl），
     // 进到这里必带片段

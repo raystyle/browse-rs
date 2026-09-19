@@ -128,7 +128,7 @@ pub const COMMANDS: &[CmdSpec] = &[
     CmdSpec {
         name: "up",
         kind: CmdKind::Cli,
-        signature: "browse up [--headless] [--pipe] [--chrome <path>] [--profile <dir>] [--ws <url>] [--port <p>]",
+        signature: "browse up [--headless] [--pipe] [--chrome <path>] [--profile <dir>] [--ws <url>] [--port <p>] [--proxy <url>] [--proxy-bypass <list>] [--isolated] [--idle-timeout <ms>]",
         args: &[
             arg!("headless", "boolean", false, "false"),
             arg!("pipe", "boolean", false, "false"),
@@ -136,8 +136,12 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("profile", "string", false, "固定 engine-profile"),
             arg!("ws", "string", false),
             arg!("port", "number", false),
+            arg!("proxy", "string", false, "无"),
+            arg!("proxy-bypass", "string", false, "无"),
+            arg!("isolated", "boolean", false, "false"),
+            arg!("idle-timeout", "number", false, "3600000"),
         ],
-        description: "显式起引擎（附着优先，缺则 spawn clean-chrome 隔离实例；--profile 自定义 user-data-dir，默认固定 profile 持久保存站点会话）。",
+        description: "显式起引擎（附着优先，缺则 spawn clean-chrome 隔离实例；--profile 自定义 user-data-dir，默认固定 profile 持久保存站点会话；--proxy/--proxy-bypass 直通 chrome 代理旗标；--isolated 隔离态 profile 引擎退出即删（给了 --profile 时 isolated 优先）；--idle-timeout 闲置回收毫秒只对新拉起的 daemon 生效）。",
         example: "browse up --headless --profile ~/profiles/proj-a",
     },
     CmdSpec {
@@ -967,10 +971,26 @@ const COMPANION_FLAGS: &[(&str, &str)] = &[
     ("--headless", "无头引擎（伴 up 与求值前置）"),
     ("--help, -h", "人读帮助"),
     (
+        "--idle-timeout <ms>",
+        "引擎闲置回收毫秒（伴 up，只对新拉起的 daemon 生效；default: 3600000，0 关闭）",
+    ),
+    (
+        "--isolated",
+        "隔离态 profile：引擎退出即删，不留站点痕迹（伴 up）",
+    ),
+    (
         "--json",
         "JSON 输出（伴 status；--llms --json 出机器形 Schema）",
     ),
     ("--pipe", "spawn 引擎走 CDP 管道（零 TCP 面）"),
+    (
+        "--proxy <url>",
+        "引擎代理 --proxy-server（伴 up；BROWSE_PROXY 同值）",
+    ),
+    (
+        "--proxy-bypass <list>",
+        "代理旁路 --proxy-bypass-list（伴 up）",
+    ),
     ("--port <p>", "显式调试端口（伴附着与 up）"),
     (
         "--profile <dir>",
@@ -1055,7 +1075,7 @@ pub fn render_help() -> String {
         "\n片段方言：\n  await session.connect({port:9222})\n  const tabs = await listPageTargets()\n  await session.use(tabs[0].targetId)\n  await session.Page.navigate({url:\"https://example.com\"})\n  await session.waitFor(\"Page.loadEventFired\", undefined, 15000)\n  支持：字面量/对象/数组/成员/下标/await/const-let-var/return。\n  模板字符串（反引号）raw 语义：内容逐字保留（只有 \\\\` 与 \\\\${ 是转义，模板内 \\\\${ 降格为 ${），可多行，页面代码原样内嵌 expression。\n  普通字符串只转义 \\\\n/\\\\t/\\\\\\\\/引号，其余保留反斜杠（与 JS 不同）。\n  不支持：函数字面量、if/for；页面逻辑放 Runtime.evaluate 的 expression。\n",
     );
     out.push_str(
-        "\nEnvironment Variables:\n  BROWSE_PORT          daemon 端口（default: 9880）\n  BROWSE_NAME          命名实例：状态目录加派生端口 9900-9999 隔离，多实例并行\n  BROWSE_CHROME        chrome 路径（default: 走发现序：显式、托管 pin、祖先部署、常规路径）\n  BROWSE_PROFILE       spawn 引擎 user-data-dir（default: 固定 engine-profile，down 不删）\n  BROWSE_CDP_WS        钉死连接的 WS URL\n  BROWSE_NO_ATTACH=1   跳过附着探测，强制 spawn 隔离实例\n  BROWSE_EVAL_TIMEOUT  单次求值超时秒数（default: 300）\n",
+        "\nEnvironment Variables:\n  BROWSE_PORT          daemon 端口（default: 9880）\n  BROWSE_NAME          命名实例：状态目录加派生端口 9900-9999 隔离，多实例并行\n  BROWSE_CHROME        chrome 路径（default: 走发现序：显式、托管 pin、祖先部署、常规路径）\n  BROWSE_PROFILE       spawn 引擎 user-data-dir（default: 固定 engine-profile，down 不删）\n  BROWSE_CDP_WS        钉死连接的 WS URL\n  BROWSE_NO_ATTACH=1   跳过附着探测，强制 spawn 隔离实例\n  BROWSE_EVAL_TIMEOUT  单次求值超时秒数（default: 300）\n  BROWSE_IDLE_TIMEOUT  引擎闲置回收毫秒，到期退引擎下次求值自动拉起（default: 3600000，0 关闭）\n  BROWSE_PROXY         引擎代理 --proxy-server（与 --proxy 旗标同值）\n  BROWSE_PROXY_BYPASS  代理旁路 --proxy-bypass-list\n",
     );
     out.push_str("\n退出码：\n  0 成功 / 1 执行失败 / 2 用法错\n");
     out

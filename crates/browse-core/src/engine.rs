@@ -38,7 +38,7 @@ pub enum EngineSpec {
         u16,
     ),
     /// 自动策略：先探测附着，缺则 spawn（`--chrome` / `--headless` / `--pipe` /
-    /// `--profile` 可约束 spawn 面）。
+    /// `--profile` / `--proxy` / `--isolated` 可约束 spawn 面）。
     Auto {
         /// 指定 chrome 可执行文件（`None` 走发现序）。
         chrome: Option<PathBuf>,
@@ -49,7 +49,41 @@ pub enum EngineSpec {
         /// spawn 引擎的自定义 profile（user-data-dir；`None` 用默认固定
         /// `<state>/engine-profile`，持久保存站点状态与会话）。
         profile: Option<PathBuf>,
+        /// 引擎代理（`--proxy-server`，#25.5）：`BROWSE_PROXY` 同值。
+        proxy: Option<String>,
+        /// 代理旁路清单（`--proxy-bypass-list`，#25.5）：`BROWSE_PROXY_BYPASS`。
+        proxy_bypass: Option<String>,
+        /// 隔离态 profile（#25.3 拆出）：引擎退出即删 profile 目录，
+        /// 不留站点痕迹；目录由引擎自管。
+        isolated: bool,
     },
+}
+
+impl EngineSpec {
+    /// 从 spec 派生 chrome 附加旗标（#25.5/#25.3）：代理与旁路直通
+    /// chrome 语义；单测锁形。
+    ///
+    /// 纪律：值按单 flag 直通、不做转义或拆分（`cmd.args` 每项是一个
+    /// argv 元素，无 shell 无空白拆分，无注入面）；新增字段一律经本函数
+    /// 并补单测，别在这里加拼接/拆分逻辑。
+    pub(crate) fn spawn_extra_args(&self) -> Vec<String> {
+        let EngineSpec::Auto {
+            proxy,
+            proxy_bypass,
+            ..
+        } = self
+        else {
+            return Vec::new();
+        };
+        let mut args = Vec::new();
+        if let Some(p) = proxy {
+            args.push(format!("--proxy-server={p}"));
+        }
+        if let Some(b) = proxy_bypass {
+            args.push(format!("--proxy-bypass-list={b}"));
+        }
+        args
+    }
 }
 
 impl EngineSpec {
@@ -75,6 +109,9 @@ impl EngineSpec {
             headless,
             pipe,
             profile: std::env::var_os("BROWSE_PROFILE").map(Into::into),
+            proxy: std::env::var("BROWSE_PROXY").ok(),
+            proxy_bypass: std::env::var("BROWSE_PROXY_BYPASS").ok(),
+            isolated: false,
         }
     }
 }
@@ -116,6 +153,8 @@ pub struct Engine {
 struct EngineInner {
     source: EngineSource,
     child: Option<Child>,
+    /// 隔离态 profile 目录（#25.3 拆出）：shutdown 后删除，不留站点痕迹。
+    isolated_dir: Option<PathBuf>,
 }
 
 /// 引擎 chrome 解析序（ADR-0007）：CLI 显式 `--chrome` 最先；`BROWSE_CHROME`
@@ -143,6 +182,7 @@ impl Engine {
             inner: Mutex::new(EngineInner {
                 source: EngineSource::NotConnected,
                 child: None,
+                isolated_dir: None,
             }),
         })
     }
@@ -227,7 +267,24 @@ impl Engine {
                 headless,
                 pipe,
                 profile,
+                proxy: _,
+                proxy_bypass: _,
+                isolated,
             } => {
+                let extra = spec.spawn_extra_args();
+                // 隔离态（#25.3 拆出）：spawn 才落 isolated-* 目录（附着探测
+                // 分支不建目录）；退场即删
+                let profile = if *isolated {
+                    Some(crate::paths::state_dir().join(format!(
+                        "isolated-{}",
+                        std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.as_millis())
+                            .unwrap_or(0)
+                    )))
+                } else {
+                    profile.clone()
+                };
                 // BROWSE_NO_ATTACH=1：跳过附着探测，强制 spawn 隔离实例
                 // （测试确定性 / 「别碰我正开着的浏览器」的显式意图）
                 let no_attach =
@@ -243,17 +300,32 @@ impl Engine {
                     EngineSource::Attached { ws_url: ws }
                 } else if *pipe {
                     return self
-                        .spawn_pipes(chrome.clone(), *headless, profile.clone())
+                        .spawn_pipes(
+                            chrome.clone(),
+                            *headless,
+                            profile.clone(),
+                            &extra,
+                            *isolated,
+                        )
                         .await;
                 } else {
                     // spawn 分支自己落状态（含 child 句柄）并 attach，提前返回
-                    return self.spawn(chrome.clone(), *headless, profile.clone()).await;
+                    return self
+                        .spawn(
+                            chrome.clone(),
+                            *headless,
+                            profile.clone(),
+                            &extra,
+                            *isolated,
+                        )
+                        .await;
                 }
             }
         };
         *self.inner.lock().await = EngineInner {
             source: source.clone(),
             child: None,
+            isolated_dir: None,
         };
         self.attach_first_page().await?;
         Ok(source)
@@ -266,6 +338,8 @@ impl Engine {
         chrome: Option<PathBuf>,
         headless: bool,
         profile: Option<PathBuf>,
+        extra_args: &[String],
+        isolated: bool,
     ) -> Result<EngineSource> {
         let chrome = cdp_spawn::find_chrome(resolve_chrome(chrome).as_deref()).ok_or_else(|| {
             anyhow!(
@@ -273,7 +347,7 @@ impl Engine {
             )
         })?;
         let profile = profile.unwrap_or_else(crate::paths::engine_profile_dir);
-        let child = cdp_spawn::spawn_engine(&chrome, &profile, headless)?;
+        let child = cdp_spawn::spawn_engine(&chrome, &profile, headless, extra_args)?;
         let pid = child.id();
         // spawn 之后的任何失败都必须杀掉 child：std Child 的 Drop 不杀进程，
         // 丢句柄 = 孤儿 chrome 锁死 profile，后续 spawn 全挂
@@ -297,6 +371,7 @@ impl Engine {
         {
             bail_kill!(e.context("连接自起引擎"));
         }
+        let isolated_dir = isolated.then(|| profile.clone());
         *self.inner.lock().await = EngineInner {
             source: EngineSource::Spawned {
                 ws_url: Some(ws),
@@ -306,6 +381,7 @@ impl Engine {
                 headless,
                 channel: "port",
             },
+            isolated_dir,
             child: Some(child),
         };
         // spawn 分支自己 attach（ensure 的统一 attach 拿不到 child 句柄归属）
@@ -323,6 +399,8 @@ impl Engine {
         chrome: Option<PathBuf>,
         headless: bool,
         profile: Option<PathBuf>,
+        extra_args: &[String],
+        isolated: bool,
     ) -> Result<EngineSource> {
         let chrome = cdp_spawn::find_chrome(resolve_chrome(chrome).as_deref()).ok_or_else(|| {
             anyhow!(
@@ -330,13 +408,19 @@ impl Engine {
             )
         })?;
         let profile = profile.unwrap_or_else(crate::paths::engine_profile_dir);
-        let engine =
-            cdp_spawn::spawn_engine_pipes(&chrome, &profile, headless, cdp_spawn::PipeMode::Pipe)
-                .context("管道态 spawn")?;
+        let engine = cdp_spawn::spawn_engine_pipes(
+            &chrome,
+            &profile,
+            headless,
+            cdp_spawn::PipeMode::Pipe,
+            extra_args,
+        )
+        .context("管道态 spawn")?;
         let pid = engine.child.id();
         self.session
             .connect_pipes(engine.read, engine.write)
             .await?;
+        let isolated_dir = isolated.then(|| profile.clone());
         *self.inner.lock().await = EngineInner {
             source: EngineSource::Spawned {
                 ws_url: None,
@@ -346,6 +430,7 @@ impl Engine {
                 headless,
                 channel: "pipe",
             },
+            isolated_dir,
             child: Some(engine.child),
         };
         if let Err(e) = self.attach_first_page().await {
@@ -420,6 +505,17 @@ impl Engine {
         if !exited {
             cdp_spawn::terminate_pid(pid)?;
         }
+        // 隔离态 profile 随引擎退场删除（#25.3 拆出），不留站点痕迹
+        if let Some(dir) = inner.isolated_dir.take() {
+            let res =
+                tokio::task::spawn_blocking(move || std::fs::remove_dir_all(&dir).map(|_| dir))
+                    .await;
+            // 失败留痕（评审 G）：Windows 刚退的 chrome 常留锁文件，静默积累
+            // 会破「不留站点痕迹」承诺；残留目录与后续 isolated 不冲突（时间戳）
+            if let Ok(Err(e)) = res {
+                eprintln!("[browse] 隔离目录清理失败（残留待手清，评审 G）：{e}");
+            }
+        }
         inner.source = EngineSource::NotConnected;
         inner.child = None;
         Ok(())
@@ -438,5 +534,48 @@ impl Engine {
         });
         v["engine"] = serde_json::to_value(&source).unwrap_or(serde_json::Value::Null);
         v
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 代理旗标派生（#25.5）：双开与单开形、非 Auto 面为空。
+    #[test]
+    fn spawn_extra_args_shape() {
+        let spec = EngineSpec::Auto {
+            chrome: None,
+            headless: true,
+            pipe: false,
+            profile: None,
+            proxy: Some("http://127.0.0.1:7890".into()),
+            proxy_bypass: Some("localhost,*.corp".into()),
+            isolated: false,
+        };
+        assert_eq!(
+            spec.spawn_extra_args(),
+            vec![
+                "--proxy-server=http://127.0.0.1:7890".to_string(),
+                "--proxy-bypass-list=localhost,*.corp".to_string(),
+            ]
+        );
+        let none = EngineSpec::Auto {
+            chrome: None,
+            headless: false,
+            pipe: false,
+            profile: None,
+            proxy: None,
+            proxy_bypass: None,
+            isolated: true,
+        };
+        assert!(none.spawn_extra_args().is_empty());
+        assert!(
+            EngineSpec::Attach {
+                ws_url: "ws://x".into()
+            }
+            .spawn_extra_args()
+            .is_empty()
+        );
     }
 }

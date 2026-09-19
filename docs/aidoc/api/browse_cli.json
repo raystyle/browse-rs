@@ -13,6 +13,11 @@
       "docs": "daemon 的缺省端口，`BROWSE_PORT` 与 `BROWSE_NAME` 派生端口可覆盖。\n\n取 9880 是为避开 bh 的 9876。"
     },
     {
+      "path": "browse_cli::client::UpParams",
+      "kind": "struct",
+      "docs": "`engine_up` 的参数面：CLI up 旗标直通（字段名即 /engine/up 请求键）。"
+    },
+    {
       "path": "browse_cli::client::daemon_alive",
       "kind": "function",
       "docs": "探测 daemon 是否在跑：GET /health 通即为在。"
@@ -31,6 +36,11 @@
       "path": "browse_cli::client::ensure_daemon",
       "kind": "function",
       "docs": "daemon 不在跑时 detached 拉起 `browse --serve` 并探活到通；已在跑则直接返回。\n\n# Errors\n\n拉起失败（exe 找不到）或 10 秒内 /health 不通。"
+    },
+    {
+      "path": "browse_cli::client::ensure_daemon_with_env",
+      "kind": "function",
+      "docs": "同 [`ensure_daemon`]，但给新拉起的 daemon 进程注入环境变量\n（#25.1/#25.5：idle-timeout 与代理旗标只影响新 daemon；已在跑的\ndaemon 不动，其口径以启动时为准）。\n\n# Errors\n\ndaemon 起不来或就绪探测超时。"
     },
     {
       "path": "browse_cli::client::eval",

@@ -60,6 +60,17 @@ pub async fn daemon_alive() -> Option<Value> {
 ///
 /// 拉起失败（exe 找不到）或 10 秒内 /health 不通。
 pub async fn ensure_daemon() -> Result<()> {
+    ensure_daemon_with_env(&[]).await
+}
+
+/// 同 [`ensure_daemon`]，但给新拉起的 daemon 进程注入环境变量
+/// （#25.1/#25.5：idle-timeout 与代理旗标只影响新 daemon；已在跑的
+/// daemon 不动，其口径以启动时为准）。
+///
+/// # Errors
+///
+/// daemon 起不来或就绪探测超时。
+pub async fn ensure_daemon_with_env(envs: &[(&str, String)]) -> Result<()> {
     if daemon_alive().await.is_some() {
         return Ok(());
     }
@@ -91,6 +102,7 @@ pub async fn ensure_daemon() -> Result<()> {
             .append(true)
             .open(&log)?;
         let mut cmd = Command::new(exe);
+        cmd.envs(envs.iter().map(|(k, v)| (*k, v.clone())));
         cmd.args(["--serve", "--bind", &daemon_bind()]);
         let err_out = out.try_clone().ok();
         cmd.stdin(std::process::Stdio::null());
@@ -113,6 +125,7 @@ pub async fn ensure_daemon() -> Result<()> {
             .append(true)
             .open(&log)?;
         let mut cmd = Command::new(exe);
+        cmd.envs(envs.iter().map(|(k, v)| (*k, v.clone())));
         cmd.args(["--serve", "--bind", &daemon_bind()]);
         let err_out = out.try_clone().ok();
         cmd.stdin(std::process::Stdio::null());
@@ -178,23 +191,48 @@ pub async fn health() -> Result<Value> {
         .ok_or_else(|| anyhow!("browse: daemon 不在（先随便跑一条片段自动拉起，或 browse up）"))
 }
 
+/// `engine_up` 的参数面：CLI up 旗标直通（字段名即 /engine/up 请求键）。
+pub struct UpParams {
+    /// spawn 时无头。
+    pub headless: bool,
+    /// 显式 chrome 路径。
+    pub chrome: Option<String>,
+    /// 显式 WS URL。
+    pub ws: Option<String>,
+    /// 显式端口。
+    pub port: Option<u16>,
+    /// spawn 走 CDP 管道。
+    pub pipe: bool,
+    /// 自定义 user-data-dir。
+    pub profile: Option<String>,
+    /// 引擎代理（#25.5）。
+    pub proxy: Option<String>,
+    /// 代理旁路（#25.5）。
+    pub proxy_bypass: Option<String>,
+    /// 隔离态 profile（#25.3 拆出）。
+    pub isolated: bool,
+}
+
 /// POST /engine/up 显式起引擎，走 ensure 全链（附着优先缺则 spawn）。
 ///
 /// # Errors
 ///
 /// HTTP 失败或引擎 ensure 失败（连不上、chrome 找不到、spawn 超时）。
-pub async fn engine_up(
-    headless: bool,
-    chrome: Option<String>,
-    ws: Option<String>,
-    port: Option<u16>,
-    pipe: bool,
-    profile: Option<String>,
-) -> Result<Value> {
+pub async fn engine_up(p: UpParams) -> Result<Value> {
     let c = client();
     let resp = c
         .post(format!("{}/engine/up", http()))
-        .json(&json!({ "headless": headless, "chrome": chrome, "ws": ws, "port": port, "pipe": pipe, "profile": profile }))
+        .json(&json!({
+            "headless": p.headless,
+            "chrome": p.chrome,
+            "ws": p.ws,
+            "port": p.port,
+            "pipe": p.pipe,
+            "profile": p.profile,
+            "proxy": p.proxy,
+            "proxy_bypass": p.proxy_bypass,
+            "isolated": p.isolated,
+        }))
         .send()
         .await
         .context("POST /engine/up")?;
@@ -203,7 +241,7 @@ pub async fn engine_up(
         Ok(body)
     } else {
         Err(anyhow!(
-            "browse: {}",
+            "{}",
             body.get("error")
                 .and_then(Value::as_str)
                 .unwrap_or("未知错误")

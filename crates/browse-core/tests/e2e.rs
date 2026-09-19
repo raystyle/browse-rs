@@ -1102,6 +1102,9 @@ async fn spawn_port_channel_roundtrip() {
             headless: true,
             pipe: false,
             profile: None,
+            proxy: None,
+            proxy_bypass: None,
+            isolated: false,
         })
         .await
         .expect("端口态引擎起不来（BROWSE_CHROME 指到 clean-chrome 的 chrome.exe？）");
@@ -1126,9 +1129,50 @@ async fn spawn_pipe_channel_roundtrip() {
             headless: true,
             pipe: true,
             profile: None,
+            proxy: None,
+            proxy_bypass: None,
+            isolated: false,
         })
         .await
         .expect("管道态引擎起不来（需 clean-chrome 2026-09-14 后的 47 锚产物）");
     exercise(&engine, &host, "pipe").await;
     clean_profile().await;
+}
+
+/// 隔离态 profile（#25.3 拆出，#25.1 线）：isolated 落 state/isolated-*
+/// 目录，引擎退场目录即删。
+#[tokio::test]
+async fn isolated_profile_removed_on_shutdown() {
+    if !gated() {
+        eprintln!("skip: BROWSE_E2E 未设 1");
+        return;
+    }
+    let _seq = SEQ.lock().await;
+    clean_profile().await;
+    let session = cdp::Session::new();
+    let engine = Engine::new(session);
+    engine
+        .ensure(&EngineSpec::Auto {
+            chrome: None,
+            headless: true,
+            pipe: false,
+            profile: None,
+            proxy: None,
+            proxy_bypass: None,
+            isolated: true,
+        })
+        .await
+        .expect("隔离态引擎");
+    let src = engine.source().await;
+    let browse_core::EngineSource::Spawned { profile_dir, .. } = &src else {
+        panic!("应 Spawned: {src:?}");
+    };
+    let dir = profile_dir.clone();
+    assert!(
+        dir.to_string_lossy().contains("isolated-"),
+        "隔离目录命名: {dir:?}"
+    );
+    assert!(dir.is_dir(), "运行中目录应在: {dir:?}");
+    engine.shutdown().await.expect("shutdown");
+    assert!(!dir.exists(), "退场后目录应删: {dir:?}");
 }
