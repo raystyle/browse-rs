@@ -138,6 +138,10 @@ pub async fn serve(daemon: Arc<Daemon>, bind: &str) -> anyhow::Result<()> {
         .route("/health", get(health_handler))
         .route("/engine/up", post(engine_up_handler))
         .route("/quit", post(quit_handler))
+        // 只读看板（#54）：GET / 出 HTML 单页，/dashboard/sse 推事件流；
+        // 看板自身不是工作 tab，禁止被附着驾驶（无写路由佐证）
+        .route("/", get(dashboard_handler))
+        .route("/dashboard/sse", get(dashboard_sse_handler))
         .with_state(state);
 
     // 闲置回收机（#25.1）：到期退引擎不退 daemon，下次求值自动拉起
@@ -291,6 +295,81 @@ fn err_response(e: anyhow::Error) -> (axum::http::StatusCode, Json<Value>) {
         Json(json!({ "ok": false, "error": msg })),
     )
 }
+
+/// 只读看板（#54）：单文件 HTML（无外部资源），1 秒轮询 /health 渲染
+/// 实例概览与活动 tab。SSE 通道见 [`dashboard_sse_handler`]。
+async fn dashboard_handler() -> impl IntoResponse {
+    (
+        [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
+        axum::response::Html(DASHBOARD_HTML),
+    )
+}
+
+/// 看板 SSE（#54）：每 2 秒推一帧 health 快照（instance/uptime/engine/
+/// connected/activeTarget/title/url）。axum 0.7 的 SSE 走 Body::from_stream。
+async fn dashboard_sse_handler(State(st): State<AppState>) -> impl IntoResponse {
+    use futures::stream::StreamExt;
+    let daemon = st.daemon.clone();
+    let stream = futures::stream::unfold(daemon, |daemon| async move {
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        let health = daemon.engine.health_json(daemon.started.elapsed()).await;
+        let mut ev = String::from("data: ");
+        ev.push_str(&health.to_string());
+        ev.push_str(
+            "
+
+",
+        );
+        Some((Ok::<_, std::io::Error>(axum::body::Bytes::from(ev)), daemon))
+    })
+    .map(|r: Result<axum::body::Bytes, std::io::Error>| r);
+    let body = axum::body::Body::from_stream(stream);
+    (
+        [(
+            axum::http::header::CONTENT_TYPE,
+            "text/event-stream; charset=utf-8",
+        )],
+        body,
+    )
+}
+
+/// 看板 HTML（#54）：inline，无外部依赖；SSE 断线自动重连（EventSource 原生）。
+const DASHBOARD_HTML: &str = r#"<!doctype html>
+<html lang="zh"><head><meta charset="utf-8">
+<title>browse dashboard</title>
+<style>
+body{font:14px/1.5 system-ui,sans-serif;margin:2rem;max-width:60rem}
+table{border-collapse:collapse;margin-top:1rem}
+td,th{border:1px solid #ccc;padding:.3rem .7rem;text-align:left}
+th{background:#f5f5f5}
+.badge{display:inline-block;padding:.1rem .5rem;border-radius:1rem;font-size:.85rem}
+.on{background:#d4f7d4}.off{background:#f7d4d4}
+#evt{white-space:pre;font:12px/1.4 monospace;background:#fafafa;padding:1rem;margin-top:1rem;overflow:auto;max-height:16rem}
+</style></head><body>
+<h1>browse dashboard</h1>
+<p>只读看板（多实例总览：每实例一个 daemon，各开各的看板；端口见 browse status）。本页不是工作 tab，无任何写操作。</p>
+<table id="t"><tr><th>项</th><th>值</th></tr></table>
+<div id="evt">（事件流）</div>
+<script>
+function row(k,v){return '<tr><td>'+k+'</td><td>'+v+'</td></tr>'}
+function render(h){
+  const eng = h.engine && h.engine.Spawned ? 'spawned pid '+h.engine.Spawned.pid
+    : h.engine && h.engine.Attached ? 'attached' : 'not connected';
+  const conn = '<span class="badge '+(h.connected?'on':'off')+'">'+(h.connected?'connected':'offline')+'</span>';
+  document.getElementById('t').innerHTML =
+    row('instance', h.name||'default') + row('uptime(s)', Math.round(h.uptime/1000)) +
+    row('engine', eng) + row('connection', conn) +
+    row('activeTarget', h.activeTargetId||'-') + row('activeSession', h.activeSessionId||'-');
+}
+const es = new EventSource('/dashboard/sse');
+es.onmessage = e => { const h = JSON.parse(e.data); render(h);
+  const d = document.getElementById('evt');
+  d.textContent = new Date().toLocaleTimeString()+'  '+JSON.stringify(h)+'
+'+d.textContent;
+};
+es.onerror = () => { document.getElementById('evt').textContent = 'SSE 断线，自动重连中…
+'+document.getElementById('evt').textContent; };
+</script></body></html>"#;
 
 async fn health_handler(State(st): State<AppState>) -> impl IntoResponse {
     Json(

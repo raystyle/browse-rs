@@ -544,7 +544,7 @@
       "type": "object"
     },
     "cli.serve": {
-      "description": "browse --serve [--bind host:port] 前台跑 daemon（--bind 选监听地址）。daemon 即公开 HTTP 契约（#45）：POST /eval 求值（body {code,new_tab,js}，错误形判 ok 字段）、GET /health 探活；方言做线协议门外语言不限，完整契约与 curl 三例见 docs/guides/http-api.md。",
+      "description": "browse --serve [--bind host:port] daemon 即只读看板（#54）：GET /（HTML 单页零外部资源，实例概览加活动 tab）与 GET /dashboard/sse（2 秒帧事件流，断线原生重连）；看板无任何写路由。前台跑 daemon（--bind 选监听地址）。daemon 即公开 HTTP 契约（#45）：POST /eval 求值（body {code,new_tab,js}，错误形判 ok 字段）、GET /health 探活；方言做线协议门外语言不限，完整契约与 curl 三例见 docs/guides/http-api.md。",
       "example": "browse --serve --bind 127.0.0.1:9880",
       "input": {
         "properties": {
