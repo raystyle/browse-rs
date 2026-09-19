@@ -675,17 +675,30 @@ pub const COMMANDS: &[CmdSpec] = &[
     CmdSpec {
         name: "mouseDown",
         kind: CmdKind::Global,
-        signature: "mouseDown(button?)",
-        args: &[arg!("button", "string", false, "left")],
-        description: "按下不释放（#35）：拖拽与长按语义的半边，与 mouseUp 配对。",
+        signature: "mouseDown(button?, x?, y?)",
+        args: &[
+            arg!(
+                "button",
+                "string",
+                false,
+                "left（right/middle/back/forward）"
+            ),
+            arg!("x", "number", false, "缺省最近 mouseMove 落点"),
+            arg!("y", "number", false),
+        ],
+        description: "按下不释放（#35）：拖拽与长按语义的半边，与 mouseUp 配对；坐标缺省沿用最近 mouseMove 落点（按下前自动 move 打点）。",
         example: "await mouseDown()",
     },
     CmdSpec {
         name: "mouseUp",
         kind: CmdKind::Global,
-        signature: "mouseUp(button?)",
-        args: &[arg!("button", "string", false, "left")],
-        description: "释放按键（#35）：与 mouseDown 配对。",
+        signature: "mouseUp(button?, x?, y?)",
+        args: &[
+            arg!("button", "string", false, "left"),
+            arg!("x", "number", false, "缺省最近落点"),
+            arg!("y", "number", false),
+        ],
+        description: "释放按键（#35）：与 mouseDown 配对；坐标缺省沿用最近落点。",
         example: "await mouseUp()",
     },
     CmdSpec {
@@ -693,7 +706,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "mouseWheel(dx, dy)",
         args: &[arg!("dx", "number", true), arg!("dy", "number", true)],
-        description: "滚轮（#35）：像素量（向下滚 dy 正），走 wheel 事件路径——SPA 懒加载监听 wheel 时 JS scrollBy 不可替代。",
+        description: "滚轮（#35）：像素量（向下滚 dy 正），走 synthesizeScrollGesture 手势合成（导航后首发吞没问题已绕开；落点用最近 mouseMove 位置缺省中上）；SPA 懒加载监听 wheel 时 JS scrollBy 不可替代。要精确单 wheel 事件裸调 Input.dispatchMouseEvent（注意导航后首个会被吞）。",
         example: "await mouseWheel(0, 600)",
     },
     CmdSpec {
@@ -704,7 +717,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("ref", "string", true),
             arg!("paths", "array", true, "daemon 侧绝对路径"),
         ],
-        description: "文件灌入 input[type=file]（#35）：DOM.setFileInputFiles 直灌（可靠面，multiple 支持）；拖拽事件序列用 mouseDown/Move/Up 手拼。",
+        description: "文件灌入 input[type=file]（#35）：DOM.setFileInputFiles 直灌（可靠面，multiple 支持，路径预检不存在即报错防 CDP 静默假成功）；拖拽事件序列用 mouseDown/Move/Up 手拼。",
         example: "await dropFiles(\"e3\", [\"/tmp/a.png\"])",
     },
     CmdSpec {

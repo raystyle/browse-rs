@@ -882,6 +882,35 @@ l`.length === 3].join(\"|\")", returnByValue:true})).result.value"#;
         .await
         .expect("读 wheelGot");
     assert_eq!(wg, json!(3), "mouseWheel 应走 wheel 事件路径: {wg}");
+    // 评审 F1/G4：mouseDown/mouseUp 配对真路径（修前裸 down 100% 报错）
+    host.eval_snippet(
+        r#"await pageEval("window.dn = 0; window.upEv = 0; addEventListener('mousedown', () => { window.dn = 1 }); addEventListener('mouseup', () => { window.upEv = 1 })")"#,
+    )
+    .await
+    .expect("挂 down/up");
+    host.eval_snippet(&format!(
+        r#"await mouseMove({}, {}); await mouseDown(); await mouseUp()"#,
+        hv.0, hv.1
+    ))
+    .await
+    .expect("move-down-up 链");
+    let du = host
+        .eval_snippet(
+            r#"return (await session.Runtime.evaluate({expression:"[window.dn, window.upEv].join('|')", returnByValue:true})).result.value"#,
+        )
+        .await
+        .expect("读 down/up");
+    assert_eq!(du, json!("1|1"), "down 与 up 都应触发: {du}");
+    // 非法 button：白名单当场报错（G1/G4，修前 Playwright 别名会静默不派发）
+    let bad = host
+        .eval_snippet(r#"await clickAt(10, 10, {button: "primary"})"#)
+        .await;
+    let bad_msg = format!("{bad:#?}");
+    assert!(
+        bad.is_err() && bad_msg.contains("left/right/middle/back/forward"),
+        "非法 button 应白名单报错: {bad_msg}"
+    );
+
     // dropFiles：临时两文件灌 multiple input，FileList 长度 2
     let d = std::env::temp_dir().join("browse-e2e-drop");
     let _ = std::fs::create_dir_all(&d);
@@ -928,6 +957,14 @@ l`.length === 3].join(\"|\")", returnByValue:true})).result.value"#;
         .await
         .expect("读 FileList");
     assert_eq!(fl, json!(2), "dropFiles 应灌两文件: {fl}");
+    // 坏路径预检（评审 F1b：CDP 不校验会假成功）
+    let badp = host
+        .eval_snippet(r#"await dropFiles("e1", ["/no/such/path.nope"])"#)
+        .await;
+    assert!(
+        badp.is_err() && format!("{badp:#?}").contains("不存在"),
+        "坏路径应预检报错: {badp:?}"
+    );
     let _ = std::fs::remove_dir_all(&d);
 
     // screenshot：存文件、字节数为正、清场

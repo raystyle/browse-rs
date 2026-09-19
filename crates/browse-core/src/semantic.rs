@@ -589,6 +589,7 @@ pub async fn click_at_opts(
     button: &str,
     click_count: i64,
 ) -> Result<Value> {
+    validate_button(button)?;
     dispatch_input_seq(
         s,
         vec![
@@ -598,6 +599,20 @@ pub async fn click_at_opts(
     )
     .await?;
     Ok(json!(true))
+}
+
+/// 最近一次 mouseMove/hover 的坐标（#35 评审 F1）：mouseDown/mouseUp/
+/// mouseWheel 缺省落点。进程级单份（daemon 单引擎单活动页，口径够用）。
+static LAST_MOUSE: std::sync::Mutex<Option<(i64, i64)>> = std::sync::Mutex::new(None);
+
+/// 鼠标按键白名单（#35 评审 G1）：非法值当场报错列合法值，不靠 CDP 的
+/// Invalid mouse button（Playwright 别名 primary/secondary 会静默不派发）。
+fn validate_button(button: &str) -> Result<()> {
+    const OK: [&str; 5] = ["left", "right", "middle", "back", "forward"];
+    if !OK.contains(&button) {
+        bail!("button 非法值 {button}（合法：left/right/middle/back/forward）");
+    }
+    Ok(())
 }
 
 /// 鼠标原语族（#35）：move、按下/释放分离、滚轮、按钮与次数参数化。
@@ -613,6 +628,9 @@ pub async fn mouse_move(s: &Session, x: i64, y: i64) -> Result<Value> {
         json!({ "type": "mouseMoved", "x": x, "y": y }),
     )
     .await?;
+    if let Ok(mut m) = LAST_MOUSE.lock() {
+        *m = Some((x, y));
+    }
     Ok(json!(true))
 }
 
@@ -621,10 +639,23 @@ pub async fn mouse_move(s: &Session, x: i64, y: i64) -> Result<Value> {
 /// # Errors
 ///
 /// 同 [`mouse_move`]。
-pub async fn mouse_down(s: &Session, button: &str) -> Result<Value> {
+pub async fn mouse_down(
+    s: &Session,
+    x: Option<i64>,
+    y: Option<i64>,
+    button: &str,
+) -> Result<Value> {
+    validate_button(button)?;
+    let (x, y) = resolve_mouse_pos(x, y);
+    // 先 move 到落点（Chrome 输入状态机：按下落在当前指针位置）
     s.call(
         "Input.dispatchMouseEvent",
-        json!({ "type": "mousePressed", "button": button, "clickCount": 1 }),
+        json!({ "type": "mouseMoved", "x": x, "y": y }),
+    )
+    .await?;
+    s.call(
+        "Input.dispatchMouseEvent",
+        json!({ "type": "mousePressed", "x": x, "y": y, "button": button, "clickCount": 1 }),
     )
     .await?;
     Ok(json!(true))
@@ -635,13 +666,25 @@ pub async fn mouse_down(s: &Session, button: &str) -> Result<Value> {
 /// # Errors
 ///
 /// 同 [`mouse_move`]。
-pub async fn mouse_up(s: &Session, button: &str) -> Result<Value> {
+pub async fn mouse_up(s: &Session, x: Option<i64>, y: Option<i64>, button: &str) -> Result<Value> {
+    validate_button(button)?;
+    let (x, y) = resolve_mouse_pos(x, y);
     s.call(
         "Input.dispatchMouseEvent",
-        json!({ "type": "mouseReleased", "button": button, "clickCount": 1 }),
+        json!({ "type": "mouseReleased", "x": x, "y": y, "button": button, "clickCount": 1 }),
     )
     .await?;
     Ok(json!(true))
+}
+
+/// 鼠标落点解析（#35 评审 F1）：显式坐标优先，缺省沿用最近 mouseMove，
+/// 再缺省 (0,0)。
+fn resolve_mouse_pos(x: Option<i64>, y: Option<i64>) -> (i64, i64) {
+    let last = LAST_MOUSE.lock().ok().and_then(|m| *m);
+    (
+        x.or(last.map(|l| l.0)).unwrap_or(0),
+        y.or(last.map(|l| l.1)).unwrap_or(0),
+    )
 }
 
 /// 滚轮（#35）：deltaX/deltaY 是像素量（向下滚正 deltaY）；触发 wheel
@@ -655,9 +698,15 @@ pub async fn mouse_wheel(s: &Session, dx: i64, dy: i64) -> Result<Value> {
     // mouseWheel 在导航后有首发吞没（首个被渲染器当监听注册握手消耗，
     // 第二发起才触发，w1=0/w2=1/w3=2 三连实测）；手势合成连续 wheel 流
     // 首次即触发。要精确单 wheel 事件就裸调 dispatchMouseEvent（自双发）
+    let (px, py) = resolve_mouse_pos(None, None);
+    let (px, py) = if (px, py) == (0, 0) {
+        (50, 50)
+    } else {
+        (px, py)
+    };
     s.call(
         "Input.synthesizeScrollGesture",
-        json!({ "x": 50, "y": 50, "xDistance": -dx, "yDistance": -dy, "speed": 800 }),
+        json!({ "x": px, "y": py, "xDistance": -dx, "yDistance": -dy, "speed": 800 }),
     )
     .await?;
     Ok(json!(true))
@@ -1300,8 +1349,6 @@ async fn resolve_node_object(s: &Session, backend_node_id: i64) -> Result<String
 ///
 /// ref 失效（节点没了）、取不到中心（不可见）、被遮挡（错误附遮挡元素）、
 /// 派发失败。
-/// 按 snapshot 短 ref trusted 点击（原口径）：左键单击，参数化走
-/// [`click_ref_opts`]。
 pub async fn click_ref(s: &Session, backend_node_id: i64) -> Result<Value> {
     click_ref_opts(s, backend_node_id, "left", 1).await
 }
@@ -1319,6 +1366,7 @@ pub async fn click_ref_opts(
     button: &str,
     click_count: i64,
 ) -> Result<Value> {
+    validate_button(button)?;
     let object_id = resolve_node_object(s, backend_node_id).await?;
     let r = s
         .call(

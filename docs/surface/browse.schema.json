@@ -902,7 +902,7 @@
       "type": "object"
     },
     "dropFiles": {
-      "description": "dropFiles(ref, paths) 文件灌入 input[type=file]（#35）：DOM.setFileInputFiles 直灌（可靠面，multiple 支持）；拖拽事件序列用 mouseDown/Move/Up 手拼。",
+      "description": "dropFiles(ref, paths) 文件灌入 input[type=file]（#35）：DOM.setFileInputFiles 直灌（可靠面，multiple 支持，路径预检不存在即报错防 CDP 静默假成功）；拖拽事件序列用 mouseDown/Move/Up 手拼。",
       "example": "await dropFiles(\"e3\", [\"/tmp/a.png\"])",
       "input": {
         "properties": {
@@ -1334,13 +1334,21 @@
       "type": "object"
     },
     "mouseDown": {
-      "description": "mouseDown(button?) 按下不释放（#35）：拖拽与长按语义的半边，与 mouseUp 配对。",
+      "description": "mouseDown(button?, x?, y?) 按下不释放（#35）：拖拽与长按语义的半边，与 mouseUp 配对；坐标缺省沿用最近 mouseMove 落点（按下前自动 move 打点）。",
       "example": "await mouseDown()",
       "input": {
         "properties": {
           "button": {
-            "description": "缺省 left",
+            "description": "缺省 left（right/middle/back/forward）",
             "type": "string"
+          },
+          "x": {
+            "description": "缺省 缺省最近 mouseMove 落点",
+            "type": "number"
+          },
+          "y": {
+            "description": "",
+            "type": "number"
           }
         },
         "required": [],
@@ -1373,13 +1381,21 @@
       "type": "object"
     },
     "mouseUp": {
-      "description": "mouseUp(button?) 释放按键（#35）：与 mouseDown 配对。",
+      "description": "mouseUp(button?, x?, y?) 释放按键（#35）：与 mouseDown 配对；坐标缺省沿用最近落点。",
       "example": "await mouseUp()",
       "input": {
         "properties": {
           "button": {
             "description": "缺省 left",
             "type": "string"
+          },
+          "x": {
+            "description": "缺省 缺省最近落点",
+            "type": "number"
+          },
+          "y": {
+            "description": "",
+            "type": "number"
           }
         },
         "required": [],
@@ -1389,7 +1405,7 @@
       "type": "object"
     },
     "mouseWheel": {
-      "description": "mouseWheel(dx, dy) 滚轮（#35）：像素量（向下滚 dy 正），走 wheel 事件路径——SPA 懒加载监听 wheel 时 JS scrollBy 不可替代。",
+      "description": "mouseWheel(dx, dy) 滚轮（#35）：像素量（向下滚 dy 正），走 synthesizeScrollGesture 手势合成（导航后首发吞没问题已绕开；落点用最近 mouseMove 位置缺省中上）；SPA 懒加载监听 wheel 时 JS scrollBy 不可替代。要精确单 wheel 事件裸调 Input.dispatchMouseEvent（注意导航后首个会被吞）。",
       "example": "await mouseWheel(0, 600)",
       "input": {
         "properties": {

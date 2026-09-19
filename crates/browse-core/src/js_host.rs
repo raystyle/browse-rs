@@ -1514,13 +1514,16 @@ impl JsHost {
                 crate::semantic::mouse_move(&self.session, x, y).await
             }
             "mouseDown" => {
+                // button? x? y?：坐标缺省沿用最近 mouseMove 落点（评审 F1）
                 let b = argv
                     .first()
                     .and_then(Value::as_str)
                     .unwrap_or("left")
                     .to_string();
+                let x = argv.get(1).and_then(Value::as_i64);
+                let y = argv.get(2).and_then(Value::as_i64);
                 self.assert_no_dialog().await?;
-                crate::semantic::mouse_down(&self.session, &b).await
+                crate::semantic::mouse_down(&self.session, x, y, &b).await
             }
             "mouseUp" => {
                 let b = argv
@@ -1528,8 +1531,10 @@ impl JsHost {
                     .and_then(Value::as_str)
                     .unwrap_or("left")
                     .to_string();
+                let x = argv.get(1).and_then(Value::as_i64);
+                let y = argv.get(2).and_then(Value::as_i64);
                 self.assert_no_dialog().await?;
-                crate::semantic::mouse_up(&self.session, &b).await
+                crate::semantic::mouse_up(&self.session, x, y, &b).await
             }
             "mouseWheel" => {
                 let dx = argv.first().and_then(Value::as_i64).unwrap_or(0);
@@ -1550,6 +1555,19 @@ impl JsHost {
                     .unwrap_or_default();
                 if files.is_empty() {
                     bail!("dropFiles 缺文件路径数组；下一步：第二参给绝对路径数组");
+                }
+                // 路径预检（#35 评审 F1b）：CDP 不校验路径，坏路径静默假成功
+                let missing: Vec<String> = files
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .filter(|p| !std::path::Path::new(p).is_file())
+                    .map(str::to_string)
+                    .collect();
+                if !missing.is_empty() {
+                    bail!(
+                        "dropFiles 这些路径在 daemon 侧不存在（CDP 不校验会假成功）：{}；下一步：给存在的绝对路径",
+                        missing.join(", ")
+                    );
                 }
                 let bn = self.lookup_ref(r).await?;
                 self.session

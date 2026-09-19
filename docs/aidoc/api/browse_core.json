@@ -330,7 +330,7 @@
     {
       "path": "browse_core::semantic::click_ref",
       "kind": "function",
-      "docs": "按短 ref 点击：滚动可见 -> 量视口中心 -> **遮挡命中测试** -> 复用\n[`click_at`] 的 trusted 鼠标事件。\n\n命中测试（吸收 agent-browser 的 blocker 思路）：`elementFromPoint` 看\n点击点实际落谁头上，落点与目标无祖孙/label 关联即判被遮挡（consent\nbanner、modal 场景），报遮挡元素描述并拒绝点击：绝不静默点错位置。\n`clickAt` 是显式「点可见物」，不做此检查。\n\n# Errors\n\nref 失效（节点没了）、取不到中心（不可见）、被遮挡（错误附遮挡元素）、\n派发失败。\n按 snapshot 短 ref trusted 点击（原口径）：左键单击，参数化走\n[`click_ref_opts`]。"
+      "docs": "按短 ref 点击：滚动可见 -> 量视口中心 -> **遮挡命中测试** -> 复用\n[`click_at`] 的 trusted 鼠标事件。\n\n命中测试（吸收 agent-browser 的 blocker 思路）：`elementFromPoint` 看\n点击点实际落谁头上，落点与目标无祖孙/label 关联即判被遮挡（consent\nbanner、modal 场景），报遮挡元素描述并拒绝点击：绝不静默点错位置。\n`clickAt` 是显式「点可见物」，不做此检查。\n\n# Errors\n\nref 失效（节点没了）、取不到中心（不可见）、被遮挡（错误附遮挡元素）、\n派发失败。"
     },
     {
       "path": "browse_core::semantic::click_ref_opts",
