@@ -300,7 +300,14 @@ fn err_response(e: anyhow::Error) -> (axum::http::StatusCode, Json<Value>) {
 /// 实例概览与活动 tab。SSE 通道见 [`dashboard_sse_handler`]。
 async fn dashboard_handler() -> impl IntoResponse {
     (
-        [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
+        [
+            (axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8"),
+            // 只读看板零外部资源（评审 F1）：CSP 全关外联，inline 脚本放行
+            (
+                axum::http::header::CONTENT_SECURITY_POLICY,
+                "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'",
+            ),
+        ],
         axum::response::Html(DASHBOARD_HTML),
     )
 }
@@ -351,7 +358,8 @@ th{background:#f5f5f5}
 <table id="t"><tr><th>项</th><th>值</th></tr></table>
 <div id="evt">（事件流）</div>
 <script>
-function row(k,v){return '<tr><td>'+k+'</td><td>'+v+'</td></tr>'}
+function esc(x){const d=document.createElement('div');d.textContent=String(x);return d.innerHTML}
+function row(k,v){return '<tr><td>'+esc(k)+'</td><td>'+esc(v)+'</td></tr>'}
 function render(h){
   const eng = h.engine && h.engine.Spawned ? 'spawned pid '+h.engine.Spawned.pid
     : h.engine && h.engine.Attached ? 'attached' : 'not connected';
