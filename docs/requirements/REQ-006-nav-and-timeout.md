@@ -1,9 +1,9 @@
 ---
 id: REQ-006
 title: 批 1 时序口径与导航族（issue #51/#19/#39）
-status: draft
+status: implemented
 priority: must
-trace: null
+trace: timeout_tests 三件单测（js_host）加 e2e 批 1 块（goto/历史/reload/check 幂等/submit/秒口径双态）加 surface 六新条目；issue #51/#19/#39 验收正文中九断言对齐
 ---
 
 # REQ-006：批 1 时序口径与导航族（issue #51/#19/#39）

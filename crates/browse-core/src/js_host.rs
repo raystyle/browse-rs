@@ -959,6 +959,38 @@ impl JsHost {
             "newTab" => {
                 crate::semantic::new_tab(&self.session, argv.first().and_then(Value::as_str)).await
             }
+            // 一步导航（#19）：navigate 加 waitLoad 一体；opts {timeout 秒,
+            // waitIdle: true 或秒数}。已加载页立即返回不阻塞
+            "goto" => {
+                let url = str_arg(argv, 0, "goto 的 url")?;
+                let opts = argv.get(1).cloned().unwrap_or(json!({}));
+                let (tmo_ms, warn) =
+                    secs_to_ms(opts.get("timeout").and_then(Value::as_u64).unwrap_or(15));
+                let idle_ms = match opts.get("waitIdle") {
+                    Some(Value::Number(n)) => n.as_u64().map(|s| s * 1000),
+                    Some(Value::Bool(true)) => Some(20_000),
+                    _ => None,
+                };
+                let r = crate::semantic::goto(&self.session, url, tmo_ms, idle_ms).await?;
+                Ok(attach_warning(r, warn))
+            }
+            // 历史导航（#39）：delta 步缺省 1
+            "goBack" => {
+                let delta = argv.first().and_then(Value::as_u64).unwrap_or(1);
+                crate::semantic::go_back(&self.session, delta).await
+            }
+            "goForward" => {
+                let delta = argv.first().and_then(Value::as_u64).unwrap_or(1);
+                crate::semantic::go_forward(&self.session, delta).await
+            }
+            "reload" => {
+                let opts = argv.first().cloned().unwrap_or(json!({}));
+                let ignore = opts
+                    .get("ignoreCache")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                crate::semantic::reload(&self.session, ignore).await
+            }
             "switchTab" => {
                 let id = argv.first().and_then(Value::as_str).ok_or_else(|| anyhow!(
                     "switchTab 缺 targetId；下一步：switchTab(tabs[0].targetId)，先 const tabs = await listPageTargets()"
@@ -984,7 +1016,12 @@ impl JsHost {
                 ))?;
                 let text = argv.get(1).and_then(Value::as_str).unwrap_or("");
                 self.assert_no_dialog().await?;
-                crate::semantic::fill_input(&self.session, sel, text).await
+                let out = crate::semantic::fill_input(&self.session, sel, text).await?;
+                // submit（#39）：填完顺带 Enter；返回值保持回读串契约不变
+                if submit_arg(argv.get(2)) {
+                    crate::semantic::press_key(&self.session, "Enter").await?;
+                }
+                Ok(out)
             }
             "pressKey" => {
                 let key = argv.first().and_then(Value::as_str).ok_or_else(|| anyhow!(
@@ -994,18 +1031,24 @@ impl JsHost {
                 crate::semantic::press_key(&self.session, key).await
             }
             "waitLoad" => {
-                let ms = argv.first().and_then(Value::as_u64).unwrap_or(10_000);
-                crate::semantic::wait_load(&self.session, ms).await
+                // 秒口径（#51）：缺省 10 秒；旧毫秒习惯值由混用守卫换算并告警
+                let (ms, warn) = timeout_ms_of(argv, 0, 10);
+                let r = crate::semantic::wait_load(&self.session, ms).await?;
+                Ok(attach_warning(r, warn))
             }
             "waitIdle" => {
-                let ms = argv.first().and_then(Value::as_u64).unwrap_or(10_000);
-                crate::semantic::wait_idle(&self.session, ms).await
+                // 秒口径（#51）：缺省 10 秒
+                let (ms, warn) = timeout_ms_of(argv, 0, 10);
+                let r = crate::semantic::wait_idle(&self.session, ms).await?;
+                Ok(attach_warning(r, warn))
             }
             // ---- 网络响应面（#20）：URL glob 命中等响应完成 ----
             "waitForResponse" => {
                 let pat = str_arg(argv, 0, "waitForResponse 的 pattern")?;
-                let ms = argv.get(1).and_then(Value::as_u64).unwrap_or(15_000);
-                self.wait_for_response(pat, ms).await
+                // 秒口径（#51）：缺省 15 秒
+                let (ms, warn) = timeout_ms_of(argv, 1, 15);
+                let r = self.wait_for_response(pat, ms).await?;
+                Ok(attach_warning(r, warn))
             }
             // ---- 全量 JS 旁路（#22，ADR-0002 修订）：页面逻辑直达 ----
             "pageEval" => {
@@ -1148,7 +1191,22 @@ impl JsHost {
                 ))?;
                 self.assert_no_dialog().await?;
                 let bn = self.lookup_ref(r).await?;
-                crate::semantic::click_ref(&self.session, bn).await
+                let mut out = crate::semantic::click_ref(&self.session, bn).await?;
+                // waitNav（#19）：链接型点击后自动等导航稳定，免点击加
+                // waitLoad 两步；同文档锚点与纯 JS 按钮等已加载页立即返回
+                let opts = argv.get(1).cloned().unwrap_or(json!({}));
+                if opts.get("waitNav").and_then(Value::as_bool) == Some(true) {
+                    let (ms, warn) =
+                        secs_to_ms(opts.get("timeout").and_then(Value::as_u64).unwrap_or(10));
+                    let wl = crate::semantic::wait_load(&self.session, ms).await?;
+                    if let Some(o) = out.as_object_mut() {
+                        o.insert("waitLoad".to_string(), wl);
+                        if let Some(w) = warn {
+                            o.insert("timeoutWarning".to_string(), json!(w));
+                        }
+                    }
+                }
+                Ok(out)
             }
             "fillRef" => {
                 let r = argv.first().and_then(Value::as_str).ok_or_else(|| anyhow!(
@@ -1157,7 +1215,13 @@ impl JsHost {
                 let text = argv.get(1).and_then(Value::as_str).unwrap_or("");
                 self.assert_no_dialog().await?;
                 let bn = self.lookup_ref(r).await?;
-                crate::semantic::fill_ref(&self.session, bn, text).await
+                let out = crate::semantic::fill_ref(&self.session, bn, text).await?;
+                // submit（#39）：填完顺带 Enter；返回值保持回读串契约不变，
+                // 提交副作用由页内可观察
+                if submit_arg(argv.get(2)) {
+                    crate::semantic::press_key(&self.session, "Enter").await?;
+                }
+                Ok(out)
             }
             "selectOption" => {
                 let r = argv.first().and_then(Value::as_str).ok_or_else(|| anyhow!(
@@ -1169,6 +1233,16 @@ impl JsHost {
                 self.assert_no_dialog().await?;
                 let bn = self.lookup_ref(r).await?;
                 crate::semantic::select_option(&self.session, bn, value).await
+            }
+            // 防呆勾选动词（#39）：checkRef 后必为 true，幂等
+            name @ ("checkRef" | "uncheckRef") => {
+                let want = name == "checkRef";
+                let r = argv.first().and_then(Value::as_str).ok_or_else(|| anyhow!(
+                    "{name} 缺 ref；下一步：{name}(\"e5\")（checkbox/radio 的 ref，来自 snapshot()）"
+                ))?;
+                self.assert_no_dialog().await?;
+                let bn = self.lookup_ref(r).await?;
+                crate::semantic::set_checked(&self.session, bn, want).await
             }
             // ---- 对话框（吸收 agent-browser 语义）----
             "dialogStatus" => match self.session.pending_dialog().await {
@@ -1392,13 +1466,14 @@ impl JsHost {
                     .first()
                     .and_then(Value::as_str)
                     .ok_or_else(|| anyhow!(
-                        "waitFor 缺 method 字符串；下一步：await session.waitFor(\"Page.loadEventFired\", undefined, 15000)"
+                        "waitFor 缺 method 字符串；下一步：await session.waitFor(\"Page.frameNavigated\", undefined, 15)（秒）。注意 loadEventFired 有竞速窗：事件在注册前已发则假超时（#19），等加载用 goto() 或 waitLoad()，等导航事件用 frameNavigated"
                     ))?;
-                let ms = argv
-                    .get(2)
-                    .and_then(Value::as_u64)
-                    .or_else(|| argv.get(1).and_then(Value::as_u64))
-                    .unwrap_or(15_000);
+                // 秒口径（#51）：缺省 15 秒；旧毫秒习惯值由混用守卫换算并
+                // 告警（事件回执是 CDP 原形，告警走 daemon 留痕）
+                let (ms, warn) = timeout_ms_of(argv, 2, 15);
+                if let Some(w) = warn {
+                    eprintln!("[browse] waitFor {w}");
+                }
                 self.session.wait_for(ev, ms).await
             }
             "call" => {
@@ -1419,11 +1494,16 @@ impl JsHost {
                     .first()
                     .and_then(Value::as_str)
                     .ok_or_else(|| anyhow!(
-                        "waitJs 缺 expression 字符串；下一步：await session.waitJs(\"document.querySelector('#x') !== null\", 5000)（页内表达式真值即通过，毫秒）"
+                        "waitJs 缺 expression 字符串；下一步：await session.waitJs(\"document.querySelector('#x') !== null\", 5)（页内表达式真值即通过，秒）"
                     ))?;
-                let timeout_ms = argv.get(1).and_then(Value::as_u64).unwrap_or(10_000);
-                let deadline = tokio::time::Instant::now()
-                    + std::time::Duration::from_millis(timeout_ms.min(120_000));
+                // 秒口径（#51）：缺省 10 秒；返回值是页内原值非对象，混用
+                // 告警走 daemon 留痕
+                let (timeout_ms, warn) = timeout_ms_of(argv, 1, 10);
+                if let Some(w) = warn {
+                    eprintln!("[browse] waitJs {w}");
+                }
+                let deadline =
+                    tokio::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
                 let mut last_err = String::new();
                 loop {
                     let r = self
@@ -1452,8 +1532,8 @@ impl JsHost {
                     }
                     if tokio::time::Instant::now() >= deadline {
                         return Err(anyhow!(
-                            "waitJs 超时（{}ms）：{expr}{}",
-                            timeout_ms,
+                            "waitJs 超时（{} 秒）：{expr}{}",
+                            timeout_ms / 1000,
                             if last_err.is_empty() {
                                 String::new()
                             } else {
@@ -1908,6 +1988,50 @@ fn str_arg<'a>(argv: &'a [Value], i: usize, who: &str) -> Result<&'a str> {
     })
 }
 
+/// wait 类 timeout 秒值换毫秒（#51 统一口径）：大于 3600 视为毫秒误写，
+/// 按毫秒换算（15000 即 15 秒）并出告警，换算后封顶 600 秒；不大于 3600
+/// 按秒原样放大。返回 (毫秒, 告警)，告警由调用方附进结果对象（无对象面
+/// 走 daemon 留痕）。
+fn secs_to_ms(v: u64) -> (u64, Option<String>) {
+    const MISUSE: u64 = 3600;
+    const CAP: u64 = 600;
+    if v > MISUSE {
+        let s = (v / 1000).clamp(1, CAP);
+        (
+            s * 1000,
+            Some(format!(
+                "timeout {v} 大于 3600，按毫秒误写换算为 {s} 秒（封顶 600）；秒口径直写如 waitLoad(15)"
+            )),
+        )
+    } else {
+        (v * 1000, None)
+    }
+}
+
+/// 取第 i 个 wait 类 timeout 实参（缺省 default_s 秒）并过 [`secs_to_ms`]
+/// 混用守卫。
+fn timeout_ms_of(argv: &[Value], i: usize, default_s: u64) -> (u64, Option<String>) {
+    secs_to_ms(argv.get(i).and_then(Value::as_u64).unwrap_or(default_s))
+}
+
+/// 把混用告警附进结果对象（只对对象面结果有意义；附不上的调用方走
+/// eprintln 留痕）。
+fn attach_warning(mut r: Value, warn: Option<String>) -> Value {
+    if let (Some(w), Some(obj)) = (warn, r.as_object_mut()) {
+        obj.insert("timeoutWarning".to_string(), json!(w));
+    }
+    r
+}
+
+/// fill 类第三参的 submit 判定：布尔 true 或对象 {submit: true}。
+fn submit_arg(v: Option<&Value>) -> bool {
+    match v {
+        Some(Value::Bool(true)) => true,
+        Some(o @ Value::Object(_)) => o.get("submit").and_then(Value::as_bool) == Some(true),
+        _ => false,
+    }
+}
+
 /// 取第 i 个整数参数（布尔与浮点不接受），带 CTA。
 fn int_arg(argv: &[Value], i: usize, who: &str) -> Result<i64> {
     argv.get(i).and_then(Value::as_i64).ok_or_else(|| {
@@ -2056,7 +2180,7 @@ const PREVIEW_HEAD_ITEMS: usize = 8;
 /// 全局函数 CTA 清单（#33 G6 单一真相）：「未知函数」提示由此派生，
 /// `global_cta_covers_catalog` 测试把它与 surface 目录的 Global 条目绑死；
 /// 增删全局必须同步这里（value-methods 是方法面族条目，不在此列）。
-const GLOBALS_CTA: &str = "listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/hostFunctions()/snapshot()/screenshot(path?, full?)/pdf(path?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/clickAt(x,y)/fillInput(sel,text)/clickRef(ref)/fillRef(ref,text)/selectOption(ref,value)/pressKey(key)/dialogStatus()/dialogAccept(text?)/dialogDismiss()/routeBlock(pattern)/routeMock(pattern,body,opts?)/routeClear()/waitLoad(ms?)/waitIdle(ms?)/waitForResponse(pattern,ms?)/responseBody(requestId)/pageEval(js)/hoverRef(ref)/hoverAt(x,y)/dblclickRef(ref)/dragRef(src,dst)/keydown(key)/keyup(key)/typeRef(ref,text)/emulate(opts)/setInitScript(code)/exportStorageState()/importStorageState(state)/JSON.parse(string)/JSON.stringify(value,indent?)/recordStart(opts?)/recordStop()/chromeInstall(opts?)/chromeList()/chromeUse(version)/chromeUpdate()/chromeRemove(version)/chromeDoctor()/print(x)";
+const GLOBALS_CTA: &str = "listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/hostFunctions()/snapshot()/screenshot(path?, full?)/pdf(path?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/goto(url,opts?)/goBack(delta?)/goForward(delta?)/reload(opts?)/clickAt(x,y)/fillInput(sel,text,submit?)/clickRef(ref,opts?)/checkRef(ref)/uncheckRef(ref)/fillRef(ref,text,submit?)/selectOption(ref,value)/pressKey(key)/dialogStatus()/dialogAccept(text?)/dialogDismiss()/routeBlock(pattern)/routeMock(pattern,body,opts?)/routeClear()/waitLoad(s?)/waitIdle(s?)/waitForResponse(pattern,s?)/responseBody(requestId)/pageEval(js)/hoverRef(ref)/hoverAt(x,y)/dblclickRef(ref)/dragRef(src,dst)/keydown(key)/keyup(key)/typeRef(ref,text)/emulate(opts)/setInitScript(code)/exportStorageState()/importStorageState(state)/JSON.parse(string)/JSON.stringify(value,indent?)/recordStart(opts?)/recordStop()/chromeInstall(opts?)/chromeList()/chromeUse(version)/chromeUpdate()/chromeRemove(version)/chromeDoctor()/print(x)";
 
 /// 容器预览：头部 JSON 截断（留尾注位），超帽尾注总项数；小容器输出
 /// 与全量形一致。不与 [`trunc_preview`] 叠用（双省略号）。
@@ -3439,5 +3563,47 @@ return JSON.stringify(JSON.parse(raw).items.slice(0, 1))"#,
             .await
             .expect("emoji length 应可求值");
         assert_eq!(v, json!(2));
+    }
+}
+
+#[cfg(test)]
+mod timeout_tests {
+    use super::*;
+
+    /// #51 秒口径混用守卫：直写秒原样放大；大于 3600 按毫秒误写换算并告警，
+    /// 换算后封顶 600 秒。
+    #[test]
+    fn secs_to_ms_units() {
+        // 秒口径直写：15 秒即 15000ms，旧习惯 waitLoad(15000) 经守卫等价
+        assert_eq!(secs_to_ms(15), (15_000, None));
+        assert_eq!(secs_to_ms(0), (0, None));
+        assert_eq!(secs_to_ms(3600), (3_600_000, None));
+        // 毫秒误写：15000 换算 15 秒并告警（与旧语义同效，迁移零破坏）
+        let (ms, warn) = secs_to_ms(15_000);
+        assert_eq!(ms, 15_000);
+        assert!(warn.is_some_and(|w| w.contains("毫秒误写")));
+        // 封顶：600000（600 秒的毫秒写法）换算后恰 600 秒；再大也钳 600
+        assert_eq!(secs_to_ms(600_000).0, 600_000);
+        assert_eq!(secs_to_ms(7_200_000).0, 600_000);
+        // 边界：3601 是最小误写值（3600 秒整仍是合法秒）
+        assert!(secs_to_ms(3601).1.is_some());
+    }
+
+    /// 缺省走 default_s；实参位次取值。
+    #[test]
+    fn timeout_ms_of_positional() {
+        let argv = vec![serde_json::json!("x"), serde_json::json!(5)];
+        assert_eq!(timeout_ms_of(&argv, 1, 10), (5_000, None));
+        assert_eq!(timeout_ms_of(&argv, 9, 10), (10_000, None));
+    }
+
+    /// fill 类第三参 submit 两形：布尔 true 与对象 {submit: true}。
+    #[test]
+    fn submit_arg_shapes() {
+        assert!(submit_arg(Some(&serde_json::json!(true))));
+        assert!(submit_arg(Some(&serde_json::json!({"submit": true}))));
+        assert!(!submit_arg(Some(&serde_json::json!(false))));
+        assert!(!submit_arg(Some(&serde_json::json!({"submit": false}))));
+        assert!(!submit_arg(None));
     }
 }

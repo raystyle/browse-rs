@@ -77,6 +77,157 @@ pub async fn close_tab(s: &Session, target_id: Option<&str>) -> Result<Value> {
     Ok(json!(true))
 }
 
+/// 一步导航（#19）：`Page.navigate` 加 waitLoad 一体收尾，可选再等网络静默，
+/// 返回提交后世界的 url/title/elapsedMs。用于「去这个页且等它可用」，替代
+/// 手写 navigate 加 waitLoad 两步；也替代 navigate 加 waitFor(loadEventFired)
+/// 组合——后者事件已发再注册即假超时（#19 竞速），本函数走 readyState 轮询
+/// 无此窗。
+///
+/// `timeout_ms` 是导航加载合计预算；`idle_ms` 为 Some 时再等网络静默。
+///
+/// # Errors
+///
+/// navigate 回执带 errorText；预算内 readyState 未到 complete；idle 档
+/// 未静默。
+pub async fn goto(s: &Session, url: &str, timeout_ms: u64, idle_ms: Option<u64>) -> Result<Value> {
+    let t0 = std::time::Instant::now();
+    let nav = s.call("Page.navigate", json!({ "url": url })).await?;
+    if let Some(et) = nav.pointer("/errorText").and_then(Value::as_str) {
+        bail!("goto({url}) 导航失败：{et}；下一步：核对 url，或 session.Page.navigate 看完整回执");
+    }
+    wait_load(s, timeout_ms).await?;
+    if let Some(ms) = idle_ms {
+        wait_idle(s, ms).await?;
+    }
+    let tab = current_tab(s).await?;
+    Ok(json!({
+        "url": tab.get("url"),
+        "title": tab.get("title"),
+        "elapsedMs": t0.elapsed().as_millis() as u64,
+    }))
+}
+
+/// 历史回退（#39）：`Page.getNavigationHistory` 取 currentIndex，回退 delta
+/// 步（缺省 1，越界钳到最早条目）后 `navigateToHistoryEntry`，再等加载
+/// 收尾。返回实跳步数与落点 url/title。
+///
+/// # Errors
+///
+/// 历史为空；历史查询或导航失败。
+pub async fn go_back(s: &Session, delta: u64) -> Result<Value> {
+    history_jump(s, -(delta.max(1) as i64)).await
+}
+
+/// 历史前进（#39）：同 [`go_back`] 方向相反，钳到最新条目。
+///
+/// # Errors
+///
+/// 同 [`go_back`]。
+pub async fn go_forward(s: &Session, delta: u64) -> Result<Value> {
+    history_jump(s, delta.max(1) as i64).await
+}
+
+async fn history_jump(s: &Session, delta: i64) -> Result<Value> {
+    let h = s.call("Page.getNavigationHistory", json!({})).await?;
+    let idx = h
+        .pointer("/currentIndex")
+        .and_then(Value::as_i64)
+        .unwrap_or(0);
+    let entries = h
+        .pointer("/entries")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let to = (idx + delta).clamp(0, (entries.len() as i64).saturating_sub(1));
+    let entry = entries
+        .get(to as usize)
+        .ok_or_else(|| anyhow!("历史为空，无条目可跳；下一步：先 goto(url) 建立历史"))?;
+    let fallback_url = entry
+        .get("url")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    let entry_id = entry.get("id").cloned().unwrap_or(json!(to));
+    s.call(
+        "Page.navigateToHistoryEntry",
+        json!({ "entryId": entry_id }),
+    )
+    .await?;
+    wait_load(s, 15_000).await?;
+    let tab = current_tab(s).await?;
+    Ok(json!({
+        "steps": to - idx,
+        "url": tab.get("url").cloned().unwrap_or(json!(fallback_url)),
+        "title": tab.get("title"),
+    }))
+}
+
+/// 刷新当前页（#39）：`Page.reload`（可带 ignoreCache）后等加载收尾。
+///
+/// # Errors
+///
+/// reload 调用失败或加载预算内 readyState 未到 complete。
+pub async fn reload(s: &Session, ignore_cache: bool) -> Result<Value> {
+    let t0 = std::time::Instant::now();
+    s.call("Page.reload", json!({ "ignoreCache": ignore_cache }))
+        .await?;
+    wait_load(s, 20_000).await?;
+    let tab = current_tab(s).await?;
+    Ok(json!({
+        "ignoredCache": ignore_cache,
+        "url": tab.get("url"),
+        "title": tab.get("title"),
+        "elapsedMs": t0.elapsed().as_millis() as u64,
+    }))
+}
+
+/// 勾选/取消复选框（#39）：读元素 checked 实态，与目标态不一致才点击
+/// （checkRef 后必为 true，重复调用幂等）。radio 只能置 true：已选中的
+/// radio 再 uncheck 无意义，原样返回不点击。
+///
+/// # Errors
+///
+/// 元素不是 checkbox/radio；元素 disabled；状态读取或点击失败。
+pub async fn set_checked(s: &Session, backend_node_id: i64, checked: bool) -> Result<Value> {
+    let object_id = resolve_node_object(s, backend_node_id).await?;
+    let r = s
+        .call(
+            "Runtime.callFunctionOn",
+            json!({
+                "objectId": object_id,
+                "functionDeclaration": r#"function(){ return {
+                    tag: this.tagName,
+                    type: (this.type || ''),
+                    checked: !!this.checked,
+                    enabled: !this.disabled
+                }; }"#,
+                "returnByValue": true
+            }),
+        )
+        .await?;
+    let st = r.pointer("/result/value").cloned().unwrap_or(Value::Null);
+    let tag = st
+        .get("tag")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_ascii_uppercase();
+    let ty = st.get("type").and_then(Value::as_str).unwrap_or("");
+    if tag != "INPUT" || (ty != "checkbox" && ty != "radio") {
+        bail!(
+            "check/uncheck 只适用 checkbox 与 radio（当前 {tag} type={ty}）；下一步：普通元素用 clickRef"
+        );
+    }
+    if !st.get("enabled").and_then(Value::as_bool).unwrap_or(false) {
+        bail!("元素 disabled；下一步：先启用再勾选");
+    }
+    let cur = st.get("checked").and_then(Value::as_bool).unwrap_or(false);
+    if cur == checked || (ty == "radio" && cur) {
+        return Ok(json!({ "checked": cur, "clicked": false }));
+    }
+    click_ref(s, backend_node_id).await?;
+    Ok(json!({ "checked": checked, "clicked": true }))
+}
+
 /// 用 `Input.dispatchMouseEvent` pressed+released 在视口坐标 (x,y) 派发
 /// trusted 的真点击。
 ///
@@ -646,7 +797,8 @@ pub async fn wait_load(s: &Session, ms: u64) -> Result<Value> {
         }
         if tokio::time::Instant::now() >= deadline {
             bail!(
-                "waitLoad 超时（{ms}ms）：readyState 未到 complete；下一步：waitJs 查具体条件或加大超时"
+                "waitLoad 超时（{} 秒）：readyState 未到 complete；下一步：waitJs 查具体条件或加大超时（秒口径）",
+                ms / 1000
             );
         }
         tokio::time::sleep(Duration::from_millis(200)).await;
@@ -691,7 +843,8 @@ pub async fn wait_idle(s: &Session, ms: u64) -> Result<Value> {
         }
         if tokio::time::Instant::now() >= deadline {
             bail!(
-                "waitIdle 超时（{ms}ms）：仍有 {in_flight} 个在飞请求；下一步：加大超时或 findEvents 看卡住的是什么请求"
+                "waitIdle 超时（{} 秒）：仍有 {in_flight} 个在飞请求；下一步：加大超时（秒口径）或 findEvents 看卡住的是什么请求",
+                ms / 1000
             );
         }
     }

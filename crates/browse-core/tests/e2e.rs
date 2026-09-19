@@ -94,7 +94,7 @@ async fn exercise(engine: &Engine, host: &JsHost, expect_channel: &str) {
     )
     .await
     .expect("再导航");
-    host.eval_snippet(r#"await session.waitFor("Page.frameNavigated", undefined, 15000)"#)
+    host.eval_snippet(r#"await session.waitFor("Page.frameNavigated", undefined, 15)"#)
         .await
         .expect("waitFor frameNavigated");
     let peeked = host
@@ -132,7 +132,7 @@ async fn exercise(engine: &Engine, host: &JsHost, expect_channel: &str) {
         }),
         "since 返回的事件 seq 必须全部大于游标"
     );
-    host.eval_snippet(r#"await session.waitFor("Page.frameStartedLoading", undefined, 15000)"#)
+    host.eval_snippet(r#"await session.waitFor("Page.frameStartedLoading", undefined, 15)"#)
         .await
         .expect("peek 之后 waitFor 仍取得到（非破坏）");
 
@@ -143,7 +143,7 @@ async fn exercise(engine: &Engine, host: &JsHost, expect_channel: &str) {
     .await
     .expect("导航到 waitJs 页");
     let waited = host
-        .eval_snippet(r#"await session.waitJs("window.done", 8000)"#)
+        .eval_snippet(r#"await session.waitJs("window.done", 8)"#)
         .await
         .expect("waitJs");
     assert_eq!(waited, json!(42), "waitJs 应返回真值本身");
@@ -258,7 +258,7 @@ l`.length === 3].join(\"|\")", returnByValue:true})).result.value"#;
         .await
         .expect("clickRef");
     let go = host
-        .eval_snippet(r#"await session.waitJs("window.go", 3000)"#)
+        .eval_snippet(r#"await session.waitJs("window.go", 3)"#)
         .await
         .expect("clickRef 副作用");
     assert_eq!(go, json!(5));
@@ -331,6 +331,138 @@ l`.length === 3].join(\"|\")", returnByValue:true})).result.value"#;
         meta.pointer("/pageTitle"),
         "快照 title 应与新文档页内 title 一致: {meta}"
     );
+
+    // ---- 批 1（REQ-006）：goto/历史导航/reload/秒口径 ----
+    // goto：navigate+waitLoad 一体，返回提交后世界的 url/title
+    let g = host
+        .eval_snippet(r#"return await goto("data:text/html,<title>goto-a</title><h1>a</h1>")"#)
+        .await
+        .expect("goto a");
+    assert_eq!(
+        g.get("title"),
+        Some(&json!("goto-a")),
+        "goto 应到 a 页: {g}"
+    );
+    host.eval_snippet(r#"await goto("data:text/html,<title>goto-b</title><h1>b</h1>")"#)
+        .await
+        .expect("goto b");
+    // goBack：回一步应回到 a 页
+    let back = host
+        .eval_snippet("return await goBack()")
+        .await
+        .expect("goBack");
+    assert_eq!(
+        back.get("title"),
+        Some(&json!("goto-a")),
+        "goBack 应回 a 页: {back}"
+    );
+    // goForward：前进回 b 页
+    let fwd = host
+        .eval_snippet("return await goForward()")
+        .await
+        .expect("goForward");
+    assert_eq!(
+        fwd.get("title"),
+        Some(&json!("goto-b")),
+        "goForward 应回 b 页: {fwd}"
+    );
+    // reload：加载收尾后 title 不变
+    let rl = host
+        .eval_snippet("return await reload()")
+        .await
+        .expect("reload");
+    assert_eq!(
+        rl.get("title"),
+        Some(&json!("goto-b")),
+        "reload 后 title 应保持: {rl}"
+    );
+    // 秒口径（#51）：直写秒与旧毫秒习惯值等价，混用守卫带 timeoutWarning
+    let wl_s = host
+        .eval_snippet("return await waitLoad(2)")
+        .await
+        .expect("waitLoad 秒口径");
+    assert_eq!(
+        wl_s.get("readyState"),
+        Some(&json!("complete")),
+        "waitLoad(2) 应已加载立即返回: {wl_s}"
+    );
+    assert!(
+        wl_s.get("timeoutWarning").is_none(),
+        "直写秒不应告警: {wl_s}"
+    );
+    let wl_ms = host
+        .eval_snippet("return await waitLoad(15000)")
+        .await
+        .expect("waitLoad 毫秒误写");
+    assert!(
+        wl_ms
+            .get("timeoutWarning")
+            .is_some_and(|w| w.as_str().unwrap_or("").contains("毫秒误写")),
+        "旧毫秒习惯值应带混用告警: {wl_ms}"
+    );
+    // checkRef/uncheckRef：防呆幂等（#39）
+    host.eval_snippet(r#"await goto("data:text/html,<input type='checkbox' id='c'>")"#)
+        .await
+        .expect("goto checkbox 页");
+    let csn = host
+        .eval_snippet("return await snapshot()")
+        .await
+        .expect("checkbox snapshot");
+    let cb_ref = csn
+        .get("nodes")
+        .and_then(Value::as_array)
+        .expect("nodes")
+        .iter()
+        .find(|n| n.get("role") == Some(&json!("checkbox")))
+        .and_then(|n| n.get("ref"))
+        .and_then(Value::as_str)
+        .expect("checkbox 节点应带 ref")
+        .to_string();
+    let ck = host
+        .eval_snippet(&format!(r#"return await checkRef("{cb_ref}")"#))
+        .await
+        .expect("checkRef");
+    assert_eq!(
+        ck.get("checked"),
+        Some(&json!(true)),
+        "checkRef 后必 true: {ck}"
+    );
+    let ck2 = host
+        .eval_snippet(&format!(r#"return await checkRef("{cb_ref}")"#))
+        .await
+        .expect("checkRef 幂等二连");
+    assert_eq!(
+        ck2.get("clicked"),
+        Some(&json!(false)),
+        "已勾选再 checkRef 不点击: {ck2}"
+    );
+    let unck = host
+        .eval_snippet(&format!(r#"return await uncheckRef("{cb_ref}")"#))
+        .await
+        .expect("uncheckRef");
+    assert_eq!(
+        unck.get("checked"),
+        Some(&json!(false)),
+        "uncheckRef 后必 false: {unck}"
+    );
+    // fill submit（#39）：填完顺带 Enter，页内 keydown 副作用可观察
+    host.eval_snippet(
+        r#"await goto("data:text/html,<input id='q'><script>document.getElementById('q').addEventListener('keydown', e => { if (e.key === 'Enter') document.title = 'submitted' })</script>")"#,
+    )
+    .await
+    .expect("goto 输入页");
+    let fs = host
+        .eval_snippet(r##"await fillInput("#q", "hi", {submit: true})"##)
+        .await
+        .expect("fillInput submit");
+    assert_eq!(fs, json!("hi"), "fill 返回保持回读串契约: {fs}");
+    let t = host
+        .eval_snippet(
+            r#"return (await session.Runtime.evaluate({expression:"document.title", returnByValue:true})).result.value"#,
+        )
+        .await
+        .expect("读 title");
+    assert_eq!(t, json!("submitted"), "Enter 应触发页内提交副作用: {t}");
 
     // screenshot：存文件、字节数为正、清场
     let shot = host
@@ -496,7 +628,7 @@ l`.length === 3].join(\"|\")", returnByValue:true})).result.value"#;
     .await
     .expect("导航 mock 页");
     let got = host
-        .eval_snippet(r#"await session.waitJs("window.got", 8000)"#)
+        .eval_snippet(r#"await session.waitJs("window.got", 8)"#)
         .await
         .expect("mock 应答应到达");
     assert_eq!(got, json!("{\"ok\":1}"), "mock body 应原样到达: {got}");
@@ -517,7 +649,7 @@ l`.length === 3].join(\"|\")", returnByValue:true})).result.value"#;
     );
     // #20 超时路径：不命中的 pattern 短窗报可读错误
     let miss = host
-        .eval_snippet(r#"await waitForResponse("http://never.test/*", 200)"#)
+        .eval_snippet(r#"await waitForResponse("http://never.test/*", 1)"#)
         .await;
     let miss_msg = format!("{miss:#?}");
     assert!(
@@ -591,7 +723,7 @@ return await responseBody(evs[0].params.requestId)"#,
     .await
     .expect("导航 block 页");
     let err = host
-        .eval_snippet(r#"await session.waitJs("window.err", 8000)"#)
+        .eval_snippet(r#"await session.waitJs("window.err", 8)"#)
         .await
         .expect("block 应让 fetch 失败");
     assert!(
@@ -617,7 +749,7 @@ return await responseBody(evs[0].params.requestId)"#,
     .await
     .expect("录制中导航 1");
     host.eval_snippet(
-        r#"await session.waitJs("document.body && document.body.innerText.includes('one')", 5000)"#,
+        r#"await session.waitJs("document.body && document.body.innerText.includes('one')", 5)"#,
     )
     .await
     .expect("等一屏就绪");
@@ -662,7 +794,7 @@ return await responseBody(evs[0].params.requestId)"#,
     host.eval_snippet(r#"await session.Page.navigate({url:"data:text/html,<h3>rec-two</h3>"})"#)
         .await
         .expect("录制中导航 3");
-    host.eval_snippet(r#"await session.waitJs("document.body && document.body.innerText.includes('rec-two')", 5000)"#)
+    host.eval_snippet(r#"await session.waitJs("document.body && document.body.innerText.includes('rec-two')", 5)"#)
         .await
         .expect("等 rec-two");
     host.eval_snippet("await newTab()")
@@ -840,7 +972,7 @@ return await responseBody(evs[0].params.requestId)"#,
         .await
         .expect("clickAt");
     let clicked = host
-        .eval_snippet(r#"await session.waitJs("window.clicked", 3000)"#)
+        .eval_snippet(r#"await session.waitJs("window.clicked", 3)"#)
         .await
         .expect("点击生效");
     assert_eq!(clicked, json!(7));
@@ -856,7 +988,7 @@ return await responseBody(evs[0].params.requestId)"#,
     eprintln!("[e2e] waitIdle 开始");
     // waitIdle：无网络请求的页面静默即返回
     let wi = host
-        .eval_snippet("return await waitIdle(5000)")
+        .eval_snippet("return await waitIdle(5)")
         .await
         .expect("waitIdle");
     assert!(wi.get("requests").is_some(), "{wi}");
@@ -886,7 +1018,7 @@ return await responseBody(evs[0].params.requestId)"#,
         .await
         .expect("hoverRef");
     let shown = host
-        .eval_snippet(r#"await session.waitJs("getComputedStyle(document.querySelector('.m')).display === 'block'", 3000)"#)
+        .eval_snippet(r#"await session.waitJs("getComputedStyle(document.querySelector('.m')).display === 'block'", 3)"#)
         .await;
     assert!(shown.is_ok(), "hover 应触发 :hover 显形: {shown:?}");
     // dblclick（#23）：计数器到 2
@@ -913,7 +1045,7 @@ return await responseBody(evs[0].params.requestId)"#,
         .await
         .expect("dblclickRef");
     let db = host
-        .eval_snippet(r#"await session.waitJs("window.db", 3000)"#)
+        .eval_snippet(r#"await session.waitJs("window.db", 3)"#)
         .await
         .expect("dblclick 应触发 ondblclick");
     assert_eq!(db, json!(1));
@@ -965,7 +1097,9 @@ return await responseBody(evs[0].params.requestId)"#,
         .await
         .expect("typeRef");
     let cev = host
-        .eval_snippet(r#"await session.waitJs("document.getElementById('ce').innerText.includes('hi')", 3000)"#)
+        .eval_snippet(
+            r#"await session.waitJs("document.getElementById('ce').innerText.includes('hi')", 3)"#,
+        )
         .await;
     assert!(cev.is_ok(), "typeRef 应入 contenteditable: {cev:?}");
     // initScript（#25.2）：设脚本后新文档生效；替换不叠加、清除真撤
@@ -977,7 +1111,7 @@ return await responseBody(evs[0].params.requestId)"#,
         .await
         .expect("导航 init 页");
     let ini = host
-        .eval_snippet(r#"await session.waitJs("window.__init_probe === 41", 3000)"#)
+        .eval_snippet(r#"await session.waitJs("window.__init_probe === 41", 3)"#)
         .await;
     assert!(ini.is_ok(), "init 脚本应在新文档前置执行: {ini:?}");
     host.eval_snippet(r#"await setInitScript("window.__init_probe2 = 42")"#)
@@ -987,11 +1121,11 @@ return await responseBody(evs[0].params.requestId)"#,
         .await
         .expect("导航 init 页 2");
     let ini2 = host
-        .eval_snippet(r#"await session.waitJs("window.__init_probe2 === 42", 3000)"#)
+        .eval_snippet(r#"await session.waitJs("window.__init_probe2 === 42", 3)"#)
         .await;
     assert!(ini2.is_ok(), "新脚本应生效: {ini2:?}");
     let old_gone = host
-        .eval_snippet(r#"await session.waitJs("window.__init_probe === 41", 1200)"#)
+        .eval_snippet(r#"await session.waitJs("window.__init_probe === 41", 1)"#)
         .await;
     assert!(
         old_gone.is_err(),
@@ -1004,7 +1138,7 @@ return await responseBody(evs[0].params.requestId)"#,
         .await
         .expect("导航 init 页 3");
     let cleared = host
-        .eval_snippet(r#"await session.waitJs("window.__init_probe2 === 42", 1200)"#)
+        .eval_snippet(r#"await session.waitJs("window.__init_probe2 === 42", 1)"#)
         .await;
     assert!(cleared.is_err(), "清除后不应再跑（注册真撤）: {cleared:?}");
     // storageState（#25.3）：cookies 半边往返（CDP setCookies 不经网络）
@@ -1039,7 +1173,7 @@ return await responseBody(evs[0].params.requestId)"#,
         .await
         .expect("导航 ls 页");
     host.eval_snippet(
-        r#"await session.waitJs("document.body && document.body.innerText.includes('LS')", 5000)"#,
+        r#"await session.waitJs("document.body && document.body.innerText.includes('LS')", 5)"#,
     )
     .await
     .expect("ls 页就绪");

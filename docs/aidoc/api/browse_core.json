@@ -368,6 +368,21 @@
       "docs": "按短 ref 填输入框：objectId 上 focus -> 探测控件（SELECT/readOnly 拒收\n并给 CTA）-> SelectAll+insertText（与 [`fill_input`] 同款，不发 Ctrl+A）\n-> 同一 objectId 回读严格验证。选择器会随重构漂移，backendNodeId 不会。\n\n# Errors\n\nref 失效、目标不是可填控件、回读不一致（错误附回读值）。"
     },
     {
+      "path": "browse_core::semantic::go_back",
+      "kind": "function",
+      "docs": "历史回退（#39）：`Page.getNavigationHistory` 取 currentIndex，回退 delta\n步（缺省 1，越界钳到最早条目）后 `navigateToHistoryEntry`，再等加载\n收尾。返回实跳步数与落点 url/title。\n\n# Errors\n\n历史为空；历史查询或导航失败。"
+    },
+    {
+      "path": "browse_core::semantic::go_forward",
+      "kind": "function",
+      "docs": "历史前进（#39）：同 [`go_back`] 方向相反，钳到最新条目。\n\n# Errors\n\n同 [`go_back`]。"
+    },
+    {
+      "path": "browse_core::semantic::goto",
+      "kind": "function",
+      "docs": "一步导航（#19）：`Page.navigate` 加 waitLoad 一体收尾，可选再等网络静默，\n返回提交后世界的 url/title/elapsedMs。用于「去这个页且等它可用」，替代\n手写 navigate 加 waitLoad 两步；也替代 navigate 加 waitFor(loadEventFired)\n组合——后者事件已发再注册即假超时（#19 竞速），本函数走 readyState 轮询\n无此窗。\n\n`timeout_ms` 是导航加载合计预算；`idle_ms` 为 Some 时再等网络静默。\n\n# Errors\n\nnavigate 回执带 errorText；预算内 readyState 未到 complete；idle 档\n未静默。"
+    },
+    {
       "path": "browse_core::semantic::hover_at",
       "kind": "function",
       "docs": "移动鼠标到视口坐标（#23）：触发 `:hover` 与悬停菜单的 mouseMoved。\n\n# Errors\n\n未连接或派发失败。"
@@ -403,9 +418,19 @@
       "docs": "用 `Input.dispatchKeyEvent` keyDown(+text)+keyUp 按一个键；Enter 的\ntext 是 `\\r`（CDP 契约），可打印单字符带自身为 text。\n\n# Errors\n\n未连接或派发失败。"
     },
     {
+      "path": "browse_core::semantic::reload",
+      "kind": "function",
+      "docs": "刷新当前页（#39）：`Page.reload`（可带 ignoreCache）后等加载收尾。\n\n# Errors\n\nreload 调用失败或加载预算内 readyState 未到 complete。"
+    },
+    {
       "path": "browse_core::semantic::select_option",
       "kind": "function",
       "docs": "按短 ref 选下拉框选项：value 或可见 label 匹配，设值并派发 input+change\n（不发鼠标事件，确定性路径），回 `{value,label}`。\n\n选择器版的入口是 `fillInput` 的 SELECT CTA（指向本函数先 snapshot 取 ref）。\n\n# Errors\n\nref 失效、目标不是 `<select>`、没有匹配选项（错误附全部可选 value）。"
+    },
+    {
+      "path": "browse_core::semantic::set_checked",
+      "kind": "function",
+      "docs": "勾选/取消复选框（#39）：读元素 checked 实态，与目标态不一致才点击\n（checkRef 后必为 true，重复调用幂等）。radio 只能置 true：已选中的\nradio 再 uncheck 无意义，原样返回不点击。\n\n# Errors\n\n元素不是 checkbox/radio；元素 disabled；状态读取或点击失败。"
     },
     {
       "path": "browse_core::semantic::switch_tab",

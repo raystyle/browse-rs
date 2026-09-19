@@ -24,10 +24,11 @@ browse 'return (await session.Runtime.evaluate({expression:"document.title", ret
 
 ```bash
 browse up --headless            # 或 browse up（有头窗口）
-browse 'await session.Page.navigate({url:"https://example.com"})'
+browse 'return await goto("https://example.com")'   # navigate+等加载一体，回 {url,title,elapsedMs}
 browse 'return (await session.Runtime.evaluate({expression:"document.querySelector(\"h1\").textContent", returnByValue:true})).result.value'
-browse 'await session.waitFor("Page.loadEventFired", undefined, 15000)'
 ```
+
+> 等加载优先 goto() 或 waitLoad(s)；`waitFor("Page.loadEventFired")` 有竞速窗（事件在注册前已发则假超时）。wait 类 timeout 一律秒口径（#51）。
 
 ## 4. 管道通道（零 TCP 面）
 

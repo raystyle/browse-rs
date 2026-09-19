@@ -355,6 +355,9 @@ ark 管理的安装拦自更新走 ark 单通道（判据：exe 同目录 `ark-m
 - `export_storage_state` — 导出会话态（#25.3）：cookies 全量加当前页 origin 的 localStorage。
 - `fill_input` — 按 CSS 选择器填输入框：focus -> 全选（commands，不发 Ctrl+A）-> 可选
 - `fill_ref` — 按短 ref 填输入框：objectId 上 focus -> 探测控件（SELECT/readOnly 拒收
+- `go_back` — 历史回退（#39）：`Page.getNavigationHistory` 取 currentIndex，回退 delta
+- `go_forward` — 历史前进（#39）：同 [`go_back`] 方向相反，钳到最新条目。
+- `goto` — 一步导航（#19）：`Page.navigate` 加 waitLoad 一体收尾，可选再等网络静默，
 - `hover_at` — 移动鼠标到视口坐标（#23）：触发 `:hover` 与悬停菜单的 mouseMoved。
 - `hover_ref` — 悬停到短 ref 元素中心（#23）：触发 CSS `:hover` 与悬停菜单。
 - `import_storage_state` — 导入会话态（#25.3）：吃 [`export_storage_state`] 的返回值或其落盘
@@ -362,7 +365,9 @@ ark 管理的安装拦自更新走 ark 单通道（判据：exe 同目录 `ark-m
 - `new_tab` — 新开 tab 并设为活动路由。给了 `url` 则先建 about:blank 附着后再导航
 - `pdf` — 当前页存 PDF（`Page.printToPDF`，`printBackground`+`preferCSSPageSize`），
 - `press_key` — 用 `Input.dispatchKeyEvent` keyDown(+text)+keyUp 按一个键；Enter 的
+- `reload` — 刷新当前页（#39）：`Page.reload`（可带 ignoreCache）后等加载收尾。
 - `select_option` — 按短 ref 选下拉框选项：value 或可见 label 匹配，设值并派发 input+change
+- `set_checked` — 勾选/取消复选框（#39）：读元素 checked 实态，与目标态不一致才点击
 - `switch_tab` — 切换活动路由到既有 tab（不改 Chrome 可见前景），返回该 tab 简表。
 - `type_ref` — 真实按键序列输入（#23）：focus 后逐字符 keyDown(text)+keyUp，
 - `wait_idle` — 等 network 静默：从调用时刻起观察 `Network.requestWillBeSent` 与

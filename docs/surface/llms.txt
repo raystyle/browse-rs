@@ -52,11 +52,17 @@
 | `switchTab(targetId)` | 切活动路由（不改 Chrome 可见前景，人机共存）。 |
 | `currentTab()` | 当前活动 tab 简表（无活动返回 null）。 |
 | `closeTab(targetId?)` | 关 tab；守卫只放行自建 tab（chrome 初始页与用户 tab 拒绝）。 |
+| `goto(url, opts?)` | 一步导航（#19）：navigate 加 waitLoad 一体收尾，可选 waitIdle: true（或秒数）再等网络静默，回 {url,title,elapsedMs}；已加载页立即返回。替代 navigate 加 waitFor(loadEventFired) 组合——后者事件已发再注册即假超时（竞速窗），本函数走 readyState 轮询无此窗。timeout 秒口径（#51）。 |
+| `goBack(delta?)` | 历史回退 delta 步（#39，越界钳到最早），等加载收尾，回 {steps,url,title}。 |
+| `goForward(delta?)` | 历史前进 delta 步（#39，越界钳到最新），等加载收尾，回 {steps,url,title}。 |
+| `reload(opts?)` | 刷新当前页（#39）：opts.ignoreCache 走强制刷新；等加载收尾，回 {ignoredCache,url,title,elapsedMs}。 |
 | `clickAt(x, y)` | 视口坐标 trusted 点击（点当前可见物，不做遮挡检查）。 |
-| `fillInput(selector, text)` | 按 CSS 选择器填输入框（SelectAll 不发 Ctrl+A，回读严格验证；select 走 selectOption）。 |
-| `clickRef(ref)` | 按 snapshot 短 ref 点击：滚动可见、量中心、遮挡命中测试（被盖即拒绝并报遮挡物）、trusted 派发。 |
-| `fillRef(ref, text)` | 按 ref 填输入框：objectId focus、SelectAll+insertText、同节点回读严格验证。 |
+| `fillInput(selector, text, submit?)` | 按 CSS 选择器填输入框（SelectAll 不发 Ctrl+A，回读严格验证；select 走 selectOption；submit 填完顺带 Enter，#39）。 |
+| `clickRef(ref, opts?)` | 按 snapshot 短 ref 点击：滚动可见、量中心、遮挡命中测试（被盖即拒绝并报遮挡物）、trusted 派发；opts.waitNav 链接型点击后自动等导航稳定（#19，同文档锚点与 JS 按钮立即返回），timeout 秒口径。 |
+| `fillRef(ref, text, submit?)` | 按 ref 填输入框：objectId focus、SelectAll+insertText、同节点回读严格验证；submit 填完顺带 Enter（#39）。 |
 | `selectOption(ref, value)` | 下拉框选择（value 或可见 label；设值+派发 input/change；未命中报全部可选值）。 |
+| `checkRef(ref)` | 勾选 checkbox/radio（#39）：读实态不一致才点击，幂等（checkRef 后必 true）；radio 已选中再 uncheck 无意义不点击；非 checkbox/radio 报错指 clickRef。 |
+| `uncheckRef(ref)` | 取消勾选 checkbox（#39）：同 checkRef 反向，幂等。 |
 | `pressKey(key)` | 按键；单键与组合（#23）：Enter 等命名键、单字符、"Control+a" 式修饰组合（组合不发字符；Shift 组合不产生大写输入，大写用 typeRef/fillRef；浏览器级快捷键不保证）。 |
 | `dialogStatus()` | 当前 JS 对话框状态（open/type/message/defaultPrompt）。 |
 | `dialogAccept(text?)` | 接受当前对话框（prompt 可带应答文本）。 |
@@ -64,8 +70,8 @@
 | `routeBlock(pattern)` | 网络拦截：glob 命中的请求直接失败（BlockedByClient）。作用于当前活动 tab。 |
 | `routeMock(pattern, body, opts?)` | 网络拦截：命中的请求本地应答（默认带 ACAO *）。 |
 | `routeClear()` | 清空全部拦截规则并 Fetch.disable。 |
-| `waitLoad(ms?)` | 等 document.readyState 到 complete（已加载立即返回）。 |
-| `waitForResponse(pattern, ms?)` | 等 URL 命中 glob（与 routeBlock/routeMock 同写法）的最近一个响应完成（#20，只认活动 tab）：回 {requestId,url,status,headers,body,base64Encoded,json}；命中含历史（Network 域须在触发前已开，本函数幂等开收不到已发出的响应），方言无并发，可用形态是触发后等待；体等 loadingFinished 再取（5 秒窗），失败显式 bodyError；base64 自动解码，可解析时附 json。 |
+| `waitLoad(s?)` | 等 document.readyState 到 complete（已加载立即返回）。timeout 秒口径（#51）：大于 3600 视为毫秒误写，告警并按毫秒换算（封顶 600 秒），旧毫秒习惯值等价迁移。 |
+| `waitForResponse(pattern, s?)` | 等 URL 命中 glob（与 routeBlock/routeMock 同写法）的最近一个响应完成（#20，只认活动 tab）：回 {requestId,url,status,headers,body,base64Encoded,json}；命中含历史（Network 域须在触发前已开，本函数幂等开收不到已发出的响应），方言无并发，可用形态是触发后等待；体等 loadingFinished 再取（5 秒窗），失败显式 bodyError；base64 自动解码，可解析时附 json。timeout 秒口径（#51：大于 3600 按毫秒误写换算并告警，封顶 600 秒）。 |
 | `pageEval(js)` | 全量 JS 一次求值（#22 受限旁路的方言内形态）：直发 Runtime.evaluate（returnByValue 加 awaitPromise），值序列化回传；模板字符串/正则/函数声明直接写。CLI 侧等价 browse --js。 |
 | `responseBody(requestId)` | 按 requestId 取响应体（#20）：peekEvents/findEvents 拿到的 id 皆可用，base64 自动解码，回 {body,base64Encoded,json} 与 waitForResponse 同形。 |
 | `hoverRef(ref)` | 悬停到元素中心（#23）：触发 CSS :hover 与悬停菜单。 |
@@ -79,7 +85,7 @@
 | `setInitScript(code)` | 每新文档前注入脚本（#25.2）：反检测补丁、杀 cookie 横幅；SPA 路由不重跑（只对新文档生效），空串清除。 |
 | `exportStorageState()` | 导出会话态（#25.3）：cookies 全量加当前页 origin 的 localStorage；多 origin 逐个切 tab 再导。 |
 | `importStorageState(state 或 path)` | 导入会话态（#25.3）：吃 exportStorageState 的返回值或其落盘文件路径，回两边计数。 |
-| `waitIdle(ms?)` | 等 network 静默（窗口语义：起点前挂着的请求不计）。 |
+| `waitIdle(s?)` | 等 network 静默（窗口语义：起点前挂着的请求不计）。timeout 秒口径（#51）：大于 3600 视为毫秒误写，告警并按毫秒换算（封顶 600 秒）。 |
 | `recordStart(opts?)` | 开始录屏（Screencast 帧流落盘；everyNthFrame 源端抽帧、maxWidth/maxHeight 限宽高）。 |
 | `recordStop()` | 停止录制，回 {frames,bytes,dir,sessionChanged}（PNG 已在盘上；录制中被换靶则 true，帧流钉住不中断）。 |
 | `hostFunctions()` | 本目录的运行时探针（agent 自描述，schema/清单同源）。 |
@@ -98,8 +104,8 @@
 | `session.setActiveSession(sessionId?)` | 覆写活动 sessionId（高级用法；一般走 session.use）。 |
 | `session.getActiveSession()` | 当前活动 sessionId（无则 null）。 |
 | `session.isConnected()` | 连接是否存活。 |
-| `session.waitFor(method, undefined, ms?)` | 从事件缓冲取第一个 method 事件（取出即移除；超时报错）。只认活动 tab 与 browser 级事件，钉住 session（录制中）与他 tab 的不被误领；要看全缓冲用 peekEvents（不过滤）。 |
-| `session.waitJs(expression, ms?)` | 页内谓词轮询（真 V8 表达式），等到即返回真值本身。 |
+| `session.waitFor(method, undefined, ms?)` | 从事件缓冲取第一个 method 事件（取出即移除；超时报错，秒口径 #51）。只认活动 tab 与 browser 级事件，钉住 session（录制中）与他 tab 的不被误领；要看全缓冲用 peekEvents（不过滤）。竞速警示（#19）：loadEventFired 这类一次性事件可能在你注册前已发（假超时），等加载用 goto()/waitLoad()，等导航事件用 frameNavigated。 |
+| `session.waitJs(expression, s?)` | 页内谓词轮询（真 V8 表达式），等到即返回真值本身。timeout 秒口径（#51）：大于 3600 视为毫秒误写，告警并按毫秒换算（封顶 600 秒）。 |
 | `session.call(method, params?)` | 裸调任意 CDP 方法（守卫与 sessionId 路由同 session.<Domain>.<method>）。 |
 | `session.peekEvents(method, n?)` | 非破坏窥视事件缓冲（waitFor 之后仍能取到）。 |
 | `session.peekEventsSince(method, sinceSeq, n?)` | seq 游标增量窥视（首拍 sinceSeq 用 0，之后用上一拍最后一条的 seq）。 |
