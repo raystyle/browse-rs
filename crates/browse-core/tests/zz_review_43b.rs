@@ -38,24 +38,42 @@ async fn record_v1_recheck() {
     let read_cur = r#"return (await session.Runtime.evaluate({expression:"(() => { const c = document.getElementById('browse-rec-cursor'); return JSON.stringify({left: c.style.left, top: c.style.top, x: Math.round(c.getBoundingClientRect().x), y: Math.round(c.getBoundingClientRect().y)}) })()", returnByValue:true})).result.value"#;
     eprintln!("[probe] 初始光标 = {:?}", host.eval_snippet(read_cur).await);
     // F1-a：mouseMove 路径
-    host.eval_snippet("await mouseMove(300, 200)").await.expect("mouseMove");
+    host.eval_snippet("await mouseMove(300, 200)")
+        .await
+        .expect("mouseMove");
     tokio::time::sleep(std::time::Duration::from_millis(250)).await;
-    eprintln!("[probe] mouseMove(300,200) 后 = {:?}", host.eval_snippet(read_cur).await);
+    eprintln!(
+        "[probe] mouseMove(300,200) 后 = {:?}",
+        host.eval_snippet(read_cur).await
+    );
     // F1-b：clickAt 路径（不走 mouse_move）
-    host.eval_snippet("await clickAt(500, 600)").await.expect("clickAt");
+    host.eval_snippet("await clickAt(500, 600)")
+        .await
+        .expect("clickAt");
     tokio::time::sleep(std::time::Duration::from_millis(250)).await;
-    eprintln!("[probe] clickAt(500,600) 后 = {:?}（不变即只有 mouseMove 路径跟随）", host.eval_snippet(read_cur).await);
+    eprintln!(
+        "[probe] clickAt(500,600) 后 = {:?}（不变即只有 mouseMove 路径跟随）",
+        host.eval_snippet(read_cur).await
+    );
     // F1-c：hoverRef / clickRef 等同理（用 clickRef 走一段：先 snapshot）
-    let snp = host.eval_snippet("return await snapshot()").await.expect("snap");
+    let snp = host
+        .eval_snippet("return await snapshot()")
+        .await
+        .expect("snap");
     let r0 = snp["nodes"]
         .as_array()
         .and_then(|a| a.first())
         .and_then(|n| n["ref"].as_str())
         .map(str::to_string);
     if let Some(r) = r0 {
-        let _ = host.eval_snippet(&format!(r#"return await hoverRef("{r}")"#)).await;
+        let _ = host
+            .eval_snippet(&format!(r#"return await hoverRef("{r}")"#))
+            .await;
         tokio::time::sleep(std::time::Duration::from_millis(250)).await;
-        eprintln!("[probe] hoverRef 后 = {:?}", host.eval_snippet(read_cur).await);
+        eprintln!(
+            "[probe] hoverRef 后 = {:?}",
+            host.eval_snippet(read_cur).await
+        );
     }
     // F2-a：监听幂等 + stop 摘除
     let _ = host.eval_snippet(r#"return await recordStop()"#).await; // 先收干净（此前一场还在录）
@@ -76,7 +94,9 @@ async fn record_v1_recheck() {
             r#"return (await session.Runtime.evaluate({expression:"JSON.stringify({added: window.__c, removed: window.__r, globalSet: typeof window.__browseShowActions})", returnByValue:true})).result.value"#,
         )
         .await;
-    eprintln!("[probe] 两轮 stop/start 后 = {added:?}（added 应 2、removed 应 2、globalSet 应 object）");
+    eprintln!(
+        "[probe] 两轮 stop/start 后 = {added:?}（added 应 2、removed 应 2、globalSet 应 object）"
+    );
     // F2-b：滚动后闪圈落点（pageX/pageY 与光标页面坐标口径是否一致）
     host.eval_snippet(r#"return await recordStop()"#).await.ok();
     tokio::time::sleep(std::time::Duration::from_millis(150)).await;
@@ -92,9 +112,13 @@ async fn record_v1_recheck() {
     host.eval_snippet(r#"await pageEval("window.__ring = null; const _oa = Element.prototype.appendChild; Element.prototype.appendChild = function(c){ if (c && c.id !== 'browse-rec-cursor' && (c.getAttribute && (c.getAttribute('style')||'').includes('#ff8c00'))) window.__ring = {left: c.style.left, top: c.style.top}; return _oa.call(this, c) }")"#)
         .await
         .expect("钩 appendChild");
-    host.eval_snippet(r#"await pageEval("window.scrollTo(0, 500); void 0")"#).await.expect("滚");
+    host.eval_snippet(r#"await pageEval("window.scrollTo(0, 500); void 0")"#)
+        .await
+        .expect("滚");
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-    host.eval_snippet("await clickAt(400, 300)").await.expect("点击");
+    host.eval_snippet("await clickAt(400, 300)")
+        .await
+        .expect("点击");
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     let ring = host
         .eval_snippet(
