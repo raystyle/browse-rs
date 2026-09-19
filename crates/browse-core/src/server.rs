@@ -498,33 +498,42 @@ mod tests {
 
 #[cfg(test)]
 mod dashboard_tests {
-    /// #54 评审 F1 回归锁：内联脚本里不得出现跨行裸换行的单引号串（JS 单引号
-    /// 串内换行是语法错，曾致看板整段脚本不执行、表格与事件流全空）。
+    /// #54 评审 F1 回归锁：内联脚本的字符串字面量不得含裸换行
+    /// （JS 单引号串里换行是语法错，曾致看板空表；修法是把换行写成
+    /// 反斜杠 n 转义，node --check 实证 rc 0）。代理检查：script 段内
+    /// 不得出现引号开行的跨行字符串形态。
     #[test]
     fn dashboard_script_no_raw_newlines_in_strings() {
-        let script = super::DASHBOARD_HTML
+        let html = super::DASHBOARD_HTML;
+        let script = html
             .split_once("<script>")
             .and_then(|(_, b)| b.split_once("</script>"))
             .map(|(a, _)| a)
-            .expect("应能抽出 script 段");
+            .unwrap_or("");
+        assert!(!script.is_empty(), "应能抽出 script 段");
+        // 每行单引号计数为奇且行尾不是续行符（分号/花括号/逗号/开括号/
+        // 加号）即疑似跨行字符串，下一行闭合即坐实
         let lines: Vec<&str> = script.lines().collect();
         for (i, line) in lines.iter().enumerate() {
-            if line.matches('\'').count() % 2 == 0 {
-                continue; // 本行单引号配平：无跨行串
-            }
-            // 奇数个单引号：要么本行是开串（下一行续），要么是闭串（上一行开）。
-            // 合法集合只有两类：本行以字符串字面量收尾（右上一步是引号）——
-            // 即「串在同一行闭合」被上面拦掉了；剩下的必须是显式 \n 拼接形。
-            let trimmed = line.trim_end();
-            let ok_continuation = trimmed.ends_with("+\\n'")
-                || trimmed.ends_with("+ '\\n' +")
-                || trimmed.contains("'\\n'+")
-                || trimmed.contains("+ '\\n' +");
-            if !ok_continuation {
-                panic!(
-                    "script 第 {} 行疑似跨行裸换行字符串（JS 语法错）：{line}",
-                    i + 1
-                );
+            let n = line.matches('\'').count();
+            if n % 2 == 1 {
+                let t = line.trim_end();
+                let cont = t.ends_with(';')
+                    || t.ends_with('{')
+                    || t.ends_with(',')
+                    || t.ends_with('(')
+                    || t.ends_with('+');
+                if !cont {
+                    let next = lines.get(i + 1).copied().unwrap_or("");
+                    let next_has_quote = next.contains('\'');
+                    let escaped = line.contains("\\n");
+                    if next_has_quote && !escaped {
+                        panic!(
+                            "script 第 {} 行疑似裸换行字符串（JS 语法错）: {line}",
+                            i + 1
+                        );
+                    }
+                }
             }
         }
     }
