@@ -76,6 +76,88 @@ pub fn chromium_root() -> PathBuf {
     crate::paths::state_dir().join("chromium")
 }
 
+/// AppContainer ACE 的受托 SID（S-1-15-2-2 = ALL APPLICATION PACKAGES，
+/// #32）：Windows 沙箱受限令牌读部署位 exe 的授权面。根因与三案全谱见
+/// clean-chrome 仓 S008 五节（树内位 / 维持 --no-sandbox / 补 ACE，第三
+/// 案最优保沙箱）；显示名随系统语言本地化，匹配与授权一律走 SID 串。
+#[cfg(windows)]
+const APPCONTAINER_SID: &str = "*S-1-15-2-2";
+
+/// 给部署目录补 AppContainer ACE（#32，仅 Windows）：icacls 一行授权后
+/// 纯形起部署位 chrome 不再 sandbox_win.cc 0x5 自退。非致命留痕：browse
+/// 生产 spawn 恒带 `--no-sandbox` 免疫此坑（ADR-0003），授权失败不阻断
+/// 装机。非 Windows 恒 `None`（不适用）。
+fn apply_appcontainer_ace(dir: &Path) -> Option<bool> {
+    #[cfg(windows)]
+    {
+        let out = std::process::Command::new("icacls")
+            .arg(dir)
+            .arg("/grant")
+            .arg(format!("{APPCONTAINER_SID}:(OI)(CI)RX"))
+            .arg("/T")
+            .output();
+        match out {
+            Ok(o) if o.status.success() => Some(true),
+            Ok(o) => {
+                eprintln!(
+                    "[browse] AppContainer ACE 授权失败（忽略；browse 自身 --no-sandbox 不受影响，纯形起部署位会沙箱自退）：icacls 退出 {}: {}",
+                    o.status,
+                    String::from_utf8_lossy(&o.stderr).trim()
+                );
+                Some(false)
+            }
+            Err(e) => {
+                eprintln!("[browse] icacls 起不来（忽略）：{e}");
+                Some(false)
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = dir;
+        None
+    }
+}
+
+/// 检测部署目录的 AppContainer ACE 在位与否（#32，仅 Windows）：
+/// `icacls <dir> /findsid <SID>` 按 SID 找（显示名本地化不可解析），
+/// 输出含目录路径即在位——icacls 无匹配时退出码同样为 0，只能靠路径
+/// 判阴阳。非 Windows 恒 `None`（不适用）。
+fn detect_appcontainer_ace(dir: &Path) -> Option<bool> {
+    #[cfg(windows)]
+    {
+        // 起不来保守 Some(false)（评审 G3）：与「不适用」的 None 区分开，
+        // 让 hints 引导手工核对，不静默报健康
+        let out = match std::process::Command::new("icacls")
+            .arg(dir)
+            .args(["/findsid", APPCONTAINER_SID])
+            .output()
+        {
+            Ok(o) => o,
+            Err(_) => return Some(false),
+        };
+        if !out.status.success() {
+            return Some(false);
+        }
+        let text = format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        )
+        .to_lowercase();
+        let want = dir.display().to_string().to_lowercase();
+        // 判据耦合（评审 G2 在案）：icacls 原样回显我们传入的路径串，
+        // 同串同形故包含判定成立；路径展示形变化（8.3 短名/UNC）属
+        // Windows 面版本耦合，回访面记档
+        Some(text.contains(&want))
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = dir;
+        None
+    }
+}
+
 /// 某版本的落位目录（不校验存在）。
 pub fn version_dir(root: &Path, version: &str) -> PathBuf {
     root.join(version)
@@ -179,6 +261,9 @@ pub fn install_from_dir(root: &Path, version: &str, from_dir: &Path) -> Result<V
         )
     })?;
     check_deployed(&dst)?;
+    // 落位即补 AppContainer ACE（#32）：纯形起部署位可过沙箱；失败留痕
+    // 不阻断（browse spawn 恒 --no-sandbox，ADR-0003）
+    let ace = apply_appcontainer_ace(&dst);
     let mut m = read_manifest(root);
     let rec = ChromeInstall {
         version: version.to_string(),
@@ -191,7 +276,7 @@ pub fn install_from_dir(root: &Path, version: &str, from_dir: &Path) -> Result<V
     m.installed.push(rec.clone());
     m.pinned = Some(version.to_string());
     write_manifest(root, &m)?;
-    Ok(install_json(&rec))
+    Ok(install_json(&rec, ace))
 }
 
 /// R2 镜像默认基址（chrome.ohmygh.com 版本段路由，ADR-0007 决策二；
@@ -385,6 +470,9 @@ fn install_from_mirror_inner(root: &Path, job: MirrorJob) -> Result<Value> {
     std::fs::rename(&effective, &dst).map_err(|e| {
         anyhow::anyhow!("落位 {} 失败：{e}（同盘 rename，不应跨盘）", dst.display())
     })?;
+    // 落位即补 AppContainer ACE（#32，与本地导入腿同批）：纯形起部署位
+    // 可过沙箱；失败留痕不阻断
+    let ace = apply_appcontainer_ace(&dst);
 
     let mut m = read_manifest(root);
     let rec = ChromeInstall {
@@ -398,7 +486,7 @@ fn install_from_mirror_inner(root: &Path, job: MirrorJob) -> Result<Value> {
     m.installed.push(rec.clone());
     m.pinned = Some(version.to_string());
     write_manifest(root, &m)?;
-    Ok(install_json(&rec))
+    Ok(install_json(&rec, ace))
 }
 
 /// 镜像腿错误统一加 CTA：端点、资产名覆写、首版资产窗口。
@@ -628,7 +716,11 @@ pub fn list_json(root: &Path) -> Value {
     json!({
         "root": root.display().to_string(),
         "pinned": m.pinned,
-        "installed": m.installed.iter().map(install_json).collect::<Vec<_>>(),
+        "installed": m
+            .installed
+            .iter()
+            .map(|i| install_json(i, None))
+            .collect::<Vec<_>>(),
     })
 }
 
@@ -640,24 +732,59 @@ pub fn doctor_json(root: &Path) -> Value {
         let dir = version_dir(root, &i.version);
         let deployed = check_deployed(&dir).is_ok();
         let files = count_files(&dir).unwrap_or(0);
+        // ACE 检测（#32）：仅 Windows 有值（null = 不适用）；缺则 hints 给
+        // 修法 CTA
+        let ace = if deployed {
+            detect_appcontainer_ace(&dir)
+        } else {
+            None
+        };
         checks.push(json!({
             "version": i.version,
             "deployed": deployed,
             "filesMatch": files == i.files,
             "files": files,
             "registered": i.files,
+            "appContainerAce": ace,
         }));
     }
     let pin_ok = m
         .pinned
         .as_ref()
         .is_some_and(|p| check_deployed(&version_dir(root, p)).is_ok());
+    let ace_missing = checks.iter().any(|c| c["appContainerAce"] == json!(false));
+    let mut hints: Vec<String> = Vec::new();
+    if ace_missing {
+        // 只在 Windows 会进来（detect 在别处恒 None），SID 字面可直接写
+        hints.push(
+            "部署位缺 AppContainer ACE（纯形起 chrome 会沙箱自退）：icacls <部署位> /grant *S-1-15-2-2:(OI)(CI)RX /T（#32 修法；重装该版本也会自动补）；browse 自身 spawn 恒 --no-sandbox 不受影响"
+                .to_string(),
+        );
+    }
+    // 文件基线漂移也出句（评审 G-lite）：unhealthy 必须带下一步，不许
+    // healthy=false 加 hints=[] 的哑组合
+    for c in &checks {
+        if c["deployed"] == json!(true) && c["filesMatch"] == json!(false) {
+            hints.push(format!(
+                "版本 {} 文件基线与登记不符（实得 {} / 登记 {}）：重装该版本（browse chrome install <版本> <部署目录>）或核对该目录是否被外部改动",
+                c["version"].as_str().unwrap_or("?"),
+                c["files"],
+                c["registered"]
+            ));
+        }
+    }
     json!({
         "root": root.display().to_string(),
-        "healthy": checks.iter().all(|c| c["deployed"] == json!(true))
-            && (m.pinned.is_none() || pin_ok),
+        // healthy 全量判（评审 G1）：部署在位、文件基线不漂移（filesMatch
+        // 此前漏判，实测有装机 569 对登记 567 仍 healthy 的盲区）、ACE 不缺
+        "healthy": checks.iter().all(|c| {
+            c["deployed"] == json!(true)
+                && c["filesMatch"] == json!(true)
+                && c["appContainerAce"] != json!(false)
+        }) && (m.pinned.is_none() || pin_ok),
         "pinnedOk": if m.pinned.is_none() { Value::Null } else { json!(pin_ok) },
         "checks": checks,
+        "hints": hints,
     })
 }
 
@@ -694,13 +821,15 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
-fn install_json(i: &ChromeInstall) -> Value {
+fn install_json(i: &ChromeInstall, app_container_ace: Option<bool>) -> Value {
     json!({
         "version": i.version,
         "source": i.source,
         "files": i.files,
         "bytes": i.bytes,
         "installedAt": i.installed_at,
+        // #32：仅 Windows 有值（null = 不适用）；false = 授权失败已留痕
+        "appContainerAce": app_container_ace,
     })
 }
 
@@ -833,10 +962,29 @@ mod tests {
         let root = tmp_root("doctor");
         let base = tmp_root("doctor-src");
         let src = fake_deploy(&base);
-        install_from_dir(&root, "1.2.3.4", &src).unwrap();
+        let rec = install_from_dir(&root, "1.2.3.4", &src).unwrap();
 
         let ok = doctor_json(&root);
         assert_eq!(ok["healthy"], json!(true));
+        // #32：装机回执与 doctor 的 ACE 字段在非 Windows 恒 null（不适用）
+        // 且 null 不拖垮 healthy；Windows 由实弹面验（lan-win）
+        if !cfg!(windows) {
+            assert_eq!(rec["appContainerAce"], json!(null), "{rec}");
+            assert_eq!(ok["checks"][0]["appContainerAce"], json!(null), "{ok}");
+            assert_eq!(ok["hints"], json!([]), "健康态不出 hint: {ok}");
+        }
+        // 文件基线漂移：healthy false 且 hints 带 CTA（评审 G-lite，
+        // 不许 healthy=false 加 hints=[] 的哑组合）
+        std::fs::write(version_dir(&root, "1.2.3.4").join("extra.txt"), "x").unwrap();
+        let drifted = doctor_json(&root);
+        assert_eq!(drifted["healthy"], json!(false), "{drifted}");
+        let hints = drifted["hints"].as_array().expect("hints 数组");
+        assert!(
+            hints
+                .iter()
+                .any(|h| h.as_str().is_some_and(|s| s.contains("文件基线与登记不符"))),
+            "漂移应出 CTA hint: {drifted}"
+        );
 
         let bin_name = if cfg!(windows) {
             "chrome.exe"

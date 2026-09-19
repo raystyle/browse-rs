@@ -203,7 +203,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("version", "string", true),
             arg!("fromDir", "string", false, "缺省走 R2 镜像下载"),
         ],
-        description: "安装 Chromium 版本并 pin：缺省从镜像下载（版本段路由加 .sha256 锚校验原子落位），给部署目录则本地导入。",
+        description: "安装 Chromium 版本并 pin：缺省从镜像下载（版本段路由加 .sha256 锚校验原子落位），给部署目录则本地导入；Windows 落位自动补 AppContainer ACE（#32，纯形带沙箱可起），回执 appContainerAce。",
         example: "browse chrome install 152.0.7977.84",
     },
     CmdSpec {
@@ -243,7 +243,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Cli,
         signature: "browse chrome doctor",
         args: &[],
-        description: "托管 Chromium 部署体检（在位/文件基线/pin）。",
+        description: "托管 Chromium 部署体检（在位/文件基线/pin；AppContainer ACE 仅 Windows 有值，缺则 hints 给 icacls 修法，#32）。",
         example: "browse chrome doctor",
     },
     CmdSpec {

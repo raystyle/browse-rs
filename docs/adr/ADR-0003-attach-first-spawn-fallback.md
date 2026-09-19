@@ -19,6 +19,17 @@ bh 对普通 Chrome 的铁律（永不 spawn、只附着）源于对话框与用
 ACL 与 EFS 检查均正常，clean-chrome 在 linux 验收同样用过 --no-sandbox
 （GOAL 2026-09-13，R001 坑表 18-20）。
 
+根因后补（2026-09-19，issue #32 / clean-chrome S008 五节）：0x5 是
+沙箱受限令牌（AppContainer）无权读用户 profile 深处的部署位 exe，
+Users/Everyone 授权均不消；第三案给部署位补 AppContainer ACE
+（`icacls <部署位> /grant *S-1-15-2-2:(OI)(CI)RX /T`）后纯形带沙箱
+即活。本 ADR 的 spawn 恒带 `--no-sandbox` 决策不变（自动化专属实例的
+取舍依旧成立）；`browse chrome install` 落位自动补 ACE、doctor 检测
+在位，让部署位的纯形用法（不经 browse 直接起）也可用。授权规格
+`(OI)(CI)RX`予 ALL APPLICATION PACKAGES 与 Windows 默认 Program Files
+ACL 同规格（OS 惯例面：应用目录对 AppContainer 只读执行），无额外
+攻击面扩张。
+
 ## Decision
 
 `Engine::ensure` 顺序：显式 ws/port -> `probe_default()`（`/json/version`@9222
