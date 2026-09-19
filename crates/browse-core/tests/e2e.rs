@@ -1080,6 +1080,66 @@ return await responseBody(evs[0].params.requestId)"#,
         "空停应带开录 CTA: {no_rec:?}"
     );
 
+    // 评审 F1 跨 tab 泄漏锁：后台 tab 的 403 与 console.error 不劫持
+    // 活动 tab 的 detect 判读与 console 检索（修前干净页被判 blocked）
+    host.eval_snippet(
+        r#"await goto("data:text/html,<title>clean-a</title><h1>clean page with enough body text</h1>")"#,
+    )
+    .await
+    .expect("tab A 干净页");
+    // goto 回执不带 targetId，活动 tab id 走 currentTab()
+    let tab_a = host
+        .eval_snippet("return await currentTab()")
+        .await
+        .expect("A currentTab");
+    let a_id = tab_a
+        .get("targetId")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    host.eval_snippet(
+        r#"await newTab("data:text/html,<title>tab-b</title><script>console.error('from-tab-B'); fetch('http://b403.test/x')</script>")"#,
+    )
+    .await
+    .expect("tab B");
+    host.eval_snippet(
+        r#"await routeMock("http://b403.test/*", "{}", {status: 403}); await pageEval("fetch('http://b403.test/x').catch(() => 0)")"#,
+    )
+    .await
+    .expect("B 打 403");
+    host.eval_snippet(r#"await session.waitJs("true", 1)"#)
+        .await
+        .ok();
+    // 切回 A：detect 必须 ok、console error 档不见 B 的错
+    if let Some(a) = &a_id {
+        host.eval_snippet(&format!(r#"await switchTab("{a}")"#))
+            .await
+            .expect("切回 A");
+    }
+    let det_a = host
+        .eval_snippet("return await detect()")
+        .await
+        .expect("A detect");
+    assert_eq!(
+        det_a.get("verdict"),
+        Some(&json!("ok")),
+        "后台 tab 的 403 不得劫持活动页判读: {det_a}"
+    );
+    let con_a = host
+        .eval_snippet(r#"return await console({minLevel: "error"})"#)
+        .await
+        .expect("A console");
+    let con_msgs = con_a
+        .get("messages")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    assert!(
+        !con_msgs
+            .iter()
+            .any(|m| m.get("text") == Some(&json!("from-tab-B"))),
+        "他 tab 的 console.error 不得泄漏: {con_a}"
+    );
+
     eprintln!("[e2e] 语义面开始");
     // ---- 语义层近期面 ----
     // tab 族：newTab -> currentTab -> switchTab 往返 -> closeTab 自建

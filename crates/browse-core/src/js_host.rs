@@ -1256,6 +1256,13 @@ impl JsHost {
                     .flatten()
                     .collect();
                 // 命中加祖先链（context 层）进结果集
+                // 零命中早退保留旧引用表（评审 G2）：查一次没查到不该把
+                // 手里能用的 ref 全清了；kept_refs 标记语义
+                if hit_ids.is_empty() {
+                    return Ok(json!({
+                        "query": q, "count": 0, "nodes": [], "kept_refs": true,
+                    }));
+                }
                 let mut keep: HashSet<i64> = hit_ids.clone();
                 for h in &hit_ids {
                     let mut cur = *h;
@@ -1334,10 +1341,15 @@ impl JsHost {
                     _ => 4,
                 };
                 let min_rank = rank(min_level);
+                let active = self.session.get_active_session().await;
                 let evs = self
                     .session
                     .peek_events_since("Runtime.consoleAPICalled", since, 500)
                     .await;
+                let evs: Vec<Value> = evs
+                    .into_iter()
+                    .filter(|e| from_active_session(&active, e))
+                    .collect();
                 let rows: Vec<Value> = evs
                     .iter()
                     .filter_map(|e| {
@@ -1374,10 +1386,15 @@ impl JsHost {
                     .and_then(|v| v.get("since"))
                     .and_then(Value::as_u64)
                     .unwrap_or(0);
+                let active = self.session.get_active_session().await;
                 let evs = self
                     .session
                     .peek_events_since("Runtime.exceptionThrown", since, 200)
                     .await;
+                let evs: Vec<Value> = evs
+                    .into_iter()
+                    .filter(|e| from_active_session(&active, e))
+                    .collect();
                 let rows: Vec<Value> = evs
                     .iter()
                     .map(|e| {
@@ -1400,10 +1417,15 @@ impl JsHost {
                 let opts = argv.first().cloned().unwrap_or(json!({}));
                 let since = opts.get("since").and_then(Value::as_u64).unwrap_or(0);
                 let filter = opts.get("filter").and_then(Value::as_str).unwrap_or("");
+                let active = self.session.get_active_session().await;
                 let evs = self
                     .session
                     .peek_events_since("Network.responseReceived", since, 1000)
                     .await;
+                let evs: Vec<Value> = evs
+                    .into_iter()
+                    .filter(|e| from_active_session(&active, e))
+                    .collect();
                 let mut rows: Vec<Value> = Vec::new();
                 for e in &evs {
                     let p = &e["params"];
@@ -1426,15 +1448,25 @@ impl JsHost {
             "requestDetail" => {
                 // #37：单条详情。index 是 since 窗内（未过滤）序号；也可直
                 // 接给 requestId（取最新一条）。body 另走 responseBody
-                let since = argv
-                    .get(1)
-                    .and_then(|v| v.get("since"))
-                    .and_then(Value::as_u64)
-                    .unwrap_or(0);
+                let opts = argv.get(1).cloned().unwrap_or(json!({}));
+                let since = opts.get("since").and_then(Value::as_u64).unwrap_or(0);
+                // filter 与 requests() 同解析（评审 F2）：index 语义随之一致
+                let filter = opts.get("filter").and_then(Value::as_str).unwrap_or("");
+                let active = self.session.get_active_session().await;
                 let evs = self
                     .session
                     .peek_events_since("Network.responseReceived", since, 1000)
                     .await;
+                let evs: Vec<Value> = evs
+                    .into_iter()
+                    .filter(|e| {
+                        from_active_session(&active, e)
+                            && (filter.is_empty()
+                                || e.pointer("/response/url")
+                                    .and_then(Value::as_str)
+                                    .is_some_and(|u| u.contains(filter)))
+                    })
+                    .collect();
                 let hit = match argv.first() {
                     Some(Value::Number(n)) => n
                         .as_u64()
@@ -1507,10 +1539,17 @@ impl JsHost {
                     .get("hasPassword")
                     .and_then(Value::as_bool)
                     .unwrap_or(false);
+                // 只认活动 tab 的网络信号（评审 F1）：后台 tab 的 403/429
+                // 不劫持本页判读
+                let active = self.session.get_active_session().await;
                 let statuses = self
                     .session
                     .peek_events_since("Network.responseReceived", 0, 1000)
                     .await;
+                let statuses: Vec<Value> = statuses
+                    .into_iter()
+                    .filter(|e| from_active_session(&active, e))
+                    .collect();
                 let code = |e: &Value| e.pointer("/params/response/status").and_then(Value::as_u64);
                 let c403 = statuses.iter().filter(|e| code(e) == Some(403)).count();
                 let c429 = statuses.iter().filter(|e| code(e) == Some(429)).count();
@@ -1519,7 +1558,9 @@ impl JsHost {
                     .session
                     .peek_events_since("Network.loadingFailed", 0, 200)
                     .await
-                    .len();
+                    .into_iter()
+                    .filter(|e| from_active_session(&active, e))
+                    .count();
                 let mut evidence: Vec<String> = Vec::new();
                 let title_disp = p.get("title").cloned().unwrap_or(json!(""));
                 evidence.push(format!("title={title_disp}"));
@@ -1559,7 +1600,9 @@ impl JsHost {
                         "stalled",
                         "加载停滞：waitLoad(10) 再试，requests() 看卡住的请求",
                     )
-                } else if has_password && text_len < 2000 {
+                } else if has_password && ready == "complete" {
+                    // 密码框在即判登录墙（评审 G1：现代登录页营销文案轻易
+                    // 破正文阈值，保守方向宁可误报登录墙不误报 ok）
                     (
                         "login-wall",
                         "登录墙：先补登录态（storageState 或 cookie 注入）再取数据",
@@ -2525,6 +2568,16 @@ fn str_arg<'a>(argv: &'a [Value], i: usize, who: &str) -> Result<&'a str> {
             preview(argv.get(i).unwrap_or(&Value::Null))
         )
     })
+}
+
+/// 事件是否来自当前活动 tab（#37 评审 F1，口径同 wait_for_response 的
+/// #33 F2）：他 tab 的 console/异常/请求信号不泄漏；无活动 session 时只
+/// 认 browser 级（无 sessionId）。
+fn from_active_session(active: &Option<String>, e: &Value) -> bool {
+    match active {
+        Some(a) => e.get("sessionId").and_then(Value::as_str) == Some(a.as_str()),
+        None => e.get("sessionId").is_none(),
+    }
 }
 
 /// AX 节点 id/childIds 归一解析（#36）：真 chrome 回执是数字串（"2"），
