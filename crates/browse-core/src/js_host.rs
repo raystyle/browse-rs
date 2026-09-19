@@ -1495,6 +1495,108 @@ impl JsHost {
                     "bodyHint": "body 走 responseBody(requestId)",
                 }))
             }
+            // ---- storage 颗粒度 CRUD（#42）----
+            "cookies" => {
+                let domain = argv.first().and_then(Value::as_str);
+                crate::semantic::cookies(&self.session, domain).await
+            }
+            "cookieGet" => {
+                let name = str_arg(argv, 0, "cookieGet 的 name")?;
+                let all = crate::semantic::cookies(&self.session, None).await?;
+                let hit = all
+                    .as_array()
+                    .and_then(|a| a.iter().find(|c| c.get("name") == Some(&json!(name))))
+                    .cloned();
+                Ok(hit.unwrap_or(Value::Null))
+            }
+            "cookieSet" => {
+                let name = str_arg(argv, 0, "cookieSet 的 name")?;
+                let value = str_arg(argv, 1, "cookieSet 的 value")?;
+                let opts = argv.get(2).cloned().unwrap_or(json!({}));
+                crate::semantic::cookie_set(&self.session, name, value, &opts).await
+            }
+            "cookieDelete" => {
+                let name = str_arg(argv, 0, "cookieDelete 的 name")?;
+                let domain = argv.get(1).and_then(Value::as_str);
+                crate::semantic::cookie_delete(&self.session, name, domain).await
+            }
+            "cookiesClear" => crate::semantic::cookies_clear(&self.session).await,
+            "localGet" => {
+                let k = str_arg(argv, 0, "localGet 的 key")?;
+                crate::semantic::storage_op_pub(&self.session, "localStorage", "get", Some(k), None)
+                    .await
+            }
+            "localSet" => {
+                let k = str_arg(argv, 0, "localSet 的 key")?;
+                let v = str_arg(argv, 1, "localSet 的 value")?;
+                crate::semantic::storage_op_pub(
+                    &self.session,
+                    "localStorage",
+                    "set",
+                    Some(k),
+                    Some(v),
+                )
+                .await
+            }
+            "localDelete" => {
+                let k = str_arg(argv, 0, "localDelete 的 key")?;
+                crate::semantic::storage_op_pub(
+                    &self.session,
+                    "localStorage",
+                    "remove",
+                    Some(k),
+                    None,
+                )
+                .await
+            }
+            "localClear" => {
+                crate::semantic::storage_op_pub(&self.session, "localStorage", "clear", None, None)
+                    .await
+            }
+            "sessionGet" => {
+                let k = str_arg(argv, 0, "sessionGet 的 key")?;
+                crate::semantic::storage_op_pub(
+                    &self.session,
+                    "sessionStorage",
+                    "get",
+                    Some(k),
+                    None,
+                )
+                .await
+            }
+            "sessionSet" => {
+                let k = str_arg(argv, 0, "sessionSet 的 key")?;
+                let v = str_arg(argv, 1, "sessionSet 的 value")?;
+                crate::semantic::storage_op_pub(
+                    &self.session,
+                    "sessionStorage",
+                    "set",
+                    Some(k),
+                    Some(v),
+                )
+                .await
+            }
+            "sessionDelete" => {
+                let k = str_arg(argv, 0, "sessionDelete 的 key")?;
+                crate::semantic::storage_op_pub(
+                    &self.session,
+                    "sessionStorage",
+                    "remove",
+                    Some(k),
+                    None,
+                )
+                .await
+            }
+            "sessionClear" => {
+                crate::semantic::storage_op_pub(
+                    &self.session,
+                    "sessionStorage",
+                    "clear",
+                    None,
+                    None,
+                )
+                .await
+            }
             // ---- 页面诊断七判（#49）：结构化判读 {verdict, evidence, suggestion} ----
             "detect" => {
                 // 页内探针一次打包（readyState/title/正文长/节点数/密码框），
@@ -2792,7 +2894,7 @@ const PREVIEW_HEAD_ITEMS: usize = 8;
 /// 全局函数 CTA 清单（#33 G6 单一真相）：「未知函数」提示由此派生，
 /// `global_cta_covers_catalog` 测试把它与 surface 目录的 Global 条目绑死；
 /// 增删全局必须同步这里（value-methods 是方法面族条目，不在此列）。
-const GLOBALS_CTA: &str = "listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/hostFunctions()/snapshot(opts?)/findRefs(q,opts?)/console(opts?)/jsErrors(since?)/requests(opts?)/requestDetail(idxOrId,opts?)/detect()/screenshot(path?, full?)/pdf(path?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/goto(url,opts?)/goBack(delta?)/goForward(delta?)/reload(opts?)/clickAt(x,y)/fillInput(sel,text,submit?)/clickRef(ref,opts?)/checkRef(ref)/uncheckRef(ref)/fillRef(ref,text,submit?)/selectOption(ref,value)/pressKey(key)/dialogStatus()/dialogAccept(text?)/dialogDismiss()/routeBlock(pattern)/routeMock(pattern,body,opts?)/routeClear()/waitLoad(s?)/waitIdle(s?)/waitForResponse(pattern,s?)/responseBody(requestId)/pageEval(js)/hoverRef(ref)/hoverAt(x,y)/dblclickRef(ref)/dragRef(src,dst)/keydown(key)/keyup(key)/typeRef(ref,text)/emulate(opts)/setInitScript(code)/exportStorageState()/importStorageState(state)/JSON.parse(string)/JSON.stringify(value,indent?)/recordStart(opts?)/recordStop()/chromeInstall(opts?)/chromeList()/chromeUse(version)/chromeUpdate()/chromeRemove(version)/chromeDoctor()/print(x)";
+const GLOBALS_CTA: &str = "listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/hostFunctions()/snapshot(opts?)/findRefs(q,opts?)/console(opts?)/jsErrors(since?)/requests(opts?)/requestDetail(idxOrId,opts?)/detect()/cookies(domain?)/cookieGet(name)/cookieSet(name,value,opts?)/cookieDelete(name,domain?)/cookiesClear()/localGet(k)/localSet(k,v)/localDelete(k)/localClear()/sessionGet(k)/sessionSet(k,v)/sessionDelete(k)/sessionClear()/screenshot(path?, full?)/pdf(path?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/goto(url,opts?)/goBack(delta?)/goForward(delta?)/reload(opts?)/clickAt(x,y)/fillInput(sel,text,submit?)/clickRef(ref,opts?)/checkRef(ref)/uncheckRef(ref)/fillRef(ref,text,submit?)/selectOption(ref,value)/pressKey(key)/dialogStatus()/dialogAccept(text?)/dialogDismiss()/routeBlock(pattern)/routeMock(pattern,body,opts?)/routeClear()/waitLoad(s?)/waitIdle(s?)/waitForResponse(pattern,s?)/responseBody(requestId)/pageEval(js)/hoverRef(ref)/hoverAt(x,y)/dblclickRef(ref)/dragRef(src,dst)/keydown(key)/keyup(key)/typeRef(ref,text)/emulate(opts)/setInitScript(code)/exportStorageState()/importStorageState(state)/JSON.parse(string)/JSON.stringify(value,indent?)/recordStart(opts?)/recordStop()/chromeInstall(opts?)/chromeList()/chromeUse(version)/chromeUpdate()/chromeRemove(version)/chromeDoctor()/print(x)";
 
 /// 容器预览：头部 JSON 截断（留尾注位），超帽尾注总项数；小容器输出
 /// 与全量形一致。不与 [`trunc_preview`] 叠用（双省略号）。

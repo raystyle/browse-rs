@@ -252,6 +252,150 @@ pub async fn wait_settled(s: &Session, since: u64, grace_ms: u64, budget_ms: u64
     }
 }
 
+/// 列 cookie（#42）：`Network.getCookies`，给了 domain 则按该域的
+/// http/https 两 URL 过滤。回 cookie 简表数组（name/value/domain/path/
+/// expires/httpOnly/secure/sameSite 等 CDP 原生字段）。
+///
+/// # Errors
+///
+/// 未连接或 CDP 失败。
+pub async fn cookies(s: &Session, domain: Option<&str>) -> Result<Value> {
+    let params = match domain {
+        Some(d) => json!({ "urls": [format!("https://{d}/"), format!("http://{d}/")] }),
+        None => json!({}),
+    };
+    let r = s.call("Network.getCookies", params).await?;
+    Ok(r.get("cookies").cloned().unwrap_or(json!([])))
+}
+
+/// 写单条 cookie（#42）：`Network.setCookie`。`opts` 可带 domain（缺省用
+/// 当前页 URL 的域）、path、expires（Unix 秒）、httpOnly、secure、
+/// sameSite。回 CDP 的 success 布尔。
+///
+/// # Errors
+///
+/// 未连接或 CDP 拒绝（如缺 domain 又无当前页）。
+pub async fn cookie_set(s: &Session, name: &str, value: &str, opts: &Value) -> Result<Value> {
+    let mut params = json!({ "name": name, "value": value });
+    if let Some(d) = opts.get("domain").and_then(Value::as_str) {
+        params["domain"] = json!(d);
+    } else {
+        // 缺 domain 走当前页 URL（CDP 要求 url 或 domain 二选一）
+        let url = s
+            .call(
+                "Runtime.evaluate",
+                json!({
+                    "expression": "location.href", "returnByValue": true
+                }),
+            )
+            .await
+            .ok()
+            .and_then(|v| {
+                v.pointer("/result/value")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            });
+        match url {
+            Some(u) => params["url"] = json!(u),
+            None => {
+                bail!(
+                    "cookieSet 缺 domain 且无当前页 URL；下一步：cookieSet(name, value, {{domain: \"example.com\"}})"
+                )
+            }
+        }
+    }
+    for k in ["path", "expires", "httpOnly", "secure", "sameSite"] {
+        if let Some(v) = opts.get(k) {
+            params[k] = v.clone();
+        }
+    }
+    let r = s.call("Network.setCookie", params).await?;
+    Ok(r.get("success").cloned().unwrap_or(json!(true)))
+}
+
+/// 删单条 cookie（#42）：`Network.deleteCookies`（CDP 无单数形，按 name 加域删全部匹配），缺省
+/// 当前页 URL 域）。
+///
+/// # Errors
+///
+/// 未连接或 CDP 失败。
+pub async fn cookie_delete(s: &Session, name: &str, domain: Option<&str>) -> Result<Value> {
+    let mut params = json!({ "name": name });
+    match domain {
+        Some(d) => params["domain"] = json!(d),
+        None => {
+            let url = s
+                .call(
+                    "Runtime.evaluate",
+                    json!({
+                        "expression": "location.href", "returnByValue": true
+                    }),
+                )
+                .await
+                .ok()
+                .and_then(|v| {
+                    v.pointer("/result/value")
+                        .and_then(Value::as_str)
+                        .map(str::to_string)
+                });
+            match url {
+                Some(u) => params["url"] = json!(u),
+                None => bail!(
+                    "cookieDelete 缺 domain 且无当前页 URL；下一步：cookieDelete(name, {{domain: \"example.com\"}})"
+                ),
+            }
+        }
+    }
+    s.call("Network.deleteCookies", params).await?;
+    Ok(json!(true))
+}
+
+/// 清空浏览器全部 cookie（#42）：`Network.clearBrowserCookies`（对照
+/// playwright cookie-clear，作用面是整个浏览器不只是当前域）。
+///
+/// # Errors
+///
+/// 未连接或 CDP 失败。
+pub async fn cookies_clear(s: &Session) -> Result<Value> {
+    s.call("Network.clearBrowserCookies", json!({})).await?;
+    Ok(json!(true))
+}
+
+/// Web Storage 逐键 CRUD 的统一执行面（#42）：`which` 是 localStorage 或
+/// sessionStorage，op 是 get/set/remove/clear，键值经 JSON 序列化内嵌
+/// 防注入。回页内表达式的原值（get 的 null 表示键不存在）。
+///
+/// # Errors
+///
+/// 未连接或页内求值失败。
+pub async fn storage_op_pub(
+    s: &Session,
+    which: &str,
+    op: &str,
+    key: Option<&str>,
+    value: Option<&str>,
+) -> Result<Value> {
+    let expr = match (op, key, value) {
+        ("get", Some(k), _) => format!("{which}.getItem({})", serde_json::to_string(k)?),
+        ("set", Some(k), Some(v)) => format!(
+            "(() => {{ {which}.setItem({}, {}); return {which}.getItem({}); }})()",
+            serde_json::to_string(k)?,
+            serde_json::to_string(v)?,
+            serde_json::to_string(k)?
+        ),
+        ("remove", Some(k), _) => format!("{which}.removeItem({})", serde_json::to_string(k)?),
+        ("clear", _, _) => format!("{which}.clear()"),
+        _ => bail!("storage 内部形态错：{op}/{key:?}"),
+    };
+    let r = s
+        .call(
+            "Runtime.evaluate",
+            json!({ "expression": expr, "returnByValue": true }),
+        )
+        .await?;
+    Ok(r.pointer("/result/value").cloned().unwrap_or(Value::Null))
+}
+
 /// 勾选/取消复选框（#39）：读元素 checked 实态，与目标态不一致才点击
 /// （checkRef 后必为 true，重复调用幂等）。radio 只能置 true：已选中的
 /// radio 再 uncheck 无意义，原样返回不点击。

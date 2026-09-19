@@ -675,6 +675,112 @@
       "output": "runtime JSON（回值随页面与 CDP 而定）",
       "type": "object"
     },
+    "cookieDelete": {
+      "description": "cookieDelete(name, domain?) 删单条 cookie（#42）：Network.deleteCookie 按 name 加域。",
+      "example": "await cookieDelete(\"k\", \"example.com\")",
+      "input": {
+        "properties": {
+          "domain": {
+            "description": "缺省 缺省当前页域",
+            "type": "string"
+          },
+          "name": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "cookieGet": {
+      "description": "cookieGet(name) 查单条 cookie（#42）：按 name 精确匹配，null 即不存在。",
+      "example": "return await cookieGet(\"session\")",
+      "input": {
+        "properties": {
+          "name": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "cookieSet": {
+      "description": "cookieSet(name, value, opts?) 写单条 cookie（#42）：Network.setCookie，缺 domain 走当前页 URL；回 success 布尔。",
+      "example": "await cookieSet(\"k\", \"v\", {domain: \"example.com\"})",
+      "input": {
+        "properties": {
+          "domain": {
+            "description": "缺省 缺省当前页域",
+            "type": "string"
+          },
+          "expires": {
+            "description": "缺省 Unix 秒",
+            "type": "number"
+          },
+          "name": {
+            "description": "",
+            "type": "string"
+          },
+          "path": {
+            "description": "",
+            "type": "string"
+          },
+          "sameSite": {
+            "description": "",
+            "type": "string"
+          },
+          "value": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "value"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "cookies": {
+      "description": "cookies(domain?) 列 cookie（#42）：Network.getCookies 原生字段简表；给 domain 按该域 http/https 过滤。",
+      "example": "return await cookies(\"example.com\")",
+      "input": {
+        "properties": {
+          "domain": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "cookiesClear": {
+      "description": "cookiesClear() 清空浏览器全部 cookie（#42，Network.clearBrowserCookies，作用面整浏览器不只当前域，对照 playwright cookie-clear）。",
+      "example": "await cookiesClear()",
+      "input": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
     "currentTab": {
       "description": "currentTab() 当前活动 tab 简表（无活动返回 null）。",
       "example": "return await currentTab()",
@@ -1078,6 +1184,76 @@
       "input": {
         "properties": {},
         "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "localClear": {
+      "description": "localClear() 清空当前域 localStorage（#42，不动 sessionStorage）。",
+      "example": "await localClear()",
+      "input": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "localDelete": {
+      "description": "localDelete(key) 删 localStorage 单键（#42）。",
+      "example": "await localDelete(\"theme\")",
+      "input": {
+        "properties": {
+          "key": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "localGet": {
+      "description": "localGet(key) 读 localStorage 单键（#42）：null 即不存在；键值经 JSON 序列化内嵌防注入。",
+      "example": "return await localGet(\"theme\")",
+      "input": {
+        "properties": {
+          "key": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "localSet": {
+      "description": "localSet(key, value) 写 localStorage 单键（#42）：回写后回读值（写入即验）。",
+      "example": "await localSet(\"theme\", \"dark\")",
+      "input": {
+        "properties": {
+          "key": {
+            "description": "",
+            "type": "string"
+          },
+          "value": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "value"
+        ],
         "type": "object"
       },
       "output": "runtime JSON（回值随页面与 CDP 而定）",
@@ -1615,6 +1791,76 @@
         },
         "required": [
           "expression"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "sessionClear": {
+      "description": "sessionClear() 清空当前域 sessionStorage（#42，不动 localStorage）。",
+      "example": "await sessionClear()",
+      "input": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "sessionDelete": {
+      "description": "sessionDelete(key) 删 sessionStorage 单键（#42）。",
+      "example": "await sessionDelete(\"tmp\")",
+      "input": {
+        "properties": {
+          "key": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "sessionGet": {
+      "description": "sessionGet(key) 读 sessionStorage 单键（#42）。",
+      "example": "return await sessionGet(\"tmp\")",
+      "input": {
+        "properties": {
+          "key": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "sessionSet": {
+      "description": "sessionSet(key, value) 写 sessionStorage 单键（#42）：回写后回读值。",
+      "example": "await sessionSet(\"tmp\", \"1\")",
+      "input": {
+        "properties": {
+          "key": {
+            "description": "",
+            "type": "string"
+          },
+          "value": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "value"
         ],
         "type": "object"
       },

@@ -333,6 +333,26 @@
       "docs": "关 tab（缺省关当前活动 tab）；守卫层只放行本会话自建 tab，用户 tab 一律拒绝。\n\n# Errors\n\n目标不是自建 tab（守卫拦截），或 closeTarget 失败。"
     },
     {
+      "path": "browse_core::semantic::cookie_delete",
+      "kind": "function",
+      "docs": "删单条 cookie（#42）：`Network.deleteCookies`（CDP 无单数形，按 name 加域删全部匹配），缺省\n当前页 URL 域）。\n\n# Errors\n\n未连接或 CDP 失败。"
+    },
+    {
+      "path": "browse_core::semantic::cookie_set",
+      "kind": "function",
+      "docs": "写单条 cookie（#42）：`Network.setCookie`。`opts` 可带 domain（缺省用\n当前页 URL 的域）、path、expires（Unix 秒）、httpOnly、secure、\nsameSite。回 CDP 的 success 布尔。\n\n# Errors\n\n未连接或 CDP 拒绝（如缺 domain 又无当前页）。"
+    },
+    {
+      "path": "browse_core::semantic::cookies",
+      "kind": "function",
+      "docs": "列 cookie（#42）：`Network.getCookies`，给了 domain 则按该域的\nhttp/https 两 URL 过滤。回 cookie 简表数组（name/value/domain/path/\nexpires/httpOnly/secure/sameSite 等 CDP 原生字段）。\n\n# Errors\n\n未连接或 CDP 失败。"
+    },
+    {
+      "path": "browse_core::semantic::cookies_clear",
+      "kind": "function",
+      "docs": "清空浏览器全部 cookie（#42）：`Network.clearBrowserCookies`（对照\nplaywright cookie-clear，作用面是整个浏览器不只是当前域）。\n\n# Errors\n\n未连接或 CDP 失败。"
+    },
+    {
       "path": "browse_core::semantic::current_tab",
       "kind": "function",
       "docs": "当前活动 tab 简表 `{targetId,title,url}`；无活动 tab 返回 `null`。\n\n# Errors\n\n未连接或 `Target.getTargets` 失败。"
@@ -431,6 +451,11 @@
       "path": "browse_core::semantic::set_checked",
       "kind": "function",
       "docs": "勾选/取消复选框（#39）：读元素 checked 实态，与目标态不一致才点击\n（checkRef 后必为 true，重复调用幂等）。radio 只能置 true：已选中的\nradio 再 uncheck 无意义，原样返回不点击。\n\n# Errors\n\n元素不是 checkbox/radio；元素 disabled；状态读取或点击失败。"
+    },
+    {
+      "path": "browse_core::semantic::storage_op_pub",
+      "kind": "function",
+      "docs": "Web Storage 逐键 CRUD 的统一执行面（#42）：`which` 是 localStorage 或\nsessionStorage，op 是 get/set/remove/clear，键值经 JSON 序列化内嵌\n防注入。回页内表达式的原值（get 的 null 表示键不存在）。\n\n# Errors\n\n未连接或页内求值失败。"
     },
     {
       "path": "browse_core::semantic::switch_tab",

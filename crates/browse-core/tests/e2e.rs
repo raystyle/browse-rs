@@ -702,6 +702,65 @@ l`.length === 3].join(\"|\")", returnByValue:true})).result.value"#;
         "密码页应 login-wall: {detl}"
     );
 
+    // ---- #42 storage 颗粒度 CRUD ----
+    // cookieSet 回读：document.cookie 可见 + getAllCookies 一致 + 域过滤
+    // cookie 面需真 http 源（data: URL 被 setCookie 拒：scheme 校验），
+    // routeMock 假域本地起页
+    host.eval_snippet(
+        r#"await routeMock("http://ck.test/*", "<h1>ck</h1>", {contentType: "text/html"}); await goto("http://ck.test/x", {timeout: 10})"#,
+    )
+    .await
+    .expect("goto cookie 页");
+    let cset = host
+        .eval_snippet(r#"return await cookieSet("bk", "bv", {path: "/"})"#)
+        .await
+        .expect("cookieSet");
+    assert_eq!(cset, json!(true), "cookieSet 应成功: {cset}");
+    let ck = host
+        .eval_snippet(r#"return await cookieGet("bk")"#)
+        .await
+        .expect("cookieGet");
+    assert_eq!(
+        ck.pointer("/value"),
+        Some(&json!("bv")),
+        "getAllCookies 应回读一致: {ck}"
+    );
+    let cdel = host
+        .eval_snippet(r#"await cookieDelete("bk"); return await cookieGet("bk")"#)
+        .await
+        .expect("cookieDelete");
+    assert_eq!(cdel, json!(Value::Null), "删后应查无: {cdel}");
+    // localStorage 中文往返 + sessionStorage 隔离（sessionClear 不动 local）
+    let ls = host
+        .eval_snippet(r#"return await localSet("中文键", "值🚚")"#)
+        .await
+        .expect("localSet 中文");
+    assert_eq!(ls, json!("值🚚"), "localSet 回读: {ls}");
+    let lg = host
+        .eval_snippet(r#"return await localGet("中文键")"#)
+        .await
+        .expect("localGet");
+    assert_eq!(lg, json!("值🚚"), "中文往返无乱码: {lg}");
+    host.eval_snippet(r#"await sessionSet("s1", "sv")"#)
+        .await
+        .expect("sessionSet");
+    host.eval_snippet("await sessionClear()")
+        .await
+        .expect("sessionClear");
+    let sg = host
+        .eval_snippet(r#"return await sessionGet("s1")"#)
+        .await
+        .expect("sessionGet after clear");
+    assert_eq!(sg, json!(Value::Null), "sessionClear 后键应无: {sg}");
+    let lg2 = host
+        .eval_snippet(r#"return await localGet("中文键")"#)
+        .await
+        .expect("localGet after sessionClear");
+    assert_eq!(lg2, json!("值🚚"), "sessionClear 不得动 local: {lg2}");
+    host.eval_snippet("await localClear()")
+        .await
+        .expect("localClear");
+
     // screenshot：存文件、字节数为正、清场
     let shot = host
         .eval_snippet("return await screenshot()")

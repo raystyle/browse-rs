@@ -16,6 +16,10 @@
 - `click_at` — 用 `Input.dispatchMouseEvent` pressed+released 在视口坐标 (x,y) 派发
 - `click_ref` — 按短 ref 点击：滚动可见 -> 量视口中心 -> **遮挡命中测试** -> 复用
 - `close_tab` — 关 tab（缺省关当前活动 tab）；守卫层只放行本会话自建 tab，用户 tab 一律拒绝。
+- `cookie_delete` — 删单条 cookie（#42）：`Network.deleteCookies`（CDP 无单数形，按 name 加域删全部匹配），缺省
+- `cookie_set` — 写单条 cookie（#42）：`Network.setCookie`。`opts` 可带 domain（缺省用
+- `cookies` — 列 cookie（#42）：`Network.getCookies`，给了 domain 则按该域的
+- `cookies_clear` — 清空浏览器全部 cookie（#42）：`Network.clearBrowserCookies`（对照
 - `current_tab` — 当前活动 tab 简表 `{targetId,title,url}`；无活动 tab 返回 `null`。
 - `dblclick_ref` — 双击短 ref 元素（#23）：press/release 两轮，clickCount 递增成双击。
 - `drag_ref` — 拖拽：源 ref 中心按下，分步移到目标 ref 中心松开（#23）。
@@ -36,6 +40,7 @@
 - `reload` — 刷新当前页（#39）：`Page.reload`（可带 ignoreCache）后等加载收尾。
 - `select_option` — 按短 ref 选下拉框选项：value 或可见 label 匹配，设值并派发 input+change
 - `set_checked` — 勾选/取消复选框（#39）：读元素 checked 实态，与目标态不一致才点击
+- `storage_op_pub` — Web Storage 逐键 CRUD 的统一执行面（#42）：`which` 是 localStorage 或
 - `switch_tab` — 切换活动路由到既有 tab（不改 Chrome 可见前景），返回该 tab 简表。
 - `type_ref` — 真实按键序列输入（#23）：focus 后逐字符 keyDown(text)+keyUp，
 - `wait_idle` — 等 network 静默：从调用时刻起观察 `Network.requestWillBeSent` 与
