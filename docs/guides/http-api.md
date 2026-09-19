@@ -7,9 +7,24 @@
 | 方法 | 路径 | 用途 |
 |---|---|---|
 | POST | `/eval` | 求值一段方言片段（或 `js: true` 时全量 JS） |
-| GET | `/health` | 探活（daemon 就绪即 200） |
+| GET | `/health` | 探活与状态（就绪即 200，响应形见下） |
 | POST | `/engine/up` | 显式起引擎 |
 | POST | `/quit` | 退 daemon（只杀自起引擎） |
+
+## GET /health 响应形
+
+```json
+{ "ok": true, "name": "default", "uptime": 1656, "connected": true,
+  "activeTargetId": "46BC…", "activeSessionId": "FF6D…",
+  "engine": { "Spawned": { "pid": 267718, "ws_url": "ws://127.0.0.1:43877/…",
+      "profile_dir": "…", "chrome": "…", "headless": false, "channel": "port" } } }
+```
+
+`engine` 三态（单键包裹的枚举形）：`{"Spawned":{pid,ws_url,profile_dir,chrome,headless,channel}}`（自起）、`{"Attached":{ws_url}}`（附着）、`{"NotConnected":null}`。门外 agent 用它判「引擎在不在、活动 tab 是哪个」。
+
+## POST /engine/up 请求体
+
+字段全可省（走发现序）：`headless`（bool）、`chrome`（路径）、`ws`（钉死 WS URL）、`port`、`pipe`（bool）、`profile`、`proxy`、`proxy_bypass`、`isolated`。失败同 `/eval` 的 500 加错误形。
 
 ## POST /eval
 
@@ -29,7 +44,7 @@
 { "ok": true, "value": { "targetId": "A1B2…", "title": "Example", "url": "https://example.com/" } }
 ```
 
-响应（失败，HTTP 200 带错误形：协议层错误不映射 HTTP 状态码，判 `ok` 字段）：
+响应（失败，HTTP 500 带错误形；判 `ok` 字段仍是推荐姿势，但客户端要允许从非 2xx 响应读出 body，别用 curl -f 一类「非 2xx 即抛」姿势把 CTA 吞掉）：
 
 ```json
 { "ok": false, "error": "方言不支持该语法（if/for/while…）；下一步：…" }
@@ -39,7 +54,7 @@
 
 ## 语义要点
 
-- **单飞槽**：daemon 同一时刻只跑一段求值（eval_lock），并发 POST 排队等待，不并行。
+- **单飞槽**：daemon 同一时刻只跑一段求值（eval_lock），并发 POST 按到达序排队执行、不拒。`BROWSE_EVAL_TIMEOUT` 只管自己的求值段（拿到槽之后才起算），排队等待另计：第 N 个并发请求的总时延约等于前 N-1 个耗时之和加自己的求值，排队期间不会超时。客户端要按最坏 N 乘 timeout 设自己的 HTTP 超时，别把排队误判成 daemon 挂了。
 - **超时**：单次求值上限 `BROWSE_EVAL_TIMEOUT`（秒，缺省 300），超时回错误形（`eval 超时（N 秒；BROWSE_EVAL_TIMEOUT 可调）`）。
 - **懒引擎**：引擎未连且片段不含 connect 时自动拉起（懒拉起），冷启动首求值包含 spawn 时延。
 - **状态跨请求保留**：`const` 变量与引用表在 daemon 生命期跨片段持久（多段工作流直接分段 POST）。
@@ -47,11 +62,13 @@
 
 ## 兼容承诺
 
-契约即 HTTP + JSON：只加字段不减字段；错误形恒带 `ok: false` 与 `error` 字符串。任意脚本语言可驱动。
+契约即 HTTP + JSON：只加字段不减字段；错误响应当前恒为 HTTP 500，未来若细化状态码（如 400 参数错、503 引擎不可用），body 形仍恒为 `{ok:false, error}`，客户端只需认 body 不受状态码变化打穿。任意脚本语言可驱动。
 
 ## curl 三例
 
 ```bash
+# 端口缺省 9880（BROWSE_PORT）；命名实例（BROWSE_NAME）派生 9900-9999，实际端口见 browse status
+
 # 1. 探活
 curl -s http://127.0.0.1:9880/health
 
@@ -73,5 +90,5 @@ curl -s http://127.0.0.1:9880/eval \
 ## 测试用例（验收面）
 
 - curl 驱动全链路：`browse up` 后探活、navigate、snapshot 取回（三例各一）
-- 错误形：POST 一段语法错误片段，回 `ok: false` 且 `error` 带 CTA
+- 错误形：POST 一段语法错误片段，回 HTTP 500 且 body `ok: false`、`error` 带 CTA
 - 超时语义：`BROWSE_EVAL_TIMEOUT=1` 下 POST 一段 5 秒等待，1 秒级回错误形
