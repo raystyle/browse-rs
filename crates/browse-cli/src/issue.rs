@@ -96,18 +96,29 @@ pub async fn new(title: &str, body: &str) -> Result<Value> {
     }
 }
 
-/// 列 issue：`GET /api/issues?tool=&status=&limit=`（新到旧，limit 1 至 100）。
+/// 列 issue：`GET /api/issues?tool=&status=&limit=&before=`（新到旧，limit 1
+/// 至 100 由本函数 clamp 到界；`before` 是 keyset 游标（#53），取该 id 之前
+/// 更早的一页，非法值服务端回 400）。返回 `count` 是本次返回条数非在册
+/// 总数；返回条数恰打满 limit 时 stderr 出一行截断提示（#52）。
 ///
 /// # Errors
 ///
-/// 网络或超时；服务端非 200。
-pub async fn list(tool: Option<&str>, status: Option<&str>, limit: u32) -> Result<Value> {
+/// 网络或超时；服务端非 200（含 before 非法 400）。
+pub async fn list(
+    tool: Option<&str>,
+    status: Option<&str>,
+    limit: u32,
+    before: Option<&str>,
+) -> Result<Value> {
     let limit = limit.clamp(1, 100);
     let mut url = format!("{}/api/issues?limit={limit}", api_base());
     let tool = tool.unwrap_or(TOOL);
     url.push_str(&format!("&tool={}", urlencode(tool)));
     if let Some(s) = status {
         url.push_str(&format!("&status={}", urlencode(s)));
+    }
+    if let Some(b) = before {
+        url.push_str(&format!("&before={}", urlencode(b)));
     }
     let resp = http()
         .await?
@@ -118,9 +129,18 @@ pub async fn list(tool: Option<&str>, status: Option<&str>, limit: u32) -> Resul
     if !resp.status().is_success() {
         bail!("issue 服务回 {}；下一步：稍后重试", resp.status().as_u16());
     }
-    resp.json()
+    let v: Value = resp
+        .json()
         .await
-        .map_err(|e| anyhow::anyhow!("列表解析失败：{e}"))
+        .map_err(|e| anyhow::anyhow!("列表解析失败：{e}"))?;
+    // 饱和即或被截断（count 只报返回数，#52）：打满 limit 时旧条目可能仍
+    // 不可见，指路收窄与翻页
+    if v["count"].as_u64() == Some(u64::from(limit)) {
+        eprintln!(
+            "[browse] issue list 恰返回 {limit} 条（=limit，或被截断）；下一步：--status/--tool 过滤收窄，或 --before <id> 翻更早一页"
+        );
+    }
+    Ok(v)
 }
 
 /// 看 issue 详情：`GET /api/issues/<id>`。

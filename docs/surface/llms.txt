@@ -27,7 +27,7 @@
 | `browse chrome remove <版本>` | 删已装版本（目录加登记一起清；pin 指向的拒删，先 use 切走）。 |
 | `browse chrome doctor` | 托管 Chromium 部署体检（在位/文件基线/pin；AppContainer ACE 仅 Windows 有值，缺则 hints 给 icacls 修法，#32）。 |
 | `browse issue new <标题> [--body <正文>]` | 一键缺陷反馈：自动署名 tool=browse 加版本加平台加主机。 |
-| `browse issue list [--status <s>] [--limit <n>] [--tool <t>]` | 列 issue（新到旧；默认本工具，--tool 换过滤）。 |
+| `browse issue list [--status <s>] [--limit <n>] [--tool <t>] [--before <id>]` | 列 issue（新到旧；默认本工具，--tool 换过滤；默认 limit 100 即服务端上限，返回 count 是本次返回条数非在册总数，恰打满时 stderr 出截断提示（#52）；--before <id> 是 keyset 游标翻更早一页（#53））。 |
 | `browse issue show <id>` | 看 issue 详情。 |
 | `browse --serve [--bind host:port]` | 前台跑 daemon（--bind 选监听地址）。 |
 

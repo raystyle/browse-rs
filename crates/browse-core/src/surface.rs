@@ -279,13 +279,14 @@ pub const COMMANDS: &[CmdSpec] = &[
     CmdSpec {
         name: "issue-list",
         kind: CmdKind::Cli,
-        signature: "browse issue list [--status <s>] [--limit <n>] [--tool <t>]",
+        signature: "browse issue list [--status <s>] [--limit <n>] [--tool <t>] [--before <id>]",
         args: &[
             arg!("status", "string", false),
-            arg!("limit", "number", false, "20"),
+            arg!("limit", "number", false, "100"),
             arg!("tool", "string", false, "browse"),
+            arg!("before", "id", false),
         ],
-        description: "列 issue（新到旧；默认本工具，--tool 换过滤）。",
+        description: "列 issue（新到旧；默认本工具，--tool 换过滤；默认 limit 100 即服务端上限，返回 count 是本次返回条数非在册总数，恰打满时 stderr 出截断提示（#52）；--before <id> 是 keyset 游标翻更早一页（#53））。",
         example: "browse issue list --limit 10",
     },
     CmdSpec {

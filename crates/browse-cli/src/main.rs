@@ -47,11 +47,12 @@ enum Mode {
     ChromeDoctor,
     /// `browse issue new <标题> [--body <正文>]`：一键提交缺陷反馈（REQ-057）。
     IssueNew { title: String, body: String },
-    /// `browse issue list [--status <s>] [--limit <n>] [--tool <t>]`：列 issue。
+    /// `browse issue list [--status <s>] [--limit <n>] [--tool <t>] [--before <id>]`：列 issue。
     IssueList {
         tool: Option<String>,
         status: Option<String>,
         limit: u32,
+        before: Option<String>,
     },
     /// `browse issue show <id>`：看 issue 详情。
     IssueShow(String),
@@ -171,12 +172,16 @@ async fn main() -> Result<()> {
                     "list" => {
                         let mut tool = None;
                         let mut status = None;
-                        let mut limit = 20u32;
+                        // 默认 100（服务端上限）：默认面即全量，防 open 集超
+                        // 20 后旧条目静默隐形（#52）
+                        let mut limit = 100u32;
+                        let mut before = None;
                         // next 只在参数尽时报错，即旗标收尾
                         while let Ok(f) = next("issue list 旗标") {
                             match f.as_str() {
                                 "--tool" => tool = Some(next("--tool")?),
                                 "--status" => status = Some(next("--status")?),
+                                "--before" => before = Some(next("--before")?),
                                 "--limit" => {
                                     limit = next("--limit")?.parse().unwrap_or_else(|_| {
                                         eprintln!("browse: --limit 要数字（退出 2）");
@@ -190,6 +195,7 @@ async fn main() -> Result<()> {
                             tool,
                             status,
                             limit,
+                            before,
                         };
                     }
                     "show" => mode = Mode::IssueShow(next("issue show <id>")?),
@@ -415,8 +421,15 @@ async fn main() -> Result<()> {
             tool,
             status,
             limit,
+            before,
         } => {
-            let r = browse_cli::issue::list(tool.as_deref(), status.as_deref(), limit).await?;
+            let r = browse_cli::issue::list(
+                tool.as_deref(),
+                status.as_deref(),
+                limit,
+                before.as_deref(),
+            )
+            .await?;
             println!("{}", serde_json::to_string_pretty(&r)?);
             Ok(())
         }

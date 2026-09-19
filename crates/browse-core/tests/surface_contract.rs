@@ -155,7 +155,14 @@ fn help_lists_every_cli_flag() {
     let help = surface::render_help();
     let src = std::fs::read_to_string(repo_root().join("crates/browse-cli/src/main.rs"))
         .expect("main.rs 应可读");
-    let exempt = ["--gen-surface", "--body", "--tool", "--status", "--limit"];
+    let exempt = [
+        "--gen-surface",
+        "--body",
+        "--tool",
+        "--status",
+        "--limit",
+        "--before",
+    ];
     let mut flags: Vec<String> = src
         .split(['"', '|'])
         .map(str::trim)

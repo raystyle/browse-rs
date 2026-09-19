@@ -332,12 +332,16 @@
       "type": "object"
     },
     "cli.issue-list": {
-      "description": "browse issue list [--status <s>] [--limit <n>] [--tool <t>] 列 issue（新到旧；默认本工具，--tool 换过滤）。",
+      "description": "browse issue list [--status <s>] [--limit <n>] [--tool <t>] [--before <id>] 列 issue（新到旧；默认本工具，--tool 换过滤；默认 limit 100 即服务端上限，返回 count 是本次返回条数非在册总数，恰打满时 stderr 出截断提示（#52）；--before <id> 是 keyset 游标翻更早一页（#53））。",
       "example": "browse issue list --limit 10",
       "input": {
         "properties": {
+          "before": {
+            "description": "",
+            "type": "id"
+          },
           "limit": {
-            "description": "缺省 20",
+            "description": "缺省 100",
             "type": "number"
           },
           "status": {
