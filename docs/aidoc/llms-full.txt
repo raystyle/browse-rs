@@ -275,7 +275,8 @@ browser-harness-js 片段方言的语法分析器（纯函数）。
 方言没有事件回调，帧流由常驻泵任务消费：`drain_events` 取帧 ->
 解 base64 写 PNG -> 按帧自带的 sessionId 回 `Page.screencastFrameAck`
 （不 ack 的话 chrome 只发头几帧就等住）。`recordStop` 停泵、末冲一次、
-`Page.stopScreencast`，回 `{frames,bytes,dir}`。
+`Page.stopScreencast`，回 `{frames,bytes,dir,sessionChanged}`
+（录制期间活动 tab 换过则 true，录制 session 被钉住帧流不中断）。
 
 注意：帧也走事件缓冲（上限 1000），长录制会挤掉旧事件；录短段，
 要完整事件流先 peek 再录。

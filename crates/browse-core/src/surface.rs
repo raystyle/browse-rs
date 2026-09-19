@@ -542,7 +542,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "waitForResponse(pattern, ms?)",
         args: &[arg!("pattern", "string", true), arg!("ms", "int", false)],
-        description: "等 URL 命中 glob（与 routeBlock/routeMock 同写法）的最近一个响应完成（#20）：回 {requestId,url,status,headers,body,json}；命中含历史（Network 域须在触发前已开，本函数幂等开收不到已发出的响应），方言无并发，可用形态是触发后等待；体等 loadingFinished 再取（5 秒窗），失败显式 bodyError；base64 自动解码，可解析时附 json。",
+        description: "等 URL 命中 glob（与 routeBlock/routeMock 同写法）的最近一个响应完成（#20，只认活动 tab）：回 {requestId,url,status,headers,body,base64Encoded,json}；命中含历史（Network 域须在触发前已开，本函数幂等开收不到已发出的响应），方言无并发，可用形态是触发后等待；体等 loadingFinished 再取（5 秒窗），失败显式 bodyError；base64 自动解码，可解析时附 json。",
         example: r#"return await waitForResponse("https://x.test/api*")"#,
     },
     CmdSpec {
@@ -550,7 +550,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "responseBody(requestId)",
         args: &[arg!("requestId", "string", true)],
-        description: "按 requestId 取响应体（#20）：peekEvents/findEvents 拿到的 id 皆可用，base64 自动解码。",
+        description: "按 requestId 取响应体（#20）：peekEvents/findEvents 拿到的 id 皆可用，base64 自动解码，回 {body,base64Encoded,json} 与 waitForResponse 同形。",
         example: r#"return await responseBody(rid)"#,
     },
     CmdSpec {
@@ -574,7 +574,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "recordStop()",
         args: &[],
-        description: "停止录制，回 {frames,bytes,dir}（PNG 已在盘上）。",
+        description: "停止录制，回 {frames,bytes,dir,sessionChanged}（PNG 已在盘上；录制中被换靶则 true，帧流钉住不中断）。",
         example: "return await recordStop()",
     },
     CmdSpec {
@@ -614,7 +614,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "值.slice(start,end?) 等",
         args: &[],
-        description: "字符串与数组的小加工（#21）：字符串 slice(start,end?)/split(sep)/includes(sub)/startsWith(sub)/endsWith(sub)/trim()/toUpperCase()/toLowerCase()；数组 slice(start,end?)/join(sep?)/includes(v)/concat(数组...)。slice 按 UTF-16 单元（同 .length，代理对切中间出替换符）；大小写转换非 locale；join 对容器元素打紧凑 JSON；includes 数值宽等（1 与 1.0 同值）。纯函数无控制流，页面内逻辑仍走 Runtime.evaluate。",
+        description: "字符串与数组的小加工（#21）：字符串 slice(start,end?)/split(sep)/includes(sub)/startsWith(sub)/endsWith(sub)/trim()/toUpperCase()/toLowerCase()；数组 slice(start,end?)/join(sep?)/includes(v)/concat(数组...)。slice 按 UTF-16 单元（同 .length，代理对切中间出替换符）；大小写转换非 locale；join 对容器元素打紧凑 JSON；includes 数值宽等（1 与 1.0 同值），容器按 JSON 深等（与 JS 引用等值不同）。纯函数无控制流，页面内逻辑仍走 Runtime.evaluate。",
         example: r#"return body.slice(0, 200)"#,
     },
     // ---- session 方法 ----

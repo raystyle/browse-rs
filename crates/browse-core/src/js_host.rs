@@ -137,6 +137,13 @@ impl JsHost {
             .await
             .map_err(|e| anyhow!("Network.enable 失败：{e:#}"))?;
         let deadline = tokio::time::Instant::now() + std::time::Duration::from_millis(ms);
+        // 只认活动 tab 的事件（#33 F2）：他 tab 的响应元数据不误领，
+        // 陈旧 session 的重复副本（detach 前残影）也一并排除
+        let active = self.session.get_active_session().await;
+        let from_active = |e: &Value| match &active {
+            Some(a) => e.get("sessionId").and_then(Value::as_str) == Some(a.as_str()),
+            None => e.get("sessionId").is_none(),
+        };
         let ev = loop {
             let hits = self
                 .session
@@ -146,24 +153,37 @@ impl JsHost {
                 e.pointer("/params/response/url")
                     .and_then(Value::as_str)
                     .is_some_and(|u| glob_match(pattern, u))
+                    && from_active(e)
             }) {
                 break e;
             }
             if tokio::time::Instant::now() >= deadline {
-                let seen: Vec<String> = self
+                // CTA 清单封顶（#33 F3）：去重后只列最近几条加总数，
+                // 不把整窗 URL 灌进上下文
+                let mut uniq: Vec<String> = Vec::new();
+                let mut total = 0usize;
+                for u in self
                     .session
                     .peek_events("Network.responseReceived", 1000)
                     .await
                     .iter()
+                    .filter(|e| from_active(e))
                     .filter_map(|e| {
                         e.pointer("/params/response/url")
                             .and_then(Value::as_str)
                             .map(str::to_string)
                     })
-                    .collect();
+                {
+                    total += 1;
+                    if !uniq.contains(&u) {
+                        uniq.push(u);
+                    }
+                }
+                let sample: Vec<String> = uniq.iter().rev().take(3).cloned().collect();
                 bail!(
-                    "waitForResponse 超时（{ms}ms 内没有 URL 命中 {pattern} 的响应；缓冲里 {} 条 responseReceived，URL 有 {seen:?}）；下一步：pattern 与 routeBlock/routeMock 同一套 glob 写法（* 通配），确认触发动作在超时窗内，必要时先 await session.Network.enable({{}})",
-                    seen.len()
+                    "waitForResponse 超时（{ms}ms 内活动 tab 没有 URL 命中 {pattern} 的响应；活动窗 {} 条 responseReceived，去重 {} 条，最近有 {sample:?}）；下一步：pattern 与 routeBlock/routeMock 同一套 glob 写法（* 通配），确认动作发生在活动 tab 且在超时窗内，必要时先 await session.Network.enable({{}})；当前没有活动 tab 时先 await session.use(tabs[0].targetId)",
+                    total,
+                    uniq.len()
                 );
             }
             tokio::time::sleep(std::time::Duration::from_millis(50)).await;
@@ -220,6 +240,7 @@ impl JsHost {
                     {
                         out["json"] = parsed;
                     }
+                    out["base64Encoded"] = decoded["base64Encoded"].clone();
                     out["body"] = decoded["body"].clone();
                 }
                 Err(e) => {
@@ -723,7 +744,18 @@ impl JsHost {
                     .map_err(|e| anyhow!(
                         "Network.getResponseBody({rid}) 失败：{e:#}；下一步：requestId 可能已过期释放（No resource with given identifier），findEvents 默认取最早一条，配本函数建议取最新（数组末尾）或直接用 waitForResponse"
                     ))?;
-                Ok(decode_response_body(&b))
+                // 与 waitForResponse 同形（#33 G2）：body/base64Encoded/json 齐
+                let decoded = decode_response_body(&b);
+                let mut r = json!({
+                    "body": decoded["body"].clone(),
+                    "base64Encoded": decoded["base64Encoded"].clone(),
+                });
+                if let Value::String(text) = &decoded["body"]
+                    && let Ok(parsed) = serde_json::from_str::<Value>(text)
+                {
+                    r["json"] = parsed;
+                }
+                Ok(r)
             }
             // ---- 元素引用（D35-lite）：ref 来自最近一次 snapshot() ----
             "clickRef" => {
@@ -861,7 +893,7 @@ impl JsHost {
                 crate::record::stop(&self.session, rec).await
             }
             other => bail!(
-                "未知函数 {other}；下一步：可用全局 listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/snapshot()/screenshot(path?, full?)/pdf(path?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/clickAt(x,y)/fillInput(sel,text)/clickRef(ref)/fillRef(ref,text)/selectOption(ref,value)/pressKey(key)/dialogStatus()/dialogAccept(text?)/dialogDismiss()/routeBlock(pattern)/routeMock(pattern,body,opts?)/routeClear()/waitLoad(ms?)/waitIdle(ms?)/waitForResponse(pattern,ms?)/responseBody(requestId)/recordStart(opts?)/recordStop()/chromeInstall(opts?)/chromeList()/chromeUse(version)/chromeUpdate()/chromeRemove(version)/chromeDoctor()/print(x)；CDP 走 session.<Domain>.<method>(params)"
+                "未知函数 {other}；下一步：可用全局 {GLOBALS_CTA}；CDP 走 session.<Domain>.<method>(params)"
             ),
         }
     }
@@ -1054,7 +1086,7 @@ impl JsHost {
                 ))
             }
             other => bail!(
-                "未知 session.{other}；下一步：宿主面 connect/close/use/setActiveSession/waitFor/call/peekEvents/peekEventsSince/findEvents/isConnected/getActiveSession；CDP 域写 session.<Domain>.<method>(params)"
+                "未知 session.{other}；下一步：宿主面 connect/close/use/setActiveSession/waitFor/call/peekEvents/peekEventsSince/findEvents/isConnected/getActiveSession；便捷函数（waitLoad/waitIdle/waitForResponse/responseBody/routeMock 等）是全局，直接调不带 session. 前缀；CDP 域写 session.<Domain>.<method>(params)"
             ),
         }
     }
@@ -1541,6 +1573,31 @@ fn trunc_preview(s: &str) -> String {
     }
 }
 
+/// 容器预览只序列化的头部元素数（#33 F5）：报错路径不做全量序列化尖峰。
+const PREVIEW_HEAD_ITEMS: usize = 8;
+
+/// 全局函数 CTA 清单（#33 G6 单一真相）：「未知函数」提示由此派生，
+/// `global_cta_covers_catalog` 测试把它与 surface 目录的 Global 条目绑死；
+/// 增删全局必须同步这里（value-methods 是方法面族条目，不在此列）。
+const GLOBALS_CTA: &str = "listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/hostFunctions()/snapshot()/screenshot(path?, full?)/pdf(path?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/clickAt(x,y)/fillInput(sel,text)/clickRef(ref)/fillRef(ref,text)/selectOption(ref,value)/pressKey(key)/dialogStatus()/dialogAccept(text?)/dialogDismiss()/routeBlock(pattern)/routeMock(pattern,body,opts?)/routeClear()/waitLoad(ms?)/waitIdle(ms?)/waitForResponse(pattern,ms?)/responseBody(requestId)/JSON.parse(string)/JSON.stringify(value,indent?)/recordStart(opts?)/recordStop()/chromeInstall(opts?)/chromeList()/chromeUse(version)/chromeUpdate()/chromeRemove(version)/chromeDoctor()/print(x)";
+
+/// 容器预览：头部 JSON 截断（留尾注位），超帽尾注总项数；小容器输出
+/// 与全量形一致。不与 [`trunc_preview`] 叠用（双省略号）。
+fn preview_container(kind: &str, head_json: String, head_n: usize, total: usize) -> String {
+    let cap = PREVIEW_MAX_CHARS.saturating_sub(8);
+    let closer = if kind == "数组" { ']' } else { '}' };
+    let mut s: String = head_json.chars().take(cap).collect();
+    if total > head_n {
+        s.push_str(&format!("…(共 {total} 项){closer}"));
+    } else if head_json.chars().count() > cap {
+        s.push('…');
+        s.push(closer);
+    } else {
+        s = head_json;
+    }
+    format!("{kind} {s}")
+}
+
 /// 求值值的类型化短预览（报错与 `print` 调试）：标类型加截断内容，字符串
 /// 带引号、容器打 JSON 截断；杜绝「JSON 文本看着像对象」的误导（#21）。
 fn preview(v: &Value) -> String {
@@ -1550,12 +1607,26 @@ fn preview(v: &Value) -> String {
         Value::Number(n) => format!("数字 {n}"),
         Value::String(s) => format!("字符串\"{}\"", trunc_preview(s)),
         Value::Array(a) => {
-            let s = serde_json::to_string(a).unwrap_or_default();
-            format!("数组 {}", trunc_preview(&s))
+            let head: Vec<&Value> = a.iter().take(PREVIEW_HEAD_ITEMS).collect();
+            preview_container(
+                "数组",
+                serde_json::to_string(&head).unwrap_or_default(),
+                PREVIEW_HEAD_ITEMS,
+                a.len(),
+            )
         }
         Value::Object(o) => {
-            let s = serde_json::to_string(o).unwrap_or_default();
-            format!("对象 {}", trunc_preview(&s))
+            let head: Map<String, Value> = o
+                .iter()
+                .take(PREVIEW_HEAD_ITEMS)
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect();
+            preview_container(
+                "对象",
+                serde_json::to_string(&head).unwrap_or_default(),
+                PREVIEW_HEAD_ITEMS,
+                o.len(),
+            )
         }
     }
 }
@@ -1842,6 +1913,63 @@ mod tests {
         }
     }
 
+    /// 全局函数 CTA 与 surface 目录同源绑定（#33 G6，双向）：增删 Global
+    /// 条目不改 GLOBALS_CTA 在这里红；目录删条目后 CTA 残留同样红
+    /// （value-methods 是族条目豁免）。
+    #[test]
+    fn global_cta_covers_catalog() {
+        let globals: Vec<&str> = crate::surface::COMMANDS
+            .iter()
+            .filter(|c| matches!(c.kind, crate::surface::CmdKind::Global))
+            .map(|c| c.name)
+            .collect();
+        for name in &globals {
+            if *name != "value-methods" {
+                assert!(GLOBALS_CTA.contains(name), "{name} 应在 GLOBALS_CTA 里");
+            }
+        }
+        // 反向：CTA 里的每个标识符都应在目录（防删函数后提示残留）
+        for entry in GLOBALS_CTA.split('/') {
+            let ident = entry.split('(').next().unwrap_or("").trim();
+            if ident.is_empty() {
+                continue;
+            }
+            assert!(
+                globals.contains(&ident),
+                "GLOBALS_CTA 的 {ident} 不在目录 Global 条目里（删函数后提示残留）"
+            );
+        }
+    }
+
+    /// preview 大值有界（#33 F5）：容器只序列化头部，超帽尾注总项数。
+    #[test]
+    fn preview_bounds_container_serialization() {
+        let big: Vec<Value> = (0..1000).map(|i| json!(i)).collect();
+        let p = preview(&Value::Array(big));
+        assert!(p.contains("共 1000 项"), "{p}");
+        assert!(p.chars().count() < 60, "预览应短: {p}");
+        // 小容器输出与全量形一致（既有测试形态不回归）
+        assert_eq!(preview(&json!([1, 2])), "数组 [1,2]");
+        // 对象路径：尾注按 } 收（评审 G-lite，曾错配 ]）
+        let big_obj: serde_json::Map<String, Value> =
+            (1..=12).map(|i| (format!("k{i}"), json!(i))).collect();
+        let po = preview(&Value::Object(big_obj));
+        assert!(po.contains("共 12 项)}"), "{po}");
+    }
+
+    /// 数字字面量指数/下划线即报（#33 F4）：不再静默截断或跑偏归因。
+    #[test]
+    fn number_literals_reject_exponent_and_underscore() {
+        for src in ["return 1e5", "const x = 1_000"] {
+            let err = crate::parser::parse_script(src).expect_err(src).to_string();
+            assert!(
+                err.contains("不支持指数或下划线"),
+                "{src} 应报写法不支持: {err}"
+            );
+            assert!(err.contains("下一步："), "{err}");
+        }
+    }
+
     /// 集成（#18 严格测试令）：模板字符串与值方法面、JSON 命名空间、
     /// 变量表的组合流——页面代码模板在宿主侧小加工的典型链路。
     #[tokio::test]
@@ -1884,6 +2012,8 @@ return JSON.stringify(JSON.parse(raw).items.slice(0, 1))"#,
         let (sb, bb) = UnixStream::pair().unwrap();
         let session = cdp::Session::new();
         session.connect_pipes(sa, sb).await.expect("管道连接");
+        // F2 后 waitForResponse 只认活动 session 的事件，管道态显式设活动
+        session.set_active_session(Some("S1".into())).await;
         let host = JsHost::new(session.clone());
 
         let released = Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -1948,6 +2078,22 @@ return JSON.stringify(JSON.parse(raw).items.slice(0, 1))"#,
         };
         send_event(rr("R1", "http://slow.test/x"));
         send_event(rr("R2", "http://stuck.test/y"));
+        // F2 回归锁：他域 session 的同 URL 响应不误领（300ms 短窗超时即证）
+        send_event(json!({
+            "method": "Network.responseReceived",
+            "params": {
+                "requestId": "R9",
+                "response": {"url": "http://foreign.test/z", "status": 200, "headers": {}}
+            },
+            "sessionId": "OTHER"
+        }));
+        let foreign = host
+            .eval_snippet(r#"await waitForResponse("http://foreign.test/*", 300)"#)
+            .await;
+        assert!(
+            foreign.is_err() && format!("{foreign:#?}").contains("超时"),
+            "他域 session 的事件不应被命中: {foreign:?}"
+        );
 
         // R1：400ms 后放体（loadingFinished 到），函数等到体完成再取
         let releaser = {

@@ -3,7 +3,8 @@
 //! 方言没有事件回调，帧流由常驻泵任务消费：`drain_events` 取帧 ->
 //! 解 base64 写 PNG -> 按帧自带的 sessionId 回 `Page.screencastFrameAck`
 //! （不 ack 的话 chrome 只发头几帧就等住）。`recordStop` 停泵、末冲一次、
-//! `Page.stopScreencast`，回 `{frames,bytes,dir}`。
+//! `Page.stopScreencast`，回 `{frames,bytes,dir,sessionChanged}`
+//! （录制期间活动 tab 换过则 true，录制 session 被钉住帧流不中断）。
 //!
 //! 注意：帧也走事件缓冲（上限 1000），长录制会挤掉旧事件；录短段，
 //! 要完整事件流先 peek 再录。
@@ -23,6 +24,8 @@ pub struct Recorder {
     bytes: Arc<AtomicU64>,
     stop: Arc<AtomicBool>,
     handle: tokio::task::JoinHandle<()>,
+    /// 录制起始时的活动 sessionId（换靶保护与停场定向用，#33）。
+    recorded_sid: Option<String>,
 }
 
 /// 泵的可变共享面（任务与 stop 两侧都要动）。
@@ -57,6 +60,11 @@ pub async fn start(s: Arc<Session>, opts: &Value) -> Result<Recorder> {
         }
     }
     s.call("Page.startScreencast", params).await?;
+    // 钉住录制 session（#33）：换靶不 detach，帧流跨 tab 切换存活
+    let recorded_sid = s.get_active_session().await;
+    if let Some(sid) = &recorded_sid {
+        s.pin_session(sid).await;
+    }
     let ts = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis())
@@ -87,11 +95,14 @@ pub async fn start(s: Arc<Session>, opts: &Value) -> Result<Recorder> {
         bytes,
         stop,
         handle,
+        recorded_sid,
     })
 }
 
 /// 停止录制：停泵 -> 末冲（200ms 窗口内迟到的帧也收）->
-/// `Page.stopScreencast`，回 `{frames,bytes,dir}`。
+/// `Page.stopScreencast`（打到录制 session 本体），回
+/// `{frames,bytes,dir,sessionChanged}`（录制期间活动 tab 换过则 true，
+/// 录制 session 被钉住帧流不中断）。
 ///
 /// # Errors
 ///
@@ -107,11 +118,22 @@ pub async fn stop(s: &Session, rec: Recorder) -> Result<Value> {
         bytes: rec.bytes.clone(),
     };
     pump_once(s, &mut c).await;
-    let _ = s.call("Page.stopScreencast", json!({})).await;
+    // 停场打到录制 session 本体（换靶后活动已是别处，#33），并解钉
+    let session_changed = s.get_active_session().await != rec.recorded_sid;
+    match &rec.recorded_sid {
+        Some(sid) => {
+            let _ = s.call_on("Page.stopScreencast", json!({}), sid).await;
+            s.unpin_session(sid).await;
+        }
+        None => {
+            let _ = s.call("Page.stopScreencast", json!({})).await;
+        }
+    }
     Ok(json!({
         "frames": rec.frames.load(Ordering::Relaxed),
         "bytes": rec.bytes.load(Ordering::Relaxed),
         "dir": rec.dir.display().to_string(),
+        "sessionChanged": session_changed,
     }))
 }
 

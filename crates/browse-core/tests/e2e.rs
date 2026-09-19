@@ -448,6 +448,10 @@ l`.length === 3].join(\"|\")", returnByValue:true})).result.value"#;
         miss.is_err() && miss_msg.contains("超时") && miss_msg.contains("下一步"),
         "未命中应报超时加 CTA: {miss_msg}"
     );
+    assert!(
+        miss_msg.contains("去重"),
+        "CTA 清单应封顶去重（F3）: {miss_msg}"
+    );
     // #20 A/B：便捷函数与手工路线（findEvents 加 responseBody）取同值
     let manual = host
         .eval_snippet(
@@ -562,6 +566,67 @@ return await responseBody(evs[0].params.requestId)"#,
         .unwrap_or(0);
     assert_eq!(on_disk, frames, "盘上帧文件数应与计数一致（dir {rec_dir}）");
     let _ = tokio::fs::remove_dir_all(&rec_dir).await;
+
+    // #33 录制 × 换靶（pin 保护）：录制中开新 tab 换靶，录制 session 被
+    // 钉住不 detach，帧流存活；recordStop 定向停本体，回执带 sessionChanged
+    let rec_cur = host
+        .eval_snippet("return await currentTab()")
+        .await
+        .expect("录制前当前 tab");
+    let rec_tid = rec_cur
+        .get("targetId")
+        .and_then(Value::as_str)
+        .expect("targetId")
+        .to_string();
+    let rec2 = host
+        .eval_snippet("return await recordStart()")
+        .await
+        .expect("recordStart 2");
+    assert!(rec2.get("dir").is_some(), "recordStart 回 dir: {rec2}");
+    host.eval_snippet(r#"await session.Page.navigate({url:"data:text/html,<h3>rec-two</h3>"})"#)
+        .await
+        .expect("录制中导航 3");
+    host.eval_snippet(r#"await session.waitJs("document.body && document.body.innerText.includes('rec-two')", 5000)"#)
+        .await
+        .expect("等 rec-two");
+    host.eval_snippet("await newTab()")
+        .await
+        .expect("录制中开新 tab（换靶）");
+    let stopped2 = host
+        .eval_snippet("return await recordStop()")
+        .await
+        .expect("recordStop 2");
+    assert_eq!(
+        stopped2.pointer("/sessionChanged"),
+        Some(&json!(true)),
+        "换靶后停应告警: {stopped2}"
+    );
+    let frames2 = stopped2.get("frames").and_then(Value::as_u64).unwrap_or(0);
+    assert!(frames2 >= 1, "pin 下帧流应跨换靶存活: {stopped2}");
+    let rec_dir2 = stopped2
+        .get("dir")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    let _ = tokio::fs::remove_dir_all(&rec_dir2).await;
+    // 清场：关自开 tab，切回录制 tab
+    let nt = host
+        .eval_snippet("return await currentTab()")
+        .await
+        .expect("当前新 tab");
+    let nt_id = nt
+        .get("targetId")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    if !nt_id.is_empty() {
+        host.eval_snippet(&format!(r#"await closeTab("{nt_id}")"#))
+            .await
+            .expect("关自开 tab");
+    }
+    host.eval_snippet(&format!(r#"await switchTab("{rec_tid}")"#))
+        .await
+        .expect("切回录制 tab");
     // 没在录时 recordStop：错误带 CTA
     let no_rec = host.eval_snippet("await recordStop()").await;
     assert!(
@@ -619,6 +684,42 @@ return await responseBody(evs[0].params.requestId)"#,
     host.eval_snippet(&format!(r#"await switchTab("{t2_id}")"#))
         .await
         .expect("切回 t2");
+
+    // #33 F1 回归锁：多次换靶后（use/newTab/switchTab 全走过）陈旧
+    // session 已 detach，一次导航的响应事件在缓冲里只此一份
+    host.eval_snippet("await session.Network.enable({})")
+        .await
+        .expect("Network.enable t2");
+    host.eval_snippet(
+        r#"await session.Page.navigate({url:"data:text/html,<title>dedup</title>"})"#,
+    )
+    .await
+    .expect("导航 dedup");
+    let dup = host
+        .eval_snippet(r#"return await session.peekEvents("Network.responseReceived", 50)"#)
+        .await
+        .expect("peek dedup");
+    let dedup_events: Vec<&Value> = dup
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter(|e| {
+                    e.pointer("/params/response/url")
+                        .and_then(Value::as_str)
+                        .is_some_and(|u| u.contains("dedup"))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    assert_eq!(
+        dedup_events.len(),
+        1,
+        "换靶后同一响应应只投递一份（F1 detach）: {dup}"
+    );
+    // 探针页还原：把 t2 导回 tab-two 原页（后续 fillInput 要 #q）
+    host.eval_snippet(r#"await session.Page.navigate({url:"data:text/html,<title>tab-two</title><input id=\"q\" value=\"old\">"})"#)
+        .await
+        .expect("还原 t2 页");
 
     eprintln!("[e2e] fillInput 开始");
     // fillInput：清空旧值 + 回读验证

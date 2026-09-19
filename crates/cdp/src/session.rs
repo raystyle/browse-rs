@@ -85,6 +85,9 @@ pub struct Session {
     /// 当前打开的 `Page.javascriptDialogOpening` 事件（route 截获维护，
     /// Closed 清空）。对话框会挂起 Input/evaluate，消费方要能先看它。
     pending_dialog: Arc<Mutex<Option<Value>>>,
+    /// 换靶时钉住不 detach 的 session 集合（#33 录制保护）：被钉的旧
+    /// session 保持附着（如录制中的帧流），事件仍投递由上层过滤。
+    pinned_sessions: Arc<Mutex<HashSet<String>>>,
 }
 
 impl Session {
@@ -110,6 +113,7 @@ impl Session {
             connected: Arc::new(AtomicBool::new(false)),
             next_seq: Arc::new(AtomicI64::new(1)),
             pending_dialog: Arc::new(Mutex::new(None)),
+            pinned_sessions: Arc::new(Mutex::new(HashSet::new())),
         })
     }
 
@@ -486,9 +490,47 @@ impl Session {
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("no sessionId"))?
             .to_string();
-        *self.session_id.lock().await = Some(sid.clone());
+        // 换靶即脱旧附（#33 F1）：陈旧 flat session 的域还开着会重复投递
+        // 事件（实测三倍），detach 后事件只剩活动一份；被钉住的（如录制
+        // 中，#33）不 detach，保持其后台流
+        let old = self.session_id.lock().await.replace(sid.clone());
+        let pinned = self.pinned_sessions.lock().await;
+        if let Some(old_sid) = old
+            && old_sid != sid
+            && !pinned.contains(&old_sid)
+        {
+            drop(pinned);
+            if let Err(e) = self
+                .send("Target.detachFromTarget", json!({ "sessionId": old_sid }))
+                .await
+            {
+                // 失败留痕不阻断：现场表现为事件重复再现时 daemon.log 有线索
+                eprintln!(
+                    "[browse] Target.detachFromTarget({}) 失败（忽略）：{e:#}",
+                    &old_sid[..old_sid.len().min(8)]
+                );
+            }
+        }
         *self.target_id.lock().await = Some(target_id.to_string());
         Ok(sid)
+    }
+
+    /// 钉住一个 session：换靶（[`Session::use_target`]）不再对它
+    /// detach，直到 [`Session::unpin_session`]。机制供上层策略用
+    /// （如录制中保持帧流跨换靶存活）；钉住期间其事件仍投递，消费方
+    /// 自行按 sessionId 过滤。
+    ///
+    /// 幂等。
+    pub async fn pin_session(&self, session_id: &str) {
+        self.pinned_sessions
+            .lock()
+            .await
+            .insert(session_id.to_string());
+    }
+
+    /// 解钉（幂等）；解钉不主动 detach，下次换靶按常规处理。
+    pub async fn unpin_session(&self, session_id: &str) {
+        self.pinned_sessions.lock().await.remove(session_id);
     }
 
     /// 覆写活动 sessionId（高级用法；一般走 [`Session::use_target`]）。

@@ -571,6 +571,8 @@ async fn run_tty(new_tab: bool) -> Result<()> {
 
 /// 管道批处理；返回实际求值的段数（零段 = 空管道，裸调用面据此出帮助体）。
 async fn run_stdin(new_tab: bool) -> Result<usize> {
+    // 行号口径注记（#33 G4）：本路径跳过空行攒 buf，报错行号相对实收
+    // 片段（与 -e 直传的原始行号可能差前导空行数）
     let mut stdin = BufReader::new(tokio::io::stdin());
     let mut line = String::new();
     let mut buf = String::new();

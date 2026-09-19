@@ -235,7 +235,7 @@
     {
       "path": "browse_core::record",
       "kind": "module",
-      "docs": "录制：`Page.startScreencast` 帧流落盘（方言无回调，泵任务代收）。\n\n方言没有事件回调，帧流由常驻泵任务消费：`drain_events` 取帧 ->\n解 base64 写 PNG -> 按帧自带的 sessionId 回 `Page.screencastFrameAck`\n（不 ack 的话 chrome 只发头几帧就等住）。`recordStop` 停泵、末冲一次、\n`Page.stopScreencast`，回 `{frames,bytes,dir}`。\n\n注意：帧也走事件缓冲（上限 1000），长录制会挤掉旧事件；录短段，\n要完整事件流先 peek 再录。"
+      "docs": "录制：`Page.startScreencast` 帧流落盘（方言无回调，泵任务代收）。\n\n方言没有事件回调，帧流由常驻泵任务消费：`drain_events` 取帧 ->\n解 base64 写 PNG -> 按帧自带的 sessionId 回 `Page.screencastFrameAck`\n（不 ack 的话 chrome 只发头几帧就等住）。`recordStop` 停泵、末冲一次、\n`Page.stopScreencast`，回 `{frames,bytes,dir,sessionChanged}`\n（录制期间活动 tab 换过则 true，录制 session 被钉住帧流不中断）。\n\n注意：帧也走事件缓冲（上限 1000），长录制会挤掉旧事件；录短段，\n要完整事件流先 peek 再录。"
     },
     {
       "path": "browse_core::record::Recorder",
@@ -250,7 +250,7 @@
     {
       "path": "browse_core::record::stop",
       "kind": "function",
-      "docs": "停止录制：停泵 -> 末冲（200ms 窗口内迟到的帧也收）->\n`Page.stopScreencast`，回 `{frames,bytes,dir}`。\n\n# Errors\n\n`Page.stopScreencast` 失败（帧已在盘上的不回滚）。"
+      "docs": "停止录制：停泵 -> 末冲（200ms 窗口内迟到的帧也收）->\n`Page.stopScreencast`（打到录制 session 本体），回\n`{frames,bytes,dir,sessionChanged}`（录制期间活动 tab 换过则 true，\n录制 session 被钉住帧流不中断）。\n\n# Errors\n\n`Page.stopScreencast` 失败（帧已在盘上的不回滚）。"
     },
     {
       "path": "browse_core::self_update",

@@ -113,11 +113,12 @@ pub fn loc(src: &str, pos: usize) -> String {
 /// ```
 pub fn parse_script(source: &str) -> Result<Vec<Stmt>> {
     let src = strip_comments(source);
-    let src = src.trim();
-    if src.is_empty() {
+    // 不 trim（#33 G4）：错误位置按剥注释后的原样源算，前导空行不再使
+    // 行号偏移；首尾空白由 skip_ws 消化
+    if src.trim().is_empty() {
         return Ok(Vec::new());
     }
-    let mut p = Parser::new(src);
+    let mut p = Parser::new(&src);
     let stmts = p.parse_script()?;
     p.skip_ws();
     if p.pos < p.src.len() {
@@ -139,7 +140,9 @@ pub fn parse_script(source: &str) -> Result<Vec<Stmt>> {
 /// assert!(!browse_core::snippet_complete("const x = {a: 1"));
 /// ```
 pub fn snippet_complete(src: &str) -> bool {
-    let s = src.trim();
+    // 先剥注释（#33 G3）：注释里的括号不再误判「不完整」攒着不提交
+    let s = strip_comments(src);
+    let s = s.trim();
     if s.is_empty() {
         return false;
     }
@@ -711,6 +714,18 @@ impl<'a> Parser<'a> {
             self.pos += 1;
         }
         let s = &self.src[start..self.pos];
+        // 指数/下划线等数字写法不支持即报（#33 F4）：静默截断（1e5 得 1）
+        // 与「未定义变量 e5」的跑偏归因都比明确报错危险
+        if self
+            .peek()
+            .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        {
+            let bad = self.peek().unwrap_or('?');
+            bail!(
+                "数字字面量不支持指数或下划线写法（{s} 后随 {bad}，{}）；下一步：十进制全写（1e5 写 100000），或字符串承载后页面侧处理",
+                self.here()
+            );
+        }
         if s.contains('.') {
             s.parse::<f64>().map(|v| json!(v)).map_err(|_| {
                 anyhow!(
