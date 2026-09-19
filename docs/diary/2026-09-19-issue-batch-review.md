@@ -83,3 +83,5 @@
 - 批 21 开工并交付（#58 重复录制零帧）：record::start 前垫一次廉价会话往返（Runtime.evaluate 1），把同会话 stop 后紧接第二次 startScreencast 的竞态窗口关掉（实证 workaround 同构：插一拍 waitJs 即活 r1=6 加 r2=2；机理未定谳疑 Chrome 侧订阅状态机，注释留线索链）；e2e 补 #58 回归锁（录二场收靶后同会话紧接第三场 recordStart 断至少一帧，修前零帧必现）；实弹三连录同会话第三场 2 帧。[实证: fmt、clippy、12 组 test、surface、aidoc strict、PEVO；e2e 3 测 52.00s 含新锁]
 
 - #59 定谳收口（#58 转化单）：判别实验三连（同 daemon 同页）：背靠背 stop 加 start 必零帧；中间垫 Browser 级往返（getVersion，非会话状态）活；中间纯 sleep 2 秒（零 CDP）也活。结论：stopScreencast 的拆卸是异步时间窗，紧接的 startScreencast 落窗内被一并拆掉；非消息序竞争（若是序，纯 sleep 不该救）。垫拍的毫秒级时延覆盖拆卸窗，修法升级为定谳级。record.rs 注释随卷，e2e 回归锁在岗。[实证: 两判别实验各一次，e2e 3 测全绿]
+
+- 批 22 开工并交付（REQ-009：#50 browse fetch 一次性只读抓取）：HTTP 腿 reqwest 直取（剥 script/style/title 标签压空白粗抽正文，title 提取）加三条件升级分类器 needs_upgrade（空、八墙词、少于 20 词；纯函数单测锁四态）加引擎腿走 daemon POST /eval（goto 加页内 innerText 抽取，懒拉起口径）；CLI browse fetch <url> 加 --markdown/-m 加 --timeout；实弹：example.com 经升级腿全链回 title 加正文（HTTP 腿判 thin-content 属实——其正文真少于 20 词），墙词与空态单测锁。v1 抽取是启发式非 Readability 已在 surface 披露。REQ-009 立项（抓取与录制批，#43 待续）。[实证: fmt、clippy、12 组 test（fetch 分类器与剥标签两单测）、surface、aidoc strict（28 件）、PEVO；实弹 example.com 升级腿]

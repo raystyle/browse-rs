@@ -266,6 +266,23 @@ pub const COMMANDS: &[CmdSpec] = &[
         example: "browse chrome doctor",
     },
     CmdSpec {
+        name: "fetch",
+        kind: CmdKind::Cli,
+        signature: "browse fetch <url> [--markdown|-m] [--timeout <s>]",
+        args: &[
+            arg!("url", "string", true),
+            arg!(
+                "markdown",
+                "boolean",
+                false,
+                "false（v1 同 text，启发式抽取非 Readability）"
+            ),
+            arg!("timeout", "number", false, "15"),
+        ],
+        description: "一次性只读抓取（#50）：HTTP 直取零浏览器成本；三条件升级引擎（正文空、墙词、少于 20 词）走 goto 加页内抽取（懒拉起）；回 {via, title, text, upgradedFrom}。对照 waitForResponse：这是无会话一次性抓取。",
+        example: "browse fetch https://example.com",
+    },
+    CmdSpec {
         name: "snippets-list",
         kind: CmdKind::Cli,
         signature: "browse snippets list [site]",

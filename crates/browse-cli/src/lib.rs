@@ -7,5 +7,6 @@
 //! CLI 进程本身无状态、即起即走。
 
 pub mod client;
+pub mod fetch;
 pub mod issue;
 pub mod render;

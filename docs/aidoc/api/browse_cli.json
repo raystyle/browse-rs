@@ -68,6 +68,21 @@
       "docs": "返回 daemon 日志与运行面目录（`%USERPROFILE%\\.browse-rs[\\<name>]`，多实例各一份）。"
     },
     {
+      "path": "browse_cli::fetch",
+      "kind": "module",
+      "docs": "一次性只读抓取（#50）：HTTP 优先，三条件升级引擎，markdown 直出。\n\n- HTTP 腿：reqwest 直取（零浏览器成本），判升级三条件：正文空、命中\n  墙词、正文少于 20 词。\n- 引擎腿：经 daemon POST /eval 走 goto 加页内抽取（启发式标题加段落，\n  非 Readability；v1 口径已在 surface 披露）。"
+    },
+    {
+      "path": "browse_cli::fetch::fetch",
+      "kind": "function",
+      "docs": "抓取入口：HTTP 优先，命中升级条件转引擎腿。\n\n# Errors\n\n两腿全失败（HTTP 网络错且引擎腿也失败）；引擎腿的 goto/抽取错误原样\n上抛。"
+    },
+    {
+      "path": "browse_cli::fetch::needs_upgrade",
+      "kind": "function",
+      "docs": "升级判定的三条件（#50）：正文空、墙词、少于 20 词。\n纯函数供单测锁。"
+    },
+    {
       "path": "browse_cli::issue",
       "kind": "module",
       "docs": "issue 通道客户端（REQ-057 契约，issues.ohmygh.com）：缺陷一键反馈。\n\n提交自动署名 `tool=browse` 加版本（编译期 Cargo 版）加平台加主机名，\n客户端先做与 Worker 同形的校验与截断（title 1 至 200、body 至多 20000、\nversion 40、platform 与 host 64）；读面 list 与 show 走 GET。\n`BROWSE_ISSUES_API` 覆写基址（测与灰度，同 omc 的 OMC_ISSUES_API 惯例）。"

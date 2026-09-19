@@ -6,6 +6,7 @@
 
 - [browse-cli overview](browse_cli/index.md): browse CLI 的可测半边：daemon 客户端（HTTP 调用 + 自动拉起）。
 - [browse-cli::client](browse_cli/client.md): daemon 客户端：本地 HTTP 调用 + 首次使用自动拉起 detached daemon。
+- [browse-cli::fetch](browse_cli/fetch.md): 一次性只读抓取（#50）：HTTP 优先，三条件升级引擎，markdown 直出。
 - [browse-cli::issue](browse_cli/issue.md): issue 通道客户端（REQ-057 契约，issues.ohmygh.com）：缺陷一键反馈。
 - [browse-cli::render](browse_cli/render.md): 求值结果的打印面：大值自动落盘（artifact/checkpoint 的降级形态，
 

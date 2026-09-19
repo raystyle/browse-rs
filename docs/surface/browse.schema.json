@@ -367,6 +367,32 @@
       "output": "runtime JSON（回值随页面与 CDP 而定）",
       "type": "object"
     },
+    "cli.fetch": {
+      "description": "browse fetch <url> [--markdown|-m] [--timeout <s>] 一次性只读抓取（#50）：HTTP 直取零浏览器成本；三条件升级引擎（正文空、墙词、少于 20 词）走 goto 加页内抽取（懒拉起）；回 {via, title, text, upgradedFrom}。对照 waitForResponse：这是无会话一次性抓取。",
+      "example": "browse fetch https://example.com",
+      "input": {
+        "properties": {
+          "markdown": {
+            "description": "缺省 false（v1 同 text，启发式抽取非 Readability）",
+            "type": "boolean"
+          },
+          "timeout": {
+            "description": "缺省 15",
+            "type": "number"
+          },
+          "url": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
     "cli.issue-list": {
       "description": "browse issue list [--status <s>] [--limit <n>] [--tool <t>] [--before <id>] 列 issue（新到旧；默认本工具，--tool 换过滤；默认 limit 100 即服务端上限，返回 count 是本次返回条数非在册总数，恰打满时 stderr 出截断提示（#52）；--before <id> 是 keyset 游标翻更早一页（#53））。",
       "example": "browse issue list --limit 10",

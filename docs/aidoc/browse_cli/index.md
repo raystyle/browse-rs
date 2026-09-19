@@ -11,6 +11,7 @@ CLI 进程本身无状态、即起即走。
 ## Modules
 
 - [`client`](client.md): daemon 客户端：本地 HTTP 调用 + 首次使用自动拉起 detached daemon。
+- [`fetch`](fetch.md): 一次性只读抓取（#50）：HTTP 优先，三条件升级引擎，markdown 直出。
 - [`issue`](issue.md): issue 通道客户端（REQ-057 契约，issues.ohmygh.com）：缺陷一键反馈。
 - [`render`](render.md): 求值结果的打印面：大值自动落盘（artifact/checkpoint 的降级形态，
 

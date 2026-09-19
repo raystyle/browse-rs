@@ -163,6 +163,9 @@ fn help_lists_every_cli_flag() {
         "--limit",
         "--before",
         "--dry-run",
+        "--markdown",
+        "-m",
+        "--timeout",
     ];
     let mut flags: Vec<String> = src
         .split(['"', '|'])
