@@ -770,7 +770,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("method", "string", true),
             arg!("ms", "number", false, "15000"),
         ],
-        description: "从事件缓冲取第一个 method 事件（取出即移除；超时报错）。",
+        description: "从事件缓冲取第一个 method 事件（取出即移除；超时报错）。只认活动 tab 与 browser 级事件，钉住 session（录制中）与他 tab 的不被误领；要看全缓冲用 peekEvents（不过滤）。",
         example: "await session.waitFor(\"Page.loadEventFired\", undefined, 15000)",
     },
     CmdSpec {
@@ -993,7 +993,7 @@ const COMPANION_FLAGS: &[(&str, &str)] = &[
     ),
     (
         "--secrets <file>",
-        "dotenv 密钥文件（#25.4）：片段经 secrets.<NAME> 取值，stdout 与回显脱敏为 ***（防整值外泄，不防片段；落盘工件与网络响应体不脱敏）；取值看 daemon 启动时仓、展示看本次 CLI 旗标；改密钥重启 daemon",
+        "dotenv 密钥文件（#25.4）：片段经 secrets.<NAME> 取值，stdout 与回显脱敏为 ***（防整值外泄，不防片段；落盘工件与网络响应体不脱敏）；键容 export 前缀与行内 # 注释（shell 可直用同文件）；取值看 daemon 启动时仓、展示看本次 CLI 旗标；改密钥重启 daemon",
     ),
     ("--port <p>", "显式调试端口（伴附着与 up）"),
     (

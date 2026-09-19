@@ -95,7 +95,7 @@
 | `session.setActiveSession(sessionId?)` | 覆写活动 sessionId（高级用法；一般走 session.use）。 |
 | `session.getActiveSession()` | 当前活动 sessionId（无则 null）。 |
 | `session.isConnected()` | 连接是否存活。 |
-| `session.waitFor(method, undefined, ms?)` | 从事件缓冲取第一个 method 事件（取出即移除；超时报错）。 |
+| `session.waitFor(method, undefined, ms?)` | 从事件缓冲取第一个 method 事件（取出即移除；超时报错）。只认活动 tab 与 browser 级事件，钉住 session（录制中）与他 tab 的不被误领；要看全缓冲用 peekEvents（不过滤）。 |
 | `session.waitJs(expression, ms?)` | 页内谓词轮询（真 V8 表达式），等到即返回真值本身。 |
 | `session.call(method, params?)` | 裸调任意 CDP 方法（守卫与 sessionId 路由同 session.<Domain>.<method>）。 |
 | `session.peekEvents(method, n?)` | 非破坏窥视事件缓冲（waitFor 之后仍能取到）。 |

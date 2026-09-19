@@ -87,7 +87,14 @@ pub struct Session {
     /// [`Session::is_connected`] 与引擎侧的懒 ensure 都看它。必须是
     /// `Arc` 共享给 `'static` 读循环，否则死线只写进局部旗，会话永远
     /// 谎报活着（attach 重附不重建的 2026-09-17 实测缺口即此）。
+    ///
+    /// 旧读泵的退出只在自己仍是当前连接（见 [`Self::conn_epoch`]）时
+    /// 才翻旗：重连后旧泵迟到退出不得误杀新连接（批 12 实测：detach
+    /// 报 Not connected 即此）。
     connected: Arc<AtomicBool>,
+    /// 连接纪元：每次 open_ws/connect_pipes 自增；读泵持有自己的纪元，
+    /// 退出时纪元仍等于当前值才翻存活旗。
+    conn_epoch: Arc<AtomicI64>,
     next_seq: Arc<AtomicI64>,
     /// 当前打开的 `Page.javascriptDialogOpening` 事件（route 截获维护，
     /// Closed 清空）。对话框会挂起 Input/evaluate，消费方要能先看它。
@@ -127,6 +134,7 @@ impl Session {
             target_id: Mutex::new(None),
             own_targets: Arc::new(Mutex::new(HashSet::new())),
             connected: Arc::new(AtomicBool::new(false)),
+            conn_epoch: Arc::new(AtomicI64::new(0)),
             next_seq: Arc::new(AtomicI64::new(1)),
             pending_dialog: Arc::new(Mutex::new(None)),
             pinned_sessions: Arc::new(Mutex::new(HashSet::new())),
@@ -240,18 +248,41 @@ impl Session {
         let dialog_r = self.pending_dialog.clone();
         let gens_r = self.doc_gens.clone();
         let flag = self.connected.clone();
+        let epoch = self.conn_epoch.fetch_add(1, Ordering::Relaxed) + 1;
+        let epoch_r = self.conn_epoch.clone();
         tokio::spawn(async move {
             while let Some(Ok(Message::Text(t))) = read.next().await {
+                // 被取代的泵静默退出（评审收口 G）：不再向共享缓冲投递旧
+                // 连接的帧，防污染 peekEvents 与误领 browser 级事件
+                if epoch_r.load(Ordering::Relaxed) != epoch {
+                    break;
+                }
                 if let Ok(v) = serde_json::from_str::<Value>(&t) {
                     route(v, &pending_r, &events_r, &seq_r, &dialog_r, &gens_r).await;
                 }
             }
-            flag.store(false, Ordering::Relaxed);
+            // 只有自己仍是当前连接才翻死线：旧连接的泵在重连后迟到退出
+            // 不得误杀新连接（批 12 实测：detach 报 Not connected 即此）
+            if epoch_r.load(Ordering::Relaxed) == epoch {
+                flag.store(false, Ordering::Relaxed);
+            }
         });
 
         *self.outgoing.lock().await = Some(tx);
         self.connected.store(true, Ordering::Relaxed);
+        self.reset_connection_state().await;
         Ok(())
+    }
+
+    /// 新连接落成时清 per-connection 记账（批 6 遗留回收兜底）：钉住
+    /// 集合、文档代、提交屏障都是旧连接上旧 session 的状态，重连（引擎
+    /// 换代后的再 ensure）后全是陈尸——钉住的 sid 已不存在，忘收场的
+    /// 录制不再拖住任何东西。own_targets 是 browser 级（同一浏览器
+    /// 重附仍有效），不清。
+    async fn reset_connection_state(&self) {
+        self.pinned_sessions.lock().await.clear();
+        self.doc_gens.lock().await.clear();
+        self.commit_barrier.lock().await.clear();
     }
 
     /// 接上一对 CDP 管道（clean-chrome 管道态，S005 契约）。
@@ -308,6 +339,8 @@ impl Session {
         let dialog_r = self.pending_dialog.clone();
         let gens_r = self.doc_gens.clone();
         let flag = self.connected.clone();
+        let epoch = self.conn_epoch.fetch_add(1, Ordering::Relaxed) + 1;
+        let epoch_r = self.conn_epoch.clone();
         let (chunk_tx, mut chunk_rx) = mpsc::unbounded_channel::<Vec<u8>>();
         std::thread::Builder::new()
             .name("cdp-pipe-read".into())
@@ -328,6 +361,10 @@ impl Session {
         tokio::spawn(async move {
             let mut carry: Vec<u8> = Vec::new();
             while let Some(chunk) = chunk_rx.recv().await {
+                // 同 open_ws：被取代的泵静默退出
+                if epoch_r.load(Ordering::Relaxed) != epoch {
+                    break;
+                }
                 carry.extend_from_slice(&chunk);
                 while let Some(pos) = carry.iter().position(|&c| c == 0) {
                     let frame: Vec<u8> = carry.drain(..=pos).collect();
@@ -336,11 +373,15 @@ impl Session {
                     }
                 }
             }
-            flag.store(false, Ordering::Relaxed);
+            // 同 open_ws：旧连接迟到退出不误杀新连接
+            if epoch_r.load(Ordering::Relaxed) == epoch {
+                flag.store(false, Ordering::Relaxed);
+            }
         });
 
         *self.outgoing.lock().await = Some(tx);
         self.connected.store(true, Ordering::Relaxed);
+        self.reset_connection_state().await;
         Ok(())
     }
 
@@ -830,6 +871,12 @@ impl Session {
 
     /// 从环形缓冲里等第一个 `method` 事件（取出即移除），超时报错。
     ///
+    /// 只认活动 tab 与 browser 级事件（批 6 遗留，对齐 waitForResponse
+    /// 的 #33 F2 口径）：事件带 sessionId 时必须等于活动 session，钉住的
+    /// 旧 session（录制中）与他 tab 的事件不被误领误消费；无 sessionId
+    /// 的 browser 级事件（Target.* 等）不过滤。要看全缓冲（含他 tab）用
+    /// [`Session::peek_events`]。
+    ///
     /// # Errors
     ///
     /// `wait_ms` 内没等到该事件。
@@ -837,17 +884,24 @@ impl Session {
         let deadline = tokio::time::Instant::now() + Duration::from_millis(wait_ms);
         loop {
             {
+                let active = self.session_id.lock().await.clone();
                 let mut evs = self.events.lock().await;
-                if let Some(i) = evs
-                    .iter()
-                    .position(|e| e.get("method").and_then(|m| m.as_str()) == Some(method))
-                {
+                if let Some(i) = evs.iter().position(|e| {
+                    e.get("method").and_then(|m| m.as_str()) == Some(method)
+                        && match (&active, e.get("sessionId").and_then(Value::as_str)) {
+                            // browser 级事件（无 sessionId）不过滤
+                            (_, None) => true,
+                            // 无活动 session 时只领 browser 级
+                            (None, Some(_)) => false,
+                            (Some(a), Some(sid)) => a == sid,
+                        }
+                }) {
                     return Ok(evs.remove(i).unwrap_or(Value::Null));
                 }
             }
             if tokio::time::Instant::now() >= deadline {
                 return Err(anyhow!(
-                    "等待 {method} 超时；下一步：确认所在域已开（Page 事件先 await session.Page.enable，Network 先 await session.Network.enable），或 peekEvents 看缓冲里已有什么"
+                    "等待 {method} 超时；下一步：确认所在域已开（Page 事件先 await session.Page.enable，Network 先 await session.Network.enable），或 peekEvents 看缓冲里已有什么（peek 不过滤他 tab 事件）"
                 ));
             }
             tokio::time::sleep(Duration::from_millis(25)).await;
@@ -1030,6 +1084,159 @@ mod tests {
 
     fn ev(method: &str, stamp: f64) -> Value {
         json!({ "method": method, "params": { "timestamp": stamp } })
+    }
+
+    /// 重连清账（批 12 评审 G1）：二次连接落成后 pinned/doc_gens/屏障
+    /// 全清（钉住解钉由 detach 行为可观），own_targets 保留。
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn reconnect_resets_connection_state() {
+        use std::io::{Read, Write};
+        use std::os::unix::net::UnixStream;
+        use std::sync::Mutex;
+        // 第一条连接：假对端只回_ack，事件侧灌一条主框架导航
+        let (sa, ba) = UnixStream::pair().unwrap();
+        let (sb, bb) = UnixStream::pair().unwrap();
+        let s = Session::new();
+        s.connect_pipes(sa, sb).await.expect("管道连接 1");
+        {
+            let peer_out = Arc::new(Mutex::new(ba));
+            let peer_out_p = peer_out.clone();
+            std::thread::spawn(move || {
+                let mut bb = bb;
+                let mut buf = Vec::<u8>::new();
+                let mut chunk = [0u8; 4096];
+                loop {
+                    let n = match bb.read(&mut chunk) {
+                        Ok(0) | Err(_) => break,
+                        Ok(n) => n,
+                    };
+                    buf.extend_from_slice(&chunk[..n]);
+                    while let Some(pos) = buf.iter().position(|&b| b == 0) {
+                        let frame: Vec<u8> = buf.drain(..=pos).collect();
+                        let Ok(v) = serde_json::from_slice::<Value>(&frame[..frame.len() - 1])
+                        else {
+                            continue;
+                        };
+                        let Some(id) = v.get("id").cloned() else {
+                            continue;
+                        };
+                        let resp = json!({"id": id, "result": {}});
+                        if let Ok(mut out) = peer_out_p.lock() {
+                            let _ = out.write_all(serde_json::to_string(&resp).unwrap().as_bytes());
+                            let _ = out.write_all(&[0]);
+                        }
+                    }
+                }
+            });
+            let ev = json!({"method": "Page.frameNavigated",
+                "params": {"frame": {"id": "F1"}}, "sessionId": "S1"});
+            let mut out = peer_out.lock().unwrap();
+            let _ = out.write_all(serde_json::to_string(&ev).unwrap().as_bytes());
+            let _ = out.write_all(&[0]);
+        }
+        s.set_active_session(Some("S1".into())).await;
+        // 注：事件先于 set_active 也没关系，route 只看事件自身
+        s.pin_session("S1").await;
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        assert!(s.doc_generation("S1").await >= 1, "连接 1 上应有文档代");
+
+        // 第二条连接：新对端记录 detach 调用（pin 清空后 use_target 应发 detach）
+        let (sa2, ba2) = UnixStream::pair().unwrap();
+        let (sb2, bb2) = UnixStream::pair().unwrap();
+        let detached = Arc::new(Mutex::new(Vec::<String>::new()));
+        let (detached_p, peer_out_p2) = (detached.clone(), Arc::new(Mutex::new(ba2)));
+        std::thread::spawn(move || {
+            let mut bb2 = bb2;
+            let mut buf = Vec::<u8>::new();
+            let mut chunk = [0u8; 4096];
+            loop {
+                let n = match bb2.read(&mut chunk) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => n,
+                };
+                buf.extend_from_slice(&chunk[..n]);
+                while let Some(pos) = buf.iter().position(|&b| b == 0) {
+                    let frame: Vec<u8> = buf.drain(..=pos).collect();
+                    let Ok(v) = serde_json::from_slice::<Value>(&frame[..frame.len() - 1]) else {
+                        continue;
+                    };
+                    let Some(id) = v.get("id").cloned() else {
+                        continue;
+                    };
+                    let method = v.get("method").and_then(Value::as_str).unwrap_or("");
+                    let resp = match method {
+                        "Target.attachToTarget" => {
+                            json!({"id": id, "result": {"sessionId": "S2"}})
+                        }
+                        "Target.detachFromTarget" => {
+                            let sid = v
+                                .pointer("/params/sessionId")
+                                .and_then(Value::as_str)
+                                .unwrap_or("")
+                                .to_string();
+                            detached_p.lock().unwrap().push(sid);
+                            json!({"id": id, "result": {}})
+                        }
+                        _ => json!({"id": id, "result": {}}),
+                    };
+                    if let Ok(mut out) = peer_out_p2.lock() {
+                        let _ = out.write_all(serde_json::to_string(&resp).unwrap().as_bytes());
+                        let _ = out.write_all(&[0]);
+                    }
+                }
+            }
+        });
+        s.connect_pipes(sa2, sb2).await.expect("管道连接 2");
+        assert_eq!(s.doc_generation("S1").await, 0, "重连后文档代应清零");
+        // 钉住集已清：use_target 换靶会对旧 sid 发 detach（不清则跳过）
+        s.use_target("T2").await.expect("attach T2");
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        assert!(
+            detached.lock().unwrap().iter().any(|sid| sid == "S1"),
+            "pin 清空后旧 sid 应被 detach: {:?}",
+            detached.lock().unwrap()
+        );
+    }
+
+    /// waitFor 活动过滤（批 6 遗留）：他 sid 的同 method 事件不被误领，
+    /// browser 级（无 sessionId）不过滤。
+    #[tokio::test]
+    async fn wait_for_filters_foreign_sessions() {
+        let s = Session::new();
+        s.events.lock().await.push_back(json!({
+            "method": "Page.frameNavigated", "params": {}, "sessionId": "OTHER", "seq": 1
+        }));
+        s.set_active_session(Some("S1".into())).await;
+        let got = tokio::time::timeout(Duration::from_millis(300), async {
+            // 后台线程 150ms 后投活动 session 的事件（先用泵不进，走直塞
+            // 需要锁；经 spawn 的管道路径过重，这里由定时任务直塞）
+            tokio::time::sleep(Duration::from_millis(150)).await;
+            s.events.lock().await.push_back(json!({
+                "method": "Page.frameNavigated", "params": {}, "sessionId": "S1", "seq": 2
+            }));
+            Ok::<(), ()>(())
+        });
+        let _ = got.await;
+        let ev = s
+            .wait_for("Page.frameNavigated", 2_000)
+            .await
+            .expect("等到活动事件");
+        assert_eq!(ev.get("sessionId").and_then(Value::as_str), Some("S1"));
+        // 他 sid 的事件仍在缓冲（peek 可见），且 browser 级不过滤
+        assert_eq!(
+            s.peek_events("Page.frameNavigated", 5).await.len(),
+            1,
+            "他 sid 留缓冲"
+        );
+        s.events.lock().await.push_back(json!({
+            "method": "Target.targetCreated", "params": {}, "seq": 3
+        }));
+        let ev = s
+            .wait_for("Target.targetCreated", 300)
+            .await
+            .expect("browser 级不过滤");
+        assert!(ev.get("sessionId").is_none());
     }
 
     /// peek 非破坏：窥视后 wait_for 仍能取到同一条。

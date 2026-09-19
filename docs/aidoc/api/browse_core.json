@@ -150,7 +150,7 @@
     {
       "path": "browse_core::js_host::load_secrets",
       "kind": "function",
-      "docs": "加载 dotenv 形密钥文件（#25.4）：`KEY=VALUE` 行，`#` 注释与空行忽略，\n值剥首尾配对引号；重复键后者覆盖。幂等（清后装）。\n\n# Errors\n\n文件读不了或某行不是 `KEY=VALUE` 形（错误带行号）。"
+      "docs": "加载 dotenv 形密钥文件（#25.4）：`KEY=VALUE` 行，`#` 注释与空行忽略，\n键容 `export ` 前缀（shell 直用同文件，批 9 G2），值剥首尾配对引号、\n剥行内注释（未引值从首个 ` #` 截断；引号值以闭引号为界，`#` 在引号\n内是字面）；重复键后者覆盖。幂等（清后装）。\n\n# Errors\n\n文件读不了或某行不是 `KEY=VALUE` 形（错误带行号）。"
     },
     {
       "path": "browse_core::js_host::mask_secrets",

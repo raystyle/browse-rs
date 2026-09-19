@@ -20,7 +20,9 @@ static SECRETS: std::sync::Mutex<Vec<(String, String)>> = std::sync::Mutex::new(
 pub(crate) static SECRETS_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 /// 加载 dotenv 形密钥文件（#25.4）：`KEY=VALUE` 行，`#` 注释与空行忽略，
-/// 值剥首尾配对引号；重复键后者覆盖。幂等（清后装）。
+/// 键容 `export ` 前缀（shell 直用同文件，批 9 G2），值剥首尾配对引号、
+/// 剥行内注释（未引值从首个 ` #` 截断；引号值以闭引号为界，`#` 在引号
+/// 内是字面）；重复键后者覆盖。幂等（清后装）。
 ///
 /// # Errors
 ///
@@ -43,8 +45,29 @@ pub fn load_secrets(path: &str) -> Result<()> {
                 i + 1
             );
         };
-        let k = k.trim().to_string();
+        // export 前缀容错（批 9 G2，评审追加固）：shell 与 browse 共用一份
+        // 文件；「export」后接空白（空格或制表符）才剥，防 exporter= 被误伤
+        let k = k.trim();
+        let k = match k.strip_prefix("export") {
+            Some(rest) if rest.is_empty() || rest.starts_with(char::is_whitespace) => {
+                rest.trim_start()
+            }
+            _ => k,
+        }
+        .to_string();
         let mut v = v.trim().to_string();
+        // 行内注释（批 9 G2）：引号值闭引号后为注释界；未引值从首个 " #"
+        // 截断（# 前无空格是字面，dotenv 通例）
+        let quoted = v.starts_with('"') || v.starts_with('\'');
+        if quoted {
+            let q = v.as_bytes()[0] as char;
+            if let Some(close) = v[1..].find(q) {
+                v = v[..close + 2].to_string();
+            }
+        } else if let Some(cut) = v.find(" #") {
+            v.truncate(cut);
+            v = v.trim_end().to_string();
+        }
         if v.len() >= 2
             && ((v.starts_with('"') && v.ends_with('"'))
                 || (v.starts_with('\'') && v.ends_with('\'')))
@@ -3027,7 +3050,11 @@ return JSON.stringify(JSON.parse(raw).items.slice(0, 1))"#,
         let dir = std::env::temp_dir().join(format!("browse-sec-{}", std::process::id()));
         std::fs::create_dir_all(&dir).ok();
         let f = dir.join("s.env");
-        std::fs::write(&f, "# 注释\nA=1\n\nB=\"two words\"\nC='sq'\nA=2\n").unwrap();
+        std::fs::write(
+            &f,
+            "# 注释\nA=1\n\nB=\"two words\"\nC='sq'\nA=2\nexport D=exp\nE=bare # trailing\nF=\"quoted # kept\"\nG=abc#nospace\nexport  H=two-space\nexport\tI=tab\nEXPORTER=keep\n",
+        )
+        .unwrap();
         load_secrets(f.to_str().unwrap()).expect("解析");
         {
             let g = SECRETS.lock().unwrap();
@@ -3040,6 +3067,14 @@ return JSON.stringify(JSON.parse(raw).items.slice(0, 1))"#,
             assert_eq!(get("A"), "2", "重复键后者覆盖");
             assert_eq!(get("B"), "two words");
             assert_eq!(get("C"), "sq");
+            // 批 9 G2：export 前缀与行内注释
+            assert_eq!(get("D"), "exp", "export 前缀应剥");
+            assert_eq!(get("E"), "bare", "未引值行内注释应截断");
+            assert_eq!(get("F"), "quoted # kept", "引号内 # 是字面");
+            assert_eq!(get("G"), "abc#nospace", "# 前无空格是字面（dotenv 通例）");
+            assert_eq!(get("H"), "two-space", "export 加多空格前缀应剥");
+            assert_eq!(get("I"), "tab", "export 后制表符分隔也应剥（评审追加固）");
+            assert_eq!(get("EXPORTER"), "keep", "exporter 键不被误剥前缀");
         }
         let bad = dir.join("bad.env");
         std::fs::write(&bad, "no-equal-line\n").unwrap();

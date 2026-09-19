@@ -1301,7 +1301,7 @@
       "type": "object"
     },
     "session.waitFor": {
-      "description": "session.waitFor(method, undefined, ms?) 从事件缓冲取第一个 method 事件（取出即移除；超时报错）。",
+      "description": "session.waitFor(method, undefined, ms?) 从事件缓冲取第一个 method 事件（取出即移除；超时报错）。只认活动 tab 与 browser 级事件，钉住 session（录制中）与他 tab 的不被误领；要看全缓冲用 peekEvents（不过滤）。",
       "example": "await session.waitFor(\"Page.loadEventFired\", undefined, 15000)",
       "input": {
         "properties": {
