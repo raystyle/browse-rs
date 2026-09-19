@@ -78,6 +78,11 @@
       "docs": "issue 服务缺省基址（Worker 加 D1 真源，REQ-057）。"
     },
     {
+      "path": "browse_cli::issue::dry_run",
+      "kind": "function",
+      "docs": "预览一条 issue 载荷（#57 G6 `--dry-run`）：与 [`new`] 同规校验，不发\n网络请求，回应发载荷（含自动署名字段）。契约实弹与演练走这里，不再\n往生产台账落测试单（评审首单实弹 -b 契约真发了 #56 的教训）。\n\n# Errors\n\n客户端校验不过（title 空或超 200、body 超 20000），与 [`new`] 同文。"
+    },
+    {
       "path": "browse_cli::issue::list",
       "kind": "function",
       "docs": "列 issue：`GET /api/issues?tool=&status=&limit=&before=`（新到旧，limit 1\n至 100 由本函数 clamp 到界；`before` 是 keyset 游标（#53），取该 id 之前\n更早的一页，非法值服务端回 400）。返回 `count` 是本次返回条数非在册\n总数；返回条数恰打满 limit 时 stderr 出一行截断提示（#52）。\n\n# Errors\n\n网络或超时；服务端非 200（含 before 非法 400）。"

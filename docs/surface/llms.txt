@@ -26,7 +26,7 @@
 | `browse chrome update` | 升级到镜像最新版并默认切用（发现源 latest，BROWSE_CHROME_LATEST 可钉）。 |
 | `browse chrome remove <版本>` | 删已装版本（目录加登记一起清；pin 指向的拒删，先 use 切走）。 |
 | `browse chrome doctor` | 托管 Chromium 部署体检（在位/文件基线/pin；AppContainer ACE 仅 Windows 有值，缺则 hints 给 icacls 修法，#32）。 |
-| `browse issue new <标题> [--body <正文>]` | 一键缺陷反馈：自动署名 tool=browse 加版本加平台加主机。 |
+| `browse issue new <标题> [--body <正文>] [--dry-run]` | 一键缺陷反馈：自动署名 tool=browse 加版本加平台加主机；--dry-run 同规校验并预览载荷零网络副作用（#57 G6，契约实弹走它别落生产台账）。 |
 | `browse issue list [--status <s>] [--limit <n>] [--tool <t>] [--before <id>]` | 列 issue（新到旧；默认本工具，--tool 换过滤；默认 limit 100 即服务端上限，返回 count 是本次返回条数非在册总数，恰打满时 stderr 出截断提示（#52）；--before <id> 是 keyset 游标翻更早一页（#53））。 |
 | `browse issue show <id>` | 看 issue 详情。 |
 | `browse --serve [--bind host:port]` | 前台跑 daemon（--bind 选监听地址）。 |
@@ -48,11 +48,11 @@
 | `snapshot()` | AX 树快照：nodes 带 role/name/value/短 ref（e1、e2…），引用表的唯一来源；url/title 走 CDP 查询面，页面主世界零写入（无注入痕）。 |
 | `screenshot(path?, full?, opts?)` | 页内截图存文件；opts（#24）：format png/jpeg、quality（jpeg 1-100 缺省 80）、ifChanged（与既有文件逐字节相同即 skipped，省读回不省拍摄；字节可比性限同一引擎二进制）。回 {path,bytes,skipped}。同片段 navigate 后的提交窗竞速由 host 层统一等提交（#34 根因级，页面级调用闸到主框架 frameNavigated），本函数另内建 Not attached 有界重试兜底。 |
 | `pdf(path?)` | 当前页存 PDF（仅无头 chrome），回 {path,bytes}。 |
-| `newTab(url?)` | 开新 tab 并设为活动路由（先 about:blank 再 goto，防竞速假完成）。 |
+| `newTab(url?)` | 开新 tab 并设为活动路由（先 about:blank 再 goto，防竞速假完成）；带 url 时内部等加载预算 15 秒与 goto 缺省对齐（#57 G3）。 |
 | `switchTab(targetId)` | 切活动路由（不改 Chrome 可见前景，人机共存）。 |
 | `currentTab()` | 当前活动 tab 简表（无活动返回 null）。 |
 | `closeTab(targetId?)` | 关 tab；守卫只放行自建 tab（chrome 初始页与用户 tab 拒绝）。 |
-| `goto(url, opts?)` | 一步导航（#19）：navigate 加 waitLoad 一体收尾，可选 waitIdle: true（或秒数）再等网络静默，回 {url,title,elapsedMs}；已加载页立即返回。替代 navigate 加 waitFor(loadEventFired) 组合（后者事件已发再注册即假超时，竞速窗），本函数走 readyState 轮询无此窗。timeout 秒口径（#51）。 |
+| `goto(url, opts?)` | 一步导航（#19）：navigate 加 waitLoad 一体收尾，可选 waitIdle: true（或秒数）再等网络静默，回 {url,title,elapsedMs}；已加载页立即返回。替代 navigate 加 waitFor(loadEventFired) 组合（后者事件已发再注册即假超时，竞速窗），本函数走 readyState 轮询无此窗。timeout 秒口径（#51；不小于 1000 按毫秒误写换算并告警，封顶 600 秒）。 |
 | `goBack(delta?)` | 历史回退 delta 步（#39，越界钳到最早），等加载收尾，回 {steps,url,title}。 |
 | `goForward(delta?)` | 历史前进 delta 步（#39，越界钳到最新），等加载收尾，回 {steps,url,title}。 |
 | `reload(opts?)` | 刷新当前页（#39）：opts.ignoreCache 走强制刷新；等加载收尾，回 {ignoredCache,url,title,elapsedMs}。 |
@@ -70,8 +70,8 @@
 | `routeBlock(pattern)` | 网络拦截：glob 命中的请求直接失败（BlockedByClient）。作用于当前活动 tab。 |
 | `routeMock(pattern, body, opts?)` | 网络拦截：命中的请求本地应答（默认带 ACAO *）。 |
 | `routeClear()` | 清空全部拦截规则并 Fetch.disable。 |
-| `waitLoad(s?)` | 等 document.readyState 到 complete（已加载立即返回）。timeout 秒口径（#51）：大于 3600 视为毫秒误写，告警并按毫秒换算（封顶 600 秒）；1000 至 3600 按秒直解不告警（2000 即 33 分钟），子分钟等待直写个位数秒；旧毫秒习惯值等价迁移。 |
-| `waitForResponse(pattern, s?)` | 等 URL 命中 glob（与 routeBlock/routeMock 同写法）的最近一个响应完成（#20，只认活动 tab）：回 {requestId,url,status,headers,body,base64Encoded,json}；命中含历史（Network 域须在触发前已开，本函数幂等开收不到已发出的响应），方言无并发，可用形态是触发后等待；体等 loadingFinished 再取（5 秒窗），失败显式 bodyError；base64 自动解码，可解析时附 json。timeout 秒口径（#51：大于 3600 按毫秒误写换算并告警，封顶 600 秒；1000 至 3600 按秒直解不告警（2000 即 33 分钟），子分钟等待直写个位数秒）。 |
+| `waitLoad(s?)` | 等 document.readyState 到 complete（已加载立即返回）。timeout 秒口径（#51）：不小于 1000 视为毫秒误写，换算并告警，封顶 600 秒（#57 F1 判据收紧，1000 至 3600 不再静默秒直解）；秒直写三位数内（上界 999 秒）；旧毫秒习惯值等价迁移。 |
+| `waitForResponse(pattern, s?)` | 等 URL 命中 glob（与 routeBlock/routeMock 同写法）的最近一个响应完成（#20，只认活动 tab）：回 {requestId,url,status,headers,body,base64Encoded,json}；命中含历史（Network 域须在触发前已开，本函数幂等开收不到已发出的响应），方言无并发，可用形态是触发后等待；体等 loadingFinished 再取（5 秒窗），失败显式 bodyError；base64 自动解码，可解析时附 json。timeout 秒口径（#51：不小于 1000 按毫秒误写换算并告警，封顶 600 秒；秒直写三位数内（上界 999 秒））。 |
 | `pageEval(js)` | 全量 JS 一次求值（#22 受限旁路的方言内形态）：直发 Runtime.evaluate（returnByValue 加 awaitPromise），值序列化回传；模板字符串/正则/函数声明直接写。CLI 侧等价 browse --js。 |
 | `responseBody(requestId)` | 按 requestId 取响应体（#20）：peekEvents/findEvents 拿到的 id 皆可用，base64 自动解码，回 {body,base64Encoded,json} 与 waitForResponse 同形。 |
 | `hoverRef(ref)` | 悬停到元素中心（#23）：触发 CSS :hover 与悬停菜单。 |
@@ -85,7 +85,7 @@
 | `setInitScript(code)` | 每新文档前注入脚本（#25.2）：反检测补丁、杀 cookie 横幅；SPA 路由不重跑（只对新文档生效），空串清除。 |
 | `exportStorageState()` | 导出会话态（#25.3）：cookies 全量加当前页 origin 的 localStorage；多 origin 逐个切 tab 再导。 |
 | `importStorageState(state 或 path)` | 导入会话态（#25.3）：吃 exportStorageState 的返回值或其落盘文件路径，回两边计数。 |
-| `waitIdle(s?)` | 等 network 静默（窗口语义：起点前挂着的请求不计）。timeout 秒口径（#51）：大于 3600 视为毫秒误写，告警并按毫秒换算（封顶 600 秒）；1000 至 3600 按秒直解不告警（2000 即 33 分钟），子分钟等待直写个位数秒。 |
+| `waitIdle(s?)` | 等 network 静默（窗口语义：起点前挂着的请求不计）。timeout 秒口径（#51）：不小于 1000 视为毫秒误写，换算并告警，封顶 600 秒（#57 F1 判据收紧，1000 至 3600 不再静默秒直解）；秒直写三位数内（上界 999 秒）。 |
 | `recordStart(opts?)` | 开始录屏（Screencast 帧流落盘；everyNthFrame 源端抽帧、maxWidth/maxHeight 限宽高）。 |
 | `recordStop()` | 停止录制，回 {frames,bytes,dir,sessionChanged}（PNG 已在盘上；录制中被换靶则 true，帧流钉住不中断）。 |
 | `hostFunctions()` | 本目录的运行时探针（agent 自描述，schema/清单同源）。 |
@@ -105,7 +105,7 @@
 | `session.getActiveSession()` | 当前活动 sessionId（无则 null）。 |
 | `session.isConnected()` | 连接是否存活。 |
 | `session.waitFor(method, undefined, s?)` | 从事件缓冲取第一个 method 事件（取出即移除；超时报错，秒口径 #51）。只认活动 tab 与 browser 级事件，钉住 session（录制中）与他 tab 的不被误领；要看全缓冲用 peekEvents（不过滤）。竞速警示（#19）：loadEventFired 这类一次性事件可能在你注册前已发（假超时），等加载用 goto()/waitLoad()，等导航事件用 frameNavigated。 |
-| `session.waitJs(expression, s?)` | 页内谓词轮询（真 V8 表达式），等到即返回真值本身。timeout 秒口径（#51）：大于 3600 视为毫秒误写，告警并按毫秒换算（封顶 600 秒）；1000 至 3600 按秒直解不告警（2000 即 33 分钟），子分钟等待直写个位数秒。 |
+| `session.waitJs(expression, s?)` | 页内谓词轮询（真 V8 表达式），等到即返回真值本身。timeout 秒口径（#51）：不小于 1000 视为毫秒误写，换算并告警，封顶 600 秒（#57 F1 判据收紧，1000 至 3600 不再静默秒直解）；秒直写三位数内（上界 999 秒）。 |
 | `session.call(method, params?)` | 裸调任意 CDP 方法（守卫与 sessionId 路由同 session.<Domain>.<method>）。 |
 | `session.peekEvents(method, n?)` | 非破坏窥视事件缓冲（waitFor 之后仍能取到）。 |
 | `session.peekEventsSince(method, sinceSeq, n?)` | seq 游标增量窥视（首拍 sinceSeq 用 0，之后用上一拍最后一条的 seq）。 |

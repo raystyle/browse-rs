@@ -162,6 +162,7 @@ fn help_lists_every_cli_flag() {
         "--status",
         "--limit",
         "--before",
+        "--dry-run",
     ];
     let mut flags: Vec<String> = src
         .split(['"', '|'])

@@ -1033,7 +1033,7 @@ return await responseBody(evs[0].params.requestId)"#,
     eprintln!("[e2e] waitLoad 开始");
     // waitLoad：已加载页面立即返回 complete
     let wl = host
-        .eval_snippet("return await waitLoad(8000)")
+        .eval_snippet("return await waitLoad(8)")
         .await
         .expect("waitLoad");
     assert_eq!(wl.pointer("/readyState"), Some(&json!("complete")), "{wl}");

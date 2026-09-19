@@ -458,15 +458,11 @@ impl Session {
         // 事件与命令回执的到达序不保证，同步计数消灭「navigate 后紧接
         // 引用旧 ref」的微观竞速窗；事件路径再计一次也无妨（只需不等）。
         // 用户侧导航（点链接、location 跳转）由 route() 的事件计数覆盖。
+        // 只有跨文档才换代（#57 F3）：同文档 fragment 导航不换文档，ref
+        // 本就有效，无条件递增会假换代白拒有效 ref。
         if method == "Page.navigate"
             && let Some(sid) = self.session_id.lock().await.clone()
         {
-            *self
-                .doc_gens
-                .lock()
-                .await
-                .entry(sid.clone())
-                .or_insert(0u64) += 1;
             // 跨文档导航（回执带 loaderId、无 errorText、非下载）设提交屏障
             // 水位：后续页面级 call() 等水位后的主框架 frameNavigated 再
             // 放行。同文档导航（fragment）无 loaderId 不设屏障；失败导航
@@ -484,8 +480,16 @@ impl Session {
                     .get("isDownload")
                     .and_then(Value::as_bool)
                     .unwrap_or(false);
-            if cross_doc && let Some(mark) = pre_mark {
-                self.commit_barrier.lock().await.insert(sid, mark);
+            if cross_doc {
+                *self
+                    .doc_gens
+                    .lock()
+                    .await
+                    .entry(sid.clone())
+                    .or_insert(0u64) += 1;
+                if let Some(mark) = pre_mark {
+                    self.commit_barrier.lock().await.insert(sid, mark);
+                }
             }
         }
         Ok(v)
@@ -706,11 +710,17 @@ impl Session {
                 .send("Target.detachFromTarget", json!({ "sessionId": old_sid }))
                 .await
             {
-                // 失败留痕不阻断：现场表现为事件重复再现时 daemon.log 有线索
-                eprintln!(
-                    "[browse] Target.detachFromTarget({}) 失败（忽略）：{e:#}",
-                    &old_sid[..old_sid.len().min(8)]
-                );
+                // 失败按错误码分流（#57 G2）：-32602 / No session with
+                // given id 是陈旧 sid 已不存在（预期，静默）；其他失败
+                // 意味着旧 flat session 域仍开着，事件三倍投递（#33 形）
+                // 可能再现，升级留痕指路
+                let msg = format!("{e:#}");
+                if !msg.contains("-32602") && !msg.contains("No session with given id") {
+                    eprintln!(
+                        "[browse] Target.detachFromTarget({}) 失败（旧 flat session 域可能仍开，若事件重复见 #33 形）：{msg}",
+                        &old_sid[..old_sid.len().min(8)]
+                    );
+                }
             }
             // 已 detach 的 session 记账随清（批 10 遗留）：doc_gens 与提交
             // 屏障不再累积陈旧 sid；重附会得新 sid，代从 0 重计（旧 ref
@@ -827,6 +837,12 @@ impl Session {
     /// 实现是丢弃发送端，写循环随之退出、socket 关闭。对齐官方 harness
     /// 的 `session.close()`。
     pub async fn close(&self) {
+        // 收场腿与两条连接死亡腿同呼吸（#57 F4）：纪元递增让迟到读泵
+        // 静默退出、在途调用立刻失败、三账（pinned/doc_gens/屏障）清空
+        // ——不 drain 的 close 会让在途调用白等满 CALL_TIMEOUT 并占住
+        // eval 单飞槽（89d994c 想消灭的形态换了出口）
+        self.conn_epoch.fetch_add(1, Ordering::Relaxed);
+        self.reset_connection_state().await;
         *self.outgoing.lock().await = None;
         self.connected.store(false, Ordering::Relaxed);
     }
@@ -1301,6 +1317,109 @@ mod tests {
             "失败应即时（实测 {:?}）",
             t0.elapsed()
         );
+    }
+
+    /// #57 F3 回归锁：同文档 fragment 导航（回执无 loaderId）不换代——
+    /// 无条件递增会假换代白拒有效 ref（评审实弹 g2 到 g3）。
+    #[tokio::test]
+    async fn fragment_navigate_does_not_bump_doc_generation() {
+        use std::io::{Read, Write};
+        use std::os::unix::net::UnixStream;
+        use std::sync::Mutex;
+        let (sa, ba) = UnixStream::pair().unwrap();
+        let (sb, bb) = UnixStream::pair().unwrap();
+        let s = Session::new();
+        s.connect_pipes(sa, sb).await.expect("管道连接");
+        s.set_active_session(Some("S1".into())).await;
+        // 假对端按旗标回 navigate：带 loaderId（跨文档）或不带（fragment）
+        let with_loader = Arc::new(Mutex::new(true));
+        let peer_out = Arc::new(Mutex::new(ba));
+        let (flag_p, out_p) = (with_loader.clone(), peer_out.clone());
+        std::thread::spawn(move || {
+            let mut bb = bb;
+            let mut buf = Vec::<u8>::new();
+            let mut chunk = [0u8; 4096];
+            loop {
+                let n = match bb.read(&mut chunk) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => n,
+                };
+                buf.extend_from_slice(&chunk[..n]);
+                while let Some(pos) = buf.iter().position(|&b| b == 0) {
+                    let frame: Vec<u8> = buf.drain(..=pos).collect();
+                    let Ok(v) = serde_json::from_slice::<Value>(&frame[..frame.len() - 1]) else {
+                        continue;
+                    };
+                    let Some(id) = v.get("id").cloned() else {
+                        continue;
+                    };
+                    let is_nav = v.get("method").and_then(Value::as_str) == Some("Page.navigate");
+                    let loader = is_nav && *flag_p.lock().unwrap();
+                    let resp = if loader {
+                        json!({"id": id, "result": {"loaderId": "L1", "frameId": "F1"}})
+                    } else {
+                        json!({"id": id, "result": {"frameId": "F1"}})
+                    };
+                    if let Ok(mut out) = out_p.lock() {
+                        let _ = out.write_all(serde_json::to_string(&resp).unwrap().as_bytes());
+                        let _ = out.write_all(&[0]);
+                    }
+                }
+            }
+        });
+        s.call("Page.navigate", json!({ "url": "https://a.test/" }))
+            .await
+            .expect("跨文档 navigate");
+        assert_eq!(s.doc_generation("S1").await, 1, "跨文档应换代");
+        *with_loader.lock().unwrap() = false;
+        s.call("Page.navigate", json!({ "url": "https://a.test/#b" }))
+            .await
+            .expect("fragment navigate");
+        assert_eq!(
+            s.doc_generation("S1").await,
+            1,
+            "同文档 fragment 不换代（修前假递增白拒有效 ref）"
+        );
+    }
+
+    /// #57 F4 回归锁：close() 即时 drain 在途调用（修前白等满 30 秒
+    /// CALL_TIMEOUT 并占 eval 单飞槽）。
+    #[tokio::test]
+    async fn close_fails_inflight_calls() {
+        use std::io::Read;
+        use std::os::unix::net::UnixStream;
+        let (sa, ba) = UnixStream::pair().unwrap();
+        let (sb, bb) = UnixStream::pair().unwrap();
+        let s = Session::new();
+        s.connect_pipes(sa, sb).await.expect("管道连接");
+        s.set_active_session(Some("S1".into())).await;
+        // 假对端：收下请求永不回应（对端不死，隔离 close 自身的 drain 面）
+        std::thread::spawn(move || {
+            let mut bb = bb;
+            let mut chunk = [0u8; 4096];
+            loop {
+                match bb.read(&mut chunk) {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => {}
+                }
+            }
+        });
+        let _peer_kept = ba; // 对端写句柄存活：唯一变量是 close()
+        let call = tokio::spawn({
+            let s = s.clone();
+            async move {
+                s.call("Runtime.evaluate", json!({ "expression": "1" }))
+                    .await
+            }
+        });
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        s.close().await;
+        let r = tokio::time::timeout(Duration::from_millis(2_000), call)
+            .await
+            .expect("close 应在 2 秒内令在途调用失败（修前挂满 30 秒）")
+            .expect("task 不应 panic");
+        let msg = format!("{r:#?}");
+        assert!(msg.contains("连接已断开"), "错误应归因断开而非超时: {msg}");
     }
 
     /// waitFor 活动过滤（批 6 遗留）：他 sid 的同 method 事件不被误领，

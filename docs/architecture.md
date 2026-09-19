@@ -10,8 +10,12 @@ crates/cdp          连接与协议（无业务语义）
                     sessionId 路由（call_on 可显式指定目标 session）；事件环形
                     缓冲（1000 条，seq 盖戳）；call 守卫；drain_events 消费式取；
                     连接态状态机（conn_epoch 纪元：重连清 pinned/doc_gens/
-                    屏障/在途 pending，旧泵静默；文档代计数与提交屏障见
-                    js_host 条目；waitFor 活动过滤）
+                    屏障/在途 pending，旧泵静默；close() 同律 drain；文档代
+                    计数与提交屏障见 js_host 条目；waitFor 活动过滤。提交屏
+                    障是弱保证（#57 G1）：水位取自活动 session 的 send 前
+                    seq，回执到达前换靶会把水位挂到新 sid（白等满窗后保守
+                    放行留痕）；屏障入口不做 seen-since 过滤，提交信号早于
+                    水位即放行——两个方向都偏保守不偏漏）
   discovery.rs      wsUrl/port/profileDir -> WS URL；probe_default 附着探测；
                     DevToolsActivePort 文本解析（纯函数，契约测试锁）
   spawn.rs          chrome 发现序；端口态/管道态 spawn（Windows 句柄继承 /

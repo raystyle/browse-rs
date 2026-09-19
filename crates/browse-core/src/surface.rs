@@ -268,12 +268,12 @@ pub const COMMANDS: &[CmdSpec] = &[
     CmdSpec {
         name: "issue-new",
         kind: CmdKind::Cli,
-        signature: "browse issue new <标题> [--body <正文>]",
+        signature: "browse issue new <标题> [--body <正文>] [--dry-run]",
         args: &[
             arg!("title", "string", true),
             arg!("body", "string", false, "旗标缺省吃管道 stdin"),
         ],
-        description: "一键缺陷反馈：自动署名 tool=browse 加版本加平台加主机。",
+        description: "一键缺陷反馈：自动署名 tool=browse 加版本加平台加主机；--dry-run 同规校验并预览载荷零网络副作用（#57 G6，契约实弹走它别落生产台账）。",
         example: "browse issue new <标题> --body <复现步骤>",
     },
     CmdSpec {
@@ -419,7 +419,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "newTab(url?)",
         args: &[arg!("url", "string", false, "about:blank")],
-        description: "开新 tab 并设为活动路由（先 about:blank 再 goto，防竞速假完成）。",
+        description: "开新 tab 并设为活动路由（先 about:blank 再 goto，防竞速假完成）；带 url 时内部等加载预算 15 秒与 goto 缺省对齐（#57 G3）。",
         example: "await newTab(\"https://example.com\")",
     },
     CmdSpec {
@@ -454,7 +454,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("url", "string", true),
             arg!("opts", "object", false, "{timeout:15}"),
         ],
-        description: "一步导航（#19）：navigate 加 waitLoad 一体收尾，可选 waitIdle: true（或秒数）再等网络静默，回 {url,title,elapsedMs}；已加载页立即返回。替代 navigate 加 waitFor(loadEventFired) 组合（后者事件已发再注册即假超时，竞速窗），本函数走 readyState 轮询无此窗。timeout 秒口径（#51）。",
+        description: "一步导航（#19）：navigate 加 waitLoad 一体收尾，可选 waitIdle: true（或秒数）再等网络静默，回 {url,title,elapsedMs}；已加载页立即返回。替代 navigate 加 waitFor(loadEventFired) 组合（后者事件已发再注册即假超时，竞速窗），本函数走 readyState 轮询无此窗。timeout 秒口径（#51；不小于 1000 按毫秒误写换算并告警，封顶 600 秒）。",
         example: "return await goto(\"https://example.com\", {waitIdle: true})",
     },
     CmdSpec {
@@ -628,7 +628,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "waitLoad(s?)",
         args: &[arg!("s", "number", false, "10")],
-        description: "等 document.readyState 到 complete（已加载立即返回）。timeout 秒口径（#51）：大于 3600 视为毫秒误写，告警并按毫秒换算（封顶 600 秒）；1000 至 3600 按秒直解不告警（2000 即 33 分钟），子分钟等待直写个位数秒；旧毫秒习惯值等价迁移。",
+        description: "等 document.readyState 到 complete（已加载立即返回）。timeout 秒口径（#51）：不小于 1000 视为毫秒误写，换算并告警，封顶 600 秒（#57 F1 判据收紧，1000 至 3600 不再静默秒直解）；秒直写三位数内（上界 999 秒）；旧毫秒习惯值等价迁移。",
         example: "await waitLoad(8)",
     },
     CmdSpec {
@@ -639,7 +639,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("pattern", "string", true),
             arg!("s", "number", false, "15"),
         ],
-        description: "等 URL 命中 glob（与 routeBlock/routeMock 同写法）的最近一个响应完成（#20，只认活动 tab）：回 {requestId,url,status,headers,body,base64Encoded,json}；命中含历史（Network 域须在触发前已开，本函数幂等开收不到已发出的响应），方言无并发，可用形态是触发后等待；体等 loadingFinished 再取（5 秒窗），失败显式 bodyError；base64 自动解码，可解析时附 json。timeout 秒口径（#51：大于 3600 按毫秒误写换算并告警，封顶 600 秒；1000 至 3600 按秒直解不告警（2000 即 33 分钟），子分钟等待直写个位数秒）。",
+        description: "等 URL 命中 glob（与 routeBlock/routeMock 同写法）的最近一个响应完成（#20，只认活动 tab）：回 {requestId,url,status,headers,body,base64Encoded,json}；命中含历史（Network 域须在触发前已开，本函数幂等开收不到已发出的响应），方言无并发，可用形态是触发后等待；体等 loadingFinished 再取（5 秒窗），失败显式 bodyError；base64 自动解码，可解析时附 json。timeout 秒口径（#51：不小于 1000 按毫秒误写换算并告警，封顶 600 秒；秒直写三位数内（上界 999 秒））。",
         example: r#"return await waitForResponse("https://x.test/api*")"#,
     },
     CmdSpec {
@@ -754,7 +754,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "waitIdle(s?)",
         args: &[arg!("s", "number", false, "10")],
-        description: "等 network 静默（窗口语义：起点前挂着的请求不计）。timeout 秒口径（#51）：大于 3600 视为毫秒误写，告警并按毫秒换算（封顶 600 秒）；1000 至 3600 按秒直解不告警（2000 即 33 分钟），子分钟等待直写个位数秒。",
+        description: "等 network 静默（窗口语义：起点前挂着的请求不计）。timeout 秒口径（#51）：不小于 1000 视为毫秒误写，换算并告警，封顶 600 秒（#57 F1 判据收紧，1000 至 3600 不再静默秒直解）；秒直写三位数内（上界 999 秒）。",
         example: "await waitIdle(5)",
     },
     CmdSpec {
@@ -881,7 +881,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("expression", "string", true),
             arg!("s", "number", false, "10"),
         ],
-        description: "页内谓词轮询（真 V8 表达式），等到即返回真值本身。timeout 秒口径（#51）：大于 3600 视为毫秒误写，告警并按毫秒换算（封顶 600 秒）；1000 至 3600 按秒直解不告警（2000 即 33 分钟），子分钟等待直写个位数秒。",
+        description: "页内谓词轮询（真 V8 表达式），等到即返回真值本身。timeout 秒口径（#51）：不小于 1000 视为毫秒误写，换算并告警，封顶 600 秒（#57 F1 判据收紧，1000 至 3600 不再静默秒直解）；秒直写三位数内（上界 999 秒）。",
         example: "await session.waitJs(\"document.querySelector('#x') !== null\", 5)",
     },
     CmdSpec {

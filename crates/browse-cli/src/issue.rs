@@ -49,6 +49,31 @@ fn host() -> String {
     truncate(raw, 64)
 }
 
+/// 预览一条 issue 载荷（#57 G6 `--dry-run`）：与 [`new`] 同规校验，不发
+/// 网络请求，回应发载荷（含自动署名字段）。契约实弹与演练走这里，不再
+/// 往生产台账落测试单（评审首单实弹 -b 契约真发了 #56 的教训）。
+///
+/// # Errors
+///
+/// 客户端校验不过（title 空或超 200、body 超 20000），与 [`new`] 同文。
+pub fn dry_run(title: &str, body: &str) -> Result<Value> {
+    let title = title.trim();
+    if title.is_empty() || title.chars().count() > 200 {
+        bail!("title 长度要在 1 至 200（trim 后）；下一步：改标题再提");
+    }
+    if body.chars().count() > 20000 {
+        bail!("body 至多 20000 字符；下一步：精简正文或分段提交");
+    }
+    Ok(json!({
+        "tool": TOOL,
+        "title": title,
+        "body": body,
+        "version": truncate(env!("CARGO_PKG_VERSION").to_string(), 40),
+        "platform": platform(),
+        "host": host(),
+    }))
+}
+
 async fn http() -> Result<reqwest::Client> {
     reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(20))

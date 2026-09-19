@@ -321,7 +321,8 @@ impl JsHost {
                 }
                 let sample: Vec<String> = uniq.iter().rev().take(3).cloned().collect();
                 bail!(
-                    "waitForResponse 超时（{ms}ms 内活动 tab 没有 URL 命中 {pattern} 的响应；活动窗 {} 条 responseReceived，去重 {} 条，最近有 {sample:?}）；下一步：pattern 与 routeBlock/routeMock 同一套 glob 写法（* 通配），确认动作发生在活动 tab 且在超时窗内，必要时先 await session.Network.enable({{}})；当前没有活动 tab 时先 await session.use(tabs[0].targetId)",
+                    "waitForResponse 超时（{} 秒内活动 tab 没有 URL 命中 {pattern} 的响应；活动窗 {} 条 responseReceived，去重 {} 条，最近有 {sample:?}）；下一步：pattern 与 routeBlock/routeMock 同一套 glob 写法（* 通配），确认动作发生在活动 tab 且在超时窗内，必要时先 await session.Network.enable({{}})；当前没有活动 tab 时先 await session.use(tabs[0].targetId)",
+                    ms / 1000,
                     total,
                     uniq.len()
                 );
@@ -2040,19 +2041,21 @@ fn str_arg<'a>(argv: &'a [Value], i: usize, who: &str) -> Result<&'a str> {
     })
 }
 
-/// wait 类 timeout 秒值换毫秒（#51 统一口径）：大于 3600 视为毫秒误写，
-/// 按毫秒换算（15000 即 15 秒）并出告警，换算后封顶 600 秒；不大于 3600
-/// 按秒原样放大。返回 (毫秒, 告警)，告警由调用方附进结果对象（无对象面
-/// 走 daemon 留痕）。
+/// wait 类 timeout 秒值换毫秒（#51 统一口径）：不小于 1000 视为毫秒误写，
+/// 按毫秒换算（15000 即 15 秒）并出告警，换算后封顶 600 秒；三位数内按秒
+/// 原样放大（上界 999 秒）。判据从大于 3600 收到 1000（#57 F1）：1000 至
+/// 3600 的秒直解静默窗已实弹炸在本仓测试（300 意图变 300 秒），真实等待
+/// 三位数秒封顶足够。返回 (毫秒, 告警)，告警由调用方附进结果对象（无对象
+/// 面走 daemon 留痕）。
 fn secs_to_ms(v: u64) -> (u64, Option<String>) {
-    const MISUSE: u64 = 3600;
+    const MISUSE: u64 = 1000;
     const CAP: u64 = 600;
-    if v > MISUSE {
+    if v >= MISUSE {
         let s = (v / 1000).clamp(1, CAP);
         (
             s * 1000,
             Some(format!(
-                "timeout {v} 大于 3600，按毫秒误写换算为 {s} 秒（封顶 600）；秒口径直写如 waitLoad(15)"
+                "timeout {v} 不小于 1000，按毫秒误写换算为 {s} 秒（封顶 600）；秒口径直写三位数内如 waitLoad(15)"
             )),
         )
     } else {
@@ -2971,7 +2974,7 @@ return JSON.stringify(JSON.parse(raw).items.slice(0, 1))"#,
             "sessionId": "OTHER"
         }));
         let foreign = host
-            .eval_snippet(r#"await waitForResponse("http://foreign.test/*", 300)"#)
+            .eval_snippet(r#"await waitForResponse("http://foreign.test/*", 1)"#)
             .await;
         assert!(
             foreign.is_err() && format!("{foreign:#?}").contains("超时"),
@@ -2994,7 +2997,7 @@ return JSON.stringify(JSON.parse(raw).items.slice(0, 1))"#,
         };
         let wr = tokio::time::timeout(
             std::time::Duration::from_secs(10),
-            host.eval_snippet(r#"return await waitForResponse("http://slow.test/*", 3000)"#),
+            host.eval_snippet(r#"return await waitForResponse("http://slow.test/*", 3)"#),
         )
         .await
         .expect("不应整体超时")
@@ -3010,7 +3013,7 @@ return JSON.stringify(JSON.parse(raw).items.slice(0, 1))"#,
         // R2：体永不完，体窗耗尽后 body 为 null 加 bodyError，不静默省略
         let stuck = tokio::time::timeout(
             std::time::Duration::from_secs(10),
-            host.eval_snippet(r#"return await waitForResponse("http://stuck.test/*", 1000)"#),
+            host.eval_snippet(r#"return await waitForResponse("http://stuck.test/*", 1)"#),
         )
         .await
         .expect("不应整体超时")
@@ -3075,6 +3078,11 @@ return JSON.stringify(JSON.parse(raw).items.slice(0, 1))"#,
                                 {"nodeId": 1, "role": {"value": "button"}, "name": {"value": "Go"},
                                  "backendDOMNodeId": 42}
                             ]
+                        }}),
+                        // navigate 回执带 loaderId（跨文档形态，#57 F3）：
+                        // 同文档 fragment 回执无 loaderId 不换代
+                        "Page.navigate" => json!({"id": id, "result": {
+                            "loaderId": "L1", "frameId": "F1"
                         }}),
                         // active_target 未设（管道态），page_meta 回落导航史
                         "Page.getNavigationHistory" => json!({"id": id, "result": {
@@ -3640,16 +3648,23 @@ mod timeout_tests {
         // 秒口径直写：15 秒即 15000ms，旧习惯 waitLoad(15000) 经守卫等价
         assert_eq!(secs_to_ms(15), (15_000, None));
         assert_eq!(secs_to_ms(0), (0, None));
-        assert_eq!(secs_to_ms(3600), (3_600_000, None));
-        // 毫秒误写：15000 换算 15 秒并告警（与旧语义同效，迁移零破坏）
+        // 判据收紧（#57 F1）：999 秒是最后一位合法秒直写，1000 起即误写
+        assert_eq!(secs_to_ms(999), (999_000, None));
+        assert_eq!(secs_to_ms(1000).0, 1_000);
+        assert!(secs_to_ms(1000).1.is_some());
+        assert_eq!(secs_to_ms(3600).0, 3_000);
+        // 毫秒误写：15000 换算 15 秒并告警（与旧语义同效，迁移零破坏）；
+        // 3000 也已是误写（判据收紧后 1000..3600 窗不再静默秒直解）
+        assert_eq!(secs_to_ms(3000).0, 3_000);
+        assert!(secs_to_ms(3000).1.is_some());
         let (ms, warn) = secs_to_ms(15_000);
         assert_eq!(ms, 15_000);
         assert!(warn.is_some_and(|w| w.contains("毫秒误写")));
         // 封顶：600000（600 秒的毫秒写法）换算后恰 600 秒；再大也钳 600
         assert_eq!(secs_to_ms(600_000).0, 600_000);
         assert_eq!(secs_to_ms(7_200_000).0, 600_000);
-        // 边界：3601 是最小误写值（3600 秒整仍是合法秒）
-        assert!(secs_to_ms(3601).1.is_some());
+        // 边界随判据收紧（#57 F1）：999/1000 是新界，3600 已是误写路径
+        assert!(secs_to_ms(999).1.is_none());
     }
 
     /// 缺省走 default_s；实参位次取值。

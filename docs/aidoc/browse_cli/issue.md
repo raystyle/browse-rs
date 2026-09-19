@@ -9,6 +9,7 @@ version 40、platform 与 host 64）；读面 list 与 show 走 GET。
 
 ## Functions
 
+- `dry_run` — 预览一条 issue 载荷（#57 G6 `--dry-run`）：与 [`new`] 同规校验，不发
 - `list` — 列 issue：`GET /api/issues?tool=&status=&limit=&before=`（新到旧，limit 1
 - `new` — 提交一条 issue：`POST /api/issues`，回执 `{ok, id, url}`（url 即详情页）。
 - `show` — 看 issue 详情：`GET /api/issues/<id>`。

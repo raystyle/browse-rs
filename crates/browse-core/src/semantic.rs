@@ -27,8 +27,10 @@ pub async fn new_tab(s: &Session, url: Option<&str>) -> Result<Value> {
     crate::js_host::ensure_page_enabled(s, &sid).await;
     if let Some(u) = url {
         s.call("Page.navigate", json!({ "url": u })).await?;
-        // target 列表的 title/url 在 load 前是滞后的 about:blank，等完再取简表
-        let _ = wait_load(s, 8000).await;
+        // target 列表的 title/url 在 load 前是滞后的 about:blank，等完再取
+        // 简表；预算与 goto 缺省对齐 15 秒（#57 G3：原 8 秒是唯一没口径
+        // 的裸魔法数）
+        let _ = wait_load(s, 15_000).await;
     }
     tab_brief(s, &id).await
 }

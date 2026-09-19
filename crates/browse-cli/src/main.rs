@@ -45,8 +45,12 @@ enum Mode {
     ChromeRemove(String),
     /// `browse chrome doctor`：托管部署体检。
     ChromeDoctor,
-    /// `browse issue new <标题> [--body <正文>]`：一键提交缺陷反馈（REQ-057）。
-    IssueNew { title: String, body: String },
+    /// `browse issue new <标题> [--body <正文>] [--dry-run]`：一键提交缺陷反馈（REQ-057）。
+    IssueNew {
+        title: String,
+        body: String,
+        dry: bool,
+    },
     /// `browse issue list [--status <s>] [--limit <n>] [--tool <t>] [--before <id>]`：列 issue。
     IssueList {
         tool: Option<String>,
@@ -159,15 +163,21 @@ async fn main() -> Result<()> {
                 match next("issue")?.as_str() {
                     "new" => {
                         let title = next("issue new <标题>")?;
-                        // 可选 --body/-b（取参走 next 闭包保借用序）；参数尽即无
-                        // body，求值侧 stdin 管道兜底
+                        // 可选 --body/-b 与 --dry-run（取参走 next 闭包保借用序）；
+                        // 参数尽即无 body，求值侧 stdin 管道兜底
                         let mut body = String::new();
-                        match next("issue new 旗标") {
-                            Ok(f) if f == "--body" || f == "-b" => body = next("--body")?,
-                            Ok(f) => bail_arg(&f),
-                            Err(_) => {}
+                        let mut dry = false;
+                        loop {
+                            match next("issue new 旗标") {
+                                Ok(f) if f == "--body" || f == "-b" => {
+                                    body = next("--body")?;
+                                }
+                                Ok(f) if f == "--dry-run" => dry = true,
+                                Ok(f) => bail_arg(&f),
+                                Err(_) => break,
+                            }
                         }
-                        mode = Mode::IssueNew { title, body };
+                        mode = Mode::IssueNew { title, body, dry };
                     }
                     "list" => {
                         let mut tool = None;
@@ -408,10 +418,16 @@ async fn main() -> Result<()> {
             Ok(())
         }
         // issue 通道（REQ-057）：直连 issues.ohmygh.com，不经 daemon
-        Mode::IssueNew { title, body } => {
+        Mode::IssueNew { title, body, dry } => {
             let mut body = body;
             if body.is_empty() && !std::io::stdin().is_terminal() {
                 tokio::io::AsyncReadExt::read_to_string(&mut tokio::io::stdin(), &mut body).await?;
+            }
+            // --dry-run（#57 G6）：同规校验与载荷预览，零网络副作用
+            if dry {
+                let r = browse_cli::issue::dry_run(&title, &body)?;
+                println!("{}", serde_json::to_string_pretty(&r)?);
+                return Ok(());
             }
             let r = browse_cli::issue::new(&title, &body).await?;
             println!("{}", serde_json::to_string_pretty(&r)?);
