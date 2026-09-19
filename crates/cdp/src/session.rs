@@ -88,6 +88,11 @@ pub struct Session {
     /// 换靶时钉住不 detach 的 session 集合（#33 录制保护）：被钉的旧
     /// session 保持附着（如录制中的帧流），事件仍投递由上层过滤。
     pinned_sessions: Arc<Mutex<HashSet<String>>>,
+    /// 文档代计数（#30 消注入痕）：sessionId -> 主框架导航次数，由
+    /// [`route`] 在 `Page.frameNavigated`（主框架）时递增；同文档跳转
+    /// （pushState 走 navigatedWithinDocument）与 iframe 导航不递增。
+    /// 快照引用表的代际失效由它支撑，页面侧零写入。
+    doc_gens: Arc<Mutex<HashMap<String, u64>>>,
 }
 
 impl Session {
@@ -114,6 +119,7 @@ impl Session {
             next_seq: Arc::new(AtomicI64::new(1)),
             pending_dialog: Arc::new(Mutex::new(None)),
             pinned_sessions: Arc::new(Mutex::new(HashSet::new())),
+            doc_gens: Arc::new(Mutex::new(HashMap::new())),
         })
     }
 
@@ -220,11 +226,12 @@ impl Session {
         let events_r = self.events.clone();
         let seq_r = self.next_seq.clone();
         let dialog_r = self.pending_dialog.clone();
+        let gens_r = self.doc_gens.clone();
         let flag = self.connected.clone();
         tokio::spawn(async move {
             while let Some(Ok(Message::Text(t))) = read.next().await {
                 if let Ok(v) = serde_json::from_str::<Value>(&t) {
-                    route(v, &pending_r, &events_r, &seq_r, &dialog_r).await;
+                    route(v, &pending_r, &events_r, &seq_r, &dialog_r, &gens_r).await;
                 }
             }
             flag.store(false, Ordering::Relaxed);
@@ -287,6 +294,7 @@ impl Session {
         let events_r = self.events.clone();
         let seq_r = self.next_seq.clone();
         let dialog_r = self.pending_dialog.clone();
+        let gens_r = self.doc_gens.clone();
         let flag = self.connected.clone();
         let (chunk_tx, mut chunk_rx) = mpsc::unbounded_channel::<Vec<u8>>();
         std::thread::Builder::new()
@@ -312,7 +320,7 @@ impl Session {
                 while let Some(pos) = carry.iter().position(|&c| c == 0) {
                     let frame: Vec<u8> = carry.drain(..=pos).collect();
                     if let Ok(v) = serde_json::from_slice(&frame[..frame.len() - 1]) {
-                        route(v, &pending_r, &events_r, &seq_r, &dialog_r).await;
+                        route(v, &pending_r, &events_r, &seq_r, &dialog_r, &gens_r).await;
                     }
                 }
             }
@@ -343,6 +351,15 @@ impl Session {
             && let Some(id) = v.get("targetId").and_then(Value::as_str)
         {
             self.own_targets.lock().await.insert(id.to_string());
+        }
+        // Page.navigate 即时递增活动 session 的文档代（#30）：frameNavigated
+        // 事件与命令回执的到达序不保证，同步计数消灭「navigate 后紧接
+        // 引用旧 ref」的微观竞速窗；事件路径再计一次也无妨（只需不等）。
+        // 用户侧导航（点链接、location 跳转）由 route() 的事件计数覆盖。
+        if method == "Page.navigate"
+            && let Some(sid) = self.session_id.lock().await.clone()
+        {
+            *self.doc_gens.lock().await.entry(sid).or_insert(0u64) += 1;
         }
         Ok(v)
     }
@@ -543,6 +560,18 @@ impl Session {
         self.session_id.lock().await.clone()
     }
 
+    /// 返回该 session 的文档代计数（#30）：主框架导航一次加一，从未见过
+    /// 导航事件的 session 返回 0。快照时记现值，引用时对不上即整表作废；
+    /// 同文档跳转（pushState）代不动，ref 继续有效。
+    pub async fn doc_generation(&self, session_id: &str) -> u64 {
+        self.doc_gens
+            .lock()
+            .await
+            .get(session_id)
+            .copied()
+            .unwrap_or(0)
+    }
+
     /// 列可附着的 page targets（滤 `chrome://`、`devtools://`，防 attach 到
     /// 1px omnibox 弹窗）。返回顺序不保证等于标签栏可见顺序。
     ///
@@ -726,13 +755,15 @@ impl Session {
 /// 进缓冲的事件盖上单调 `seq`（从 1 起）：`waitFor`/`peek` 拿到的事件自带
 /// 游标，供 [`Session::peek_events_since`] 增量轮询。顺带截获对话框事件
 /// 维护 [`Session::pending_dialog`]（开着对话框时 Input/evaluate 会挂起，
-/// 消费方必须能不等 CDP 就看到它）。
+/// 消费方必须能不等 CDP 就看到它）与文档代计数（#30：主框架
+/// frameNavigated 递增该 session 的代，供快照引用表做代际失效）。
 async fn route(
     mut v: Value,
     pending: &Arc<Mutex<HashMap<i64, oneshot::Sender<Value>>>>,
     events: &Arc<Mutex<VecDeque<Value>>>,
     next_seq: &AtomicI64,
     dialog: &Arc<Mutex<Option<Value>>>,
+    gens: &Arc<Mutex<HashMap<String, u64>>>,
 ) {
     if let Some(id) = v.get("id").and_then(|x| x.as_i64()) {
         if let Some(tx) = pending.lock().await.remove(&id) {
@@ -745,6 +776,19 @@ async fn route(
             }
             Some("Page.javascriptDialogClosed") => {
                 *dialog.lock().await = None;
+            }
+            // 主框架导航（frame 无 parentId）递增该 session 的文档代（#30）：
+            // 主文档被换，旧 backendNodeId 全体作废；iframe 导航（有
+            // parentId）不换主文档，同文档跳转走 navigatedWithinDocument，
+            // 都不递增。事件须带 sessionId（flat 态页面事件恒有）。
+            Some("Page.frameNavigated")
+                if v.pointer("/params/frame/parentId").is_none()
+                    && v.get("sessionId")
+                        .and_then(Value::as_str)
+                        .is_some_and(|s| !s.is_empty()) =>
+            {
+                let sid = v["sessionId"].as_str().unwrap_or_default().to_string();
+                *gens.lock().await.entry(sid).or_insert(0u64) += 1;
             }
             _ => {}
         }
@@ -948,6 +992,7 @@ mod tests {
                 &s.events,
                 &s.next_seq,
                 &s.pending_dialog,
+                &s.doc_gens,
             )
             .await;
         }
@@ -985,7 +1030,15 @@ mod tests {
     async fn route_all(s: &Session, events: Vec<Value>) {
         let pending = Arc::new(Mutex::new(HashMap::new()));
         for e in events {
-            route(e, &pending, &s.events, &s.next_seq, &s.pending_dialog).await;
+            route(
+                e,
+                &pending,
+                &s.events,
+                &s.next_seq,
+                &s.pending_dialog,
+                &s.doc_gens,
+            )
+            .await;
         }
     }
 

@@ -20,7 +20,8 @@ crates/browse-core  语义与 daemon（不碰 argv）
   parser.rs         方言语法分析器（纯函数；方言外语法解析期报错并给提示）
   js_host.rs        方言求值器：session.<Domain>.<method> 直转 CDP；
                     vars 跨片段持久；元素引用表（snapshot 短 ref +
-                    __browse_ref_gen 代标记）；全局函数族（见 README 清单）
+                    daemon 侧文档代：session 与导航计数，页面零写入，
+                    #30 消注入痕）；全局函数族（见 README 清单）
   semantic.rs       语义层：tab 族、交互三件（clickAt/fillInput/pressKey）、
                     clickRef/fillRef（backendNodeId 锚）、等待判官
                     （waitLoad/waitIdle）；Input 挂起自愈重试

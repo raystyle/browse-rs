@@ -119,7 +119,8 @@ pub struct JsHost {
     session: Arc<Session>,
     vars: Mutex<HashMap<String, Value>>,
     /// 元素引用表（D35-lite）：最近一次 `snapshot()` 的短 ref -> backendNodeId，
-    /// 连同页窗口的代标记（主动代际失效）。整表随 snapshot 替换。
+    /// 连同快照时的 session 与文档代（daemon 侧代际失效，#30 消注入痕）。
+    /// 整表随 snapshot 替换。
     refs: Mutex<Option<RefTable>>,
     /// 进行中的录制（至多一场；方言面 recordStart/recordStop 管理）。
     record: Mutex<Option<crate::record::Recorder>>,
@@ -160,12 +161,14 @@ pub(crate) enum RouteAction {
     },
 }
 
-/// 引用表：短 ref -> backendNodeId，加 snapshot 时刻的页窗口代标记。
-/// 代标记不匹配（文档被导航重开）即整表作废；SPA 同文档跳转（pushState）
-/// 不重开窗口、代不变，ref 继续有效；比 URL 对比零假阳性。
+/// 引用表：短 ref -> backendNodeId，加 snapshot 时刻的 session 与文档代
+/// （daemon 侧计数，#30 消注入痕）。换 tab（backendNodeId 跨 target 无
+/// 意义）或主框架导航（代递增）即整表作废；SPA 同文档跳转（pushState
+/// 走 navigatedWithinDocument，代不动）ref 继续有效；比 URL 对比零假阳性。
 #[derive(Clone)]
 struct RefTable {
-    generation: i64,
+    session_id: String,
+    generation: u64,
     map: HashMap<String, i64>,
 }
 
@@ -365,6 +368,33 @@ impl JsHost {
             }
         }
         Ok(out)
+    }
+
+    /// 带提交窗重试的页面级调用（#34）：navigate 回执先于导航提交完成，
+    /// 提交窗内的页面级命令会报「Not attached to an active page」（同片段
+    /// navigate 后首个动作的竞速窗）。对该错误串有界重试（100ms 步进至多
+    /// 2 秒），其余错误原样上抛；耗尽时附提交窗辨识提示再交最后错误
+    /// （评审 G2：原文可诊断，提示给归因）。screenshot 与 snapshot 的 AX
+    /// 拉取同用（评审 G1：竞速是出口共面的，不只截图）。
+    async fn call_commit_retry(&self, method: &str, params: Value) -> Result<Value> {
+        for attempt in 0..20u32 {
+            match self.session.call(method, params.clone()).await {
+                Ok(v) => return Ok(v),
+                Err(e) => {
+                    let transient = format!("{e:#}").contains("Not attached to an active page");
+                    if !transient {
+                        return Err(e);
+                    }
+                    if attempt == 19 {
+                        return Err(e.context(
+                            "重试 2 秒仍 Not attached（可能导航提交窗超预算：大页或慢机）；下一步：分两片段发（先 navigate 后动作）或稍候重试",
+                        ));
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                }
+            }
+        }
+        unreachable!("重试循环必有返回")
     }
 
     /// 交互/求值族调用前的快失败：有未处理的 confirm/prompt 时 Input 与
@@ -705,7 +735,10 @@ impl JsHost {
                 if format == "jpeg" {
                     params["quality"] = json!(quality.clamp(1, 100));
                 }
-                let r = self.session.call("Page.captureScreenshot", params).await?;
+                // #34 提交窗竞速走共用重试（评审 G1 helper 化）
+                let r = self
+                    .call_commit_retry("Page.captureScreenshot", params)
+                    .await?;
                 let data = r
                     .get("data")
                     .and_then(Value::as_str)
@@ -750,40 +783,21 @@ impl JsHost {
                 Ok(json!({ "path": display, "bytes": bytes.len(), "skipped": false }))
             }
             // AX 树快照（对齐 browser-use-pi 的 snapshot 原语）：
-            // getFullAXTree -> 精简节点表；url/title 一并带回
+            // getFullAXTree -> 精简节点表；url/title 一并带回。
+            // 元信息与代际全走 daemon 侧（#30 消注入痕）：url/title 走
+            // Target.getTargetInfo（browser 级查询，不触页面求值），代取
+            // 文档代计数，页面窗口零写入
             "snapshot" => {
+                // AX 拉取同走提交窗重试（评审 G1：竞速出口共面）
                 let r = self
-                    .session
-                    .call("Accessibility.getFullAXTree", json!({}))
+                    .call_commit_retry("Accessibility.getFullAXTree", json!({}))
                     .await?;
-                let info = self
-                    .session
-                    .call(
-                        "Runtime.evaluate",
-                        json!({
-                            "expression": "JSON.stringify([location.href, document.title, (() => { window.__browse_ref_gen = (window.__browse_ref_gen || 0) + 1; return window.__browse_ref_gen; })()])",
-                            "returnByValue": true
-                        }),
-                    )
-                    .await?;
-                let (url, title, generation) = info
-                    .pointer("/result/value")
-                    .and_then(Value::as_str)
-                    .and_then(|s| serde_json::from_str::<Vec<Value>>(s).ok())
-                    .map(|v| {
-                        (
-                            v.first()
-                                .and_then(Value::as_str)
-                                .unwrap_or_default()
-                                .to_string(),
-                            v.get(1)
-                                .and_then(Value::as_str)
-                                .unwrap_or_default()
-                                .to_string(),
-                            v.get(2).and_then(Value::as_i64).unwrap_or(0),
-                        )
-                    })
-                    .unwrap_or_default();
+                let sid = self.session.get_active_session().await;
+                let generation = match &sid {
+                    Some(s) => self.session.doc_generation(s).await,
+                    None => 0,
+                };
+                let (url, title) = self.page_meta().await;
                 let nodes: Vec<Value> = r
                     .get("nodes")
                     .and_then(Value::as_array)
@@ -841,6 +855,7 @@ impl JsHost {
                     })
                     .collect();
                 *self.refs.lock().await = Some(RefTable {
+                    session_id: sid.unwrap_or_default(),
                     generation,
                     map: refmap,
                 });
@@ -1173,11 +1188,15 @@ impl JsHost {
     }
 
     /// 查短 ref 对应的 backendNodeId（只认最近一次 snapshot 的表），
-    /// 并做主动代际校验。
+    /// 并做主动代际校验（daemon 侧，#30 消注入痕）。
     ///
-    /// snapshot 时在页窗口盖过 `__browse_ref_gen` 代标记，引用前核对：
-    /// 不匹配即文档已被导航重开，整表作废，给重取 CTA。标记取不到
-    /// （evaluate 失败）不拦，退给被动失效（resolveNode/零尺寸）。
+    /// 快照时记下 session 与文档代（[`cdp::Session::doc_generation`]，
+    /// 主框架导航递增），引用前核对两者：换过 tab 或主框架导航过即整表
+    /// 作废，给重取 CTA。SPA 同文档跳转（pushState）代不动，ref 继续有效。
+    /// 活动缺席（None，未走 use 的裸态）按过期处理，给重取 CTA（比旧
+    /// 标记口径严：旧口径取不到标记不拦、退被动兜底）。Page 域没开的
+    /// 高级手写 attach 路径导航事件不流动、代不动，校验退化恒过，靠
+    /// 被动兜底（resolveNode/零尺寸）。
     async fn lookup_ref(&self, r: &str) -> Result<i64> {
         let table = self.refs.lock().await.clone();
         let Some(t) = table else {
@@ -1190,22 +1209,66 @@ impl JsHost {
                 "未知 ref {r}（引用表只保留最近一次 snapshot()）；下一步：先 await snapshot()，用返回里 nodes[].ref"
             );
         };
-        // 求值成功但代标记对不上（含 undefined=文档已被导航重开）：主动判整表作废；
-        // 求值失败（标记取不到）不拦，退给被动兜底（resolveNode/零尺寸）
-        if let Ok(resp) = self
-            .session
-            .call(
-                "Runtime.evaluate",
-                json!({ "expression": "window.__browse_ref_gen", "returnByValue": true }),
-            )
-            .await
-            && resp.pointer("/result/value").and_then(Value::as_i64) != Some(t.generation)
-        {
+        // 活动还是快照那个 tab 且文档代没动过才放行：换 tab 后 backendNodeId
+        // 跨 target 无意义（代数同值也不可信），导航后主文档已换
+        let cur = self.session.get_active_session().await;
+        let fresh = match cur.as_deref() {
+            Some(sid) if sid == t.session_id => {
+                self.session.doc_generation(sid).await == t.generation
+            }
+            _ => false,
+        };
+        if !fresh {
             bail!(
-                "ref 已过期（页面文档已换代，旧 ref 全体作废）；下一步：重新 await snapshot() 取新 ref"
+                "ref 已过期（换过 tab 或页面文档已换代，旧 ref 全体作废）；下一步：重新 await snapshot() 取新 ref"
             );
         }
         Ok(bn)
+    }
+
+    /// 活动页的 url/title（#30 消注入痕）：主源 `Target.getTargetInfo`
+    /// （browser 级查询，attach 面全经 use_target、targetId 在册），
+    /// 不在册或失败回落 `Page.getNavigationHistory` 当前条目；都失败给
+    /// 空串——url/title 是快照的展示字段，不为它炸整次 snapshot。
+    async fn page_meta(&self) -> (String, String) {
+        if let Some(tid) = self.session.active_target().await
+            && let Ok(r) = self
+                .session
+                .call("Target.getTargetInfo", json!({ "targetId": tid }))
+                .await
+            && let Some(info) = r.get("targetInfo")
+        {
+            let url = info.get("url").and_then(Value::as_str).unwrap_or_default();
+            let title = info
+                .get("title")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            if !url.is_empty() {
+                return (url.to_string(), title.to_string());
+            }
+        }
+        if let Ok(r) = self
+            .session
+            .call("Page.getNavigationHistory", json!({}))
+            .await
+            && let Some(entries) = r.get("entries").and_then(Value::as_array)
+            && let Some(ci) = r.get("currentIndex").and_then(Value::as_u64)
+            && let Some(entry) = entries.get(ci as usize)
+        {
+            return (
+                entry
+                    .get("url")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
+                entry
+                    .get("title")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
+            );
+        }
+        (String::new(), String::new())
     }
 
     async fn call_session(&self, method: &str, argv: &[Value]) -> Result<Value> {
@@ -2442,6 +2505,236 @@ return JSON.stringify(JSON.parse(raw).items.slice(0, 1))"#,
                 .is_some_and(|e| e.contains("No resource")),
             "bodyError 应带因: {stuck}"
         );
+    }
+
+    /// 快照消注入痕（#30）：snapshot 零 Runtime.evaluate（对端方法面留痕
+    /// 即证）、url/title 走 CDP 查询面、文档代计数按事件谱精确递增
+    /// （主框架导航 +1，iframe 与同文档跳转不动）、导航/换靶后旧 ref
+    /// 给重取 CTA。
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn snapshot_is_injection_free_and_generation_counted() {
+        use std::io::{Read, Write};
+        use std::os::unix::net::UnixStream;
+        use std::sync::Mutex;
+        let (sa, ba) = UnixStream::pair().unwrap();
+        let (sb, bb) = UnixStream::pair().unwrap();
+        let session = cdp::Session::new();
+        session.connect_pipes(sa, sb).await.expect("管道连接");
+        session.set_active_session(Some("S1".into())).await;
+        let host = JsHost::new(session.clone());
+
+        let seen: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let peer_out = Arc::new(Mutex::new(ba));
+        let (seen_p, peer_out_p) = (seen.clone(), peer_out.clone());
+        std::thread::spawn(move || {
+            let mut bb = bb;
+            let mut buf = Vec::<u8>::new();
+            let mut chunk = [0u8; 4096];
+            loop {
+                let n = match bb.read(&mut chunk) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => n,
+                };
+                buf.extend_from_slice(&chunk[..n]);
+                while let Some(pos) = buf.iter().position(|&b| b == 0) {
+                    let frame: Vec<u8> = buf.drain(..=pos).collect();
+                    let Ok(v) = serde_json::from_slice::<Value>(&frame[..frame.len() - 1]) else {
+                        continue;
+                    };
+                    let Some(id) = v.get("id").cloned() else {
+                        continue;
+                    };
+                    let method = v
+                        .get("method")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string();
+                    seen_p.lock().unwrap().push(method.clone());
+                    let resp = match method.as_str() {
+                        "Accessibility.getFullAXTree" => json!({"id": id, "result": {
+                            "nodes": [
+                                {"nodeId": 1, "role": {"value": "button"}, "name": {"value": "Go"},
+                                 "backendDOMNodeId": 42}
+                            ]
+                        }}),
+                        // active_target 未设（管道态），page_meta 回落导航史
+                        "Page.getNavigationHistory" => json!({"id": id, "result": {
+                            "currentIndex": 0,
+                            "entries": [{"id": 1, "url": "http://h.test/", "title": "HT"}]
+                        }}),
+                        _ => json!({"id": id, "result": {}}),
+                    };
+                    if let Ok(mut out) = peer_out_p.lock() {
+                        let _ = out.write_all(serde_json::to_string(&resp).unwrap().as_bytes());
+                        let _ = out.write_all(&[0]);
+                    }
+                }
+            }
+        });
+        let send_event = |ev: Value| {
+            let mut out = peer_out.lock().unwrap();
+            let _ = out.write_all(serde_json::to_string(&ev).unwrap().as_bytes());
+            let _ = out.write_all(&[0]);
+        };
+
+        // snapshot：url/title 来自 CDP 查询面，节点带 ref
+        let snap = host
+            .eval_snippet("return await snapshot()")
+            .await
+            .expect("snapshot");
+        assert_eq!(
+            snap.pointer("/url"),
+            Some(&json!("http://h.test/")),
+            "{snap}"
+        );
+        assert_eq!(snap.pointer("/title"), Some(&json!("HT")), "{snap}");
+        assert_eq!(snap.pointer("/nodes/0/ref"), Some(&json!("e1")), "{snap}");
+        // 零 evaluate：snapshot 链路不许再碰 Runtime.evaluate（含代际标记）
+        {
+            let methods = seen.lock().unwrap().clone();
+            assert!(
+                !methods.iter().any(|m| m == "Runtime.evaluate"),
+                "snapshot 不应求值页面（#30 消注入痕），实际调用: {methods:?}"
+            );
+        }
+
+        // call() 同步计数（评审 G4）：Page.navigate 回执即加代，不等事件
+        let nav = host
+            .eval_snippet(r#"await session.Page.navigate({url:"http://h.test/x"})"#)
+            .await;
+        assert!(nav.is_ok(), "假对端应答 navigate: {nav:?}");
+        assert_eq!(
+            session.doc_generation("S1").await,
+            1,
+            "navigate 回执后应立即加代（不等事件）"
+        );
+
+        // 文档代事件谱：主框架导航 +1；iframe（有 parentId）与同文档跳转不动
+        send_event(json!({"method": "Page.navigatedWithinDocument",
+            "params": {"url": "http://h.test/#x", "frameId": "F1"}, "sessionId": "S1"}));
+        send_event(json!({"method": "Page.frameNavigated",
+            "params": {"frame": {"id": "F2", "parentId": "F1"}}, "sessionId": "S1"}));
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+        assert_eq!(
+            session.doc_generation("S1").await,
+            1,
+            "同文档跳转与 iframe 导航不应递增文档代"
+        );
+        send_event(json!({"method": "Page.frameNavigated",
+            "params": {"frame": {"id": "F1"}}, "sessionId": "S1"}));
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+        assert_eq!(
+            session.doc_generation("S1").await,
+            2,
+            "主框架导航应递增文档代"
+        );
+
+        // 导航后旧 ref：重取 CTA（不静默点错位置）
+        let stale = host.eval_snippet(r#"await clickRef("e1")"#).await;
+        let msg = format!("{stale:#?}");
+        assert!(
+            stale.is_err() && msg.contains("已过期") && msg.contains("snapshot"),
+            "导航后旧 ref 应失效并带重取 CTA: {msg}"
+        );
+        // 换 tab 后同样作废（backendNodeId 跨 target 无意义，代恰好同值也不可信）
+        session.set_active_session(Some("S2".into())).await;
+        let stale = host.eval_snippet(r#"await clickRef("e1")"#).await;
+        let msg = format!("{stale:#?}");
+        assert!(
+            stale.is_err() && msg.contains("换过 tab"),
+            "引用非快照 session 应作废（代恰好同值也不可信）: {msg}"
+        );
+    }
+
+    /// 提交窗重试语义（#34 评审 G1）：先两次 Not attached 再成功（重试
+    /// 救回）；非瞬时错误立刻上抛（不吞不重试）。contains 判据写宽写窄
+    /// 都在这里红。
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn commit_window_retry_semantics() {
+        use std::io::{Read, Write};
+        use std::os::unix::net::UnixStream;
+        use std::sync::Mutex;
+        let (sa, ba) = UnixStream::pair().unwrap();
+        let (sb, bb) = UnixStream::pair().unwrap();
+        let session = cdp::Session::new();
+        session.connect_pipes(sa, sb).await.expect("管道连接");
+        session.set_active_session(Some("S1".into())).await;
+        // 不建 JsHost（watcher 噪声），重试逻辑挂在宿主方法上，经
+        // eval_snippet 走 screenshot 出口驱动
+        let host = JsHost::new(session.clone());
+
+        let state = Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let peer_out = Arc::new(Mutex::new(ba));
+        let (state_p, peer_out_p) = (state.clone(), peer_out.clone());
+        std::thread::spawn(move || {
+            let mut bb = bb;
+            let mut buf = Vec::<u8>::new();
+            let mut chunk = [0u8; 4096];
+            loop {
+                let n = match bb.read(&mut chunk) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => n,
+                };
+                buf.extend_from_slice(&chunk[..n]);
+                while let Some(pos) = buf.iter().position(|&b| b == 0) {
+                    let frame: Vec<u8> = buf.drain(..=pos).collect();
+                    let Ok(v) = serde_json::from_slice::<Value>(&frame[..frame.len() - 1]) else {
+                        continue;
+                    };
+                    let Some(id) = v.get("id").cloned() else {
+                        continue;
+                    };
+                    let method = v.get("method").and_then(Value::as_str).unwrap_or("");
+                    let resp = if method == "Page.captureScreenshot" {
+                        // 前两次拒绝（提交窗），第三次出图
+                        let n = state_p.fetch_add(1, Ordering::Relaxed);
+                        if n < 2 {
+                            json!({"id": id, "error": {"code": -32000,
+                                "message": "Not attached to an active page"}})
+                        } else if n == 2 {
+                            // 1x1 PNG 的 base64
+                            json!({"id": id, "result": {"data":
+                                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="}})
+                        } else {
+                            // 之后的调用（第二次 screenshot）：别的错误，应立刻上抛
+                            json!({"id": id, "error": {"code": -32000,
+                                "message": "Compositing happens before... something else"}})
+                        }
+                    } else {
+                        json!({"id": id, "result": {}})
+                    };
+                    if let Ok(mut out) = peer_out_p.lock() {
+                        let _ = out.write_all(serde_json::to_string(&resp).unwrap().as_bytes());
+                        let _ = out.write_all(&[0]);
+                    }
+                }
+            }
+        });
+        // 第一次：两次 Not attached 后第三次成功（重试救回）
+        let tmp = std::env::temp_dir().join("browse-commit-retry-test.png");
+        let _ = std::fs::remove_file(&tmp);
+        let shot = host
+            .eval_snippet(r#"return await screenshot("/tmp/browse-commit-retry-test.png")"#)
+            .await
+            .expect("重试后应成功");
+        assert_eq!(
+            shot.get("skipped"),
+            Some(&json!(false)),
+            "两次瞬时拒绝后第三次应出图: {shot}"
+        );
+        // 第二次：非瞬时错误立刻上抛，错误原文不吞
+        let e = host
+            .eval_snippet(r#"return await screenshot("/tmp/browse-commit-retry-test.png")"#)
+            .await
+            .expect_err("非瞬时错误应上抛");
+        let msg = format!("{e:#}");
+        assert!(
+            msg.contains("something else") && !msg.contains("重试 2 秒"),
+            "别的错误不该进重试也不该带耗尽提示: {msg}"
+        );
+        let _ = std::fs::remove_file(&tmp);
     }
 
     /// 密钥命名空间与脱敏（#25.4）：dotenv 加载、secrets.<NAME> 取值、

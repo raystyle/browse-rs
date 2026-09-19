@@ -371,7 +371,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "snapshot()",
         args: &[],
-        description: "AX 树快照：nodes 带 role/name/value/短 ref（e1、e2…），引用表的唯一来源。",
+        description: "AX 树快照：nodes 带 role/name/value/短 ref（e1、e2…），引用表的唯一来源；url/title 走 CDP 查询面，页面主世界零写入（无注入痕）。",
         example: "const s = await snapshot()",
     },
     CmdSpec {
@@ -383,7 +383,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("full", "boolean", false, "false"),
             arg!("opts", "object", false, "{format,quality,ifChanged}"),
         ],
-        description: "页内截图存文件；opts（#24）：format png/jpeg、quality（jpeg 1-100 缺省 80）、ifChanged（与既有文件逐字节相同即 skipped，省读回不省拍摄；字节可比性限同一引擎二进制）。回 {path,bytes,skipped}。",
+        description: "页内截图存文件；opts（#24）：format png/jpeg、quality（jpeg 1-100 缺省 80）、ifChanged（与既有文件逐字节相同即 skipped，省读回不省拍摄；字节可比性限同一引擎二进制）。回 {path,bytes,skipped}。同片段 navigate 后首个动作有提交窗竞态（#34），本函数与 snapshot 内建 Not attached 有界重试（至多 2 秒），其余出口自管时序。",
         example: r#"return await screenshot(null, false, {ifChanged: true})"#,
     },
     CmdSpec {

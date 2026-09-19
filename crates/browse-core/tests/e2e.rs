@@ -176,6 +176,14 @@ l`.length === 3].join(\"|\")", returnByValue:true})).result.value"#;
         Some(&json!("ax")),
         "snapshot 带 title"
     );
+    // #30 消注入痕：快照链路对主世界零写入，代际标记不存在
+    let marker = host
+        .eval_snippet(
+            r#"return (await session.Runtime.evaluate({expression:"typeof window.__browse_ref_gen", returnByValue:true})).result.value"#,
+        )
+        .await
+        .expect("读注入标记");
+    assert_eq!(marker, json!("undefined"), "快照不得向页面写入标记");
     let nodes = snap.get("nodes").and_then(Value::as_array).expect("nodes");
     assert!(
         nodes
@@ -254,6 +262,36 @@ l`.length === 3].join(\"|\")", returnByValue:true})).result.value"#;
     assert!(
         stale.is_err() && format!("{stale:#?}").contains("snapshot"),
         "导航后旧 ref 应失效并带重取 CTA: {stale:?}"
+    );
+
+    // #34 回归锁：同片段 navigate 后紧接 screenshot（提交窗口竞速，
+    // 有界重试后必须可靠，修前 data:/https 均 3/3 复现）
+    let raced = host
+        .eval_snippet(
+            r#"await session.Page.navigate({url:"data:text/html,<title>shot</title><h1>ok</h1>"}); return await screenshot()"#,
+        )
+        .await
+        .expect("同片段 navigate+screenshot");
+    assert!(
+        raced.get("bytes").and_then(Value::as_u64).unwrap_or(0) > 0,
+        "竞速窗内截图应有内容: {raced}"
+    );
+    if let Some(p) = raced.get("path").and_then(Value::as_str) {
+        tokio::fs::remove_file(p).await.ok();
+    }
+    // 提交窗元信息一致性（评审 G2 可观测化）：同片段 navigate+snapshot
+    // 的 title 必须与新文档的 document.title 一致（若偶发旧值即红，
+    // 根因级方案顺势提前）
+    let meta = host
+        .eval_snippet(
+            r#"await session.Page.navigate({url:"data:text/html,<title>meta3</title><h1>m</h1>"}); const s = await snapshot(); const t = (await session.Runtime.evaluate({expression:"document.title", returnByValue:true})).result.value; return {"snapTitle": s.title, "pageTitle": t}"#,
+        )
+        .await
+        .expect("同片段 navigate+snapshot");
+    assert_eq!(
+        meta.pointer("/snapTitle"),
+        meta.pointer("/pageTitle"),
+        "快照 title 应与新文档页内 title 一致: {meta}"
     );
 
     // screenshot：存文件、字节数为正、清场

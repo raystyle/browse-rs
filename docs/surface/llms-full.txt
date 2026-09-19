@@ -43,8 +43,8 @@
 | `chromeRemove(version)` | 删已装版本（目录加登记一起清；pin 指向的拒删，先 chromeUse 切走）。 |
 | `chromeDoctor()` | 托管 Chromium 部署体检（在位/文件基线/pin 健康）。 |
 | `cdpMethods(domain?)` | 652 个 CDP 命令的运行时探针（按域过滤）。 |
-| `snapshot()` | AX 树快照：nodes 带 role/name/value/短 ref（e1、e2…），引用表的唯一来源。 |
-| `screenshot(path?, full?, opts?)` | 页内截图存文件；opts（#24）：format png/jpeg、quality（jpeg 1-100 缺省 80）、ifChanged（与既有文件逐字节相同即 skipped，省读回不省拍摄；字节可比性限同一引擎二进制）。回 {path,bytes,skipped}。 |
+| `snapshot()` | AX 树快照：nodes 带 role/name/value/短 ref（e1、e2…），引用表的唯一来源；url/title 走 CDP 查询面，页面主世界零写入（无注入痕）。 |
+| `screenshot(path?, full?, opts?)` | 页内截图存文件；opts（#24）：format png/jpeg、quality（jpeg 1-100 缺省 80）、ifChanged（与既有文件逐字节相同即 skipped，省读回不省拍摄；字节可比性限同一引擎二进制）。回 {path,bytes,skipped}。同片段 navigate 后首个动作有提交窗竞态（#34），本函数与 snapshot 内建 Not attached 有界重试（至多 2 秒），其余出口自管时序。 |
 | `pdf(path?)` | 当前页存 PDF（仅无头 chrome），回 {path,bytes}。 |
 | `newTab(url?)` | 开新 tab 并设为活动路由（先 about:blank 再 goto，防竞速假完成）。 |
 | `switchTab(targetId)` | 切活动路由（不改 Chrome 可见前景，人机共存）。 |
@@ -449,7 +449,7 @@ return await cdpMethods("Network")
 
 ## `snapshot()`
 
-AX 树快照：nodes 带 role/name/value/短 ref（e1、e2…），引用表的唯一来源。
+AX 树快照：nodes 带 role/name/value/短 ref（e1、e2…），引用表的唯一来源；url/title 走 CDP 查询面，页面主世界零写入（无注入痕）。
 
 
 ```js
@@ -458,7 +458,7 @@ const s = await snapshot()
 
 ## `screenshot(path?, full?, opts?)`
 
-页内截图存文件；opts（#24）：format png/jpeg、quality（jpeg 1-100 缺省 80）、ifChanged（与既有文件逐字节相同即 skipped，省读回不省拍摄；字节可比性限同一引擎二进制）。回 {path,bytes,skipped}。
+页内截图存文件；opts（#24）：format png/jpeg、quality（jpeg 1-100 缺省 80）、ifChanged（与既有文件逐字节相同即 skipped，省读回不省拍摄；字节可比性限同一引擎二进制）。回 {path,bytes,skipped}。同片段 navigate 后首个动作有提交窗竞态（#34），本函数与 snapshot 内建 Not attached 有界重试（至多 2 秒），其余出口自管时序。
 
 参数：
 - `path`（string，缺省 state 目录时间戳名）
