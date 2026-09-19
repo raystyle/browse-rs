@@ -503,7 +503,7 @@ pub const COMMANDS: &[CmdSpec] = &[
                 "false（true 或 {submit:true} 填完顺带 Enter）"
             ),
         ],
-        description: "按 CSS 选择器填输入框（SelectAll 不发 Ctrl+A，回读严格验证；select 走 selectOption；submit 填完顺带 Enter，#39）。",
+        description: "按 CSS 选择器填输入框（SelectAll 不发 Ctrl+A，回读严格验证；select 走 selectOption；submit 填完顺带 Enter（#39）；提交若触发导航或对话框，后续用 goto()/waitLoad() 收尾或先 dialogStatus()。",
         example: "await fillInput(\"#q\", \"hello\", {submit: true})",
     },
     CmdSpec {
@@ -531,7 +531,7 @@ pub const COMMANDS: &[CmdSpec] = &[
                 "false（true 或 {submit:true} 填完顺带 Enter）"
             ),
         ],
-        description: "按 ref 填输入框：objectId focus、SelectAll+insertText、同节点回读严格验证；submit 填完顺带 Enter（#39）。",
+        description: "按 ref 填输入框：objectId focus、SelectAll+insertText、同节点回读严格验证；submit 填完顺带 Enter（#39）；提交若触发导航或对话框，后续用 goto()/waitLoad() 收尾或先 dialogStatus()。",
         example: "await fillRef(\"e2\", \"hello\", true)",
     },
     CmdSpec {
@@ -628,7 +628,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "waitLoad(s?)",
         args: &[arg!("s", "number", false, "10")],
-        description: "等 document.readyState 到 complete（已加载立即返回）。timeout 秒口径（#51）：大于 3600 视为毫秒误写，告警并按毫秒换算（封顶 600 秒），旧毫秒习惯值等价迁移。",
+        description: "等 document.readyState 到 complete（已加载立即返回）。timeout 秒口径（#51）：大于 3600 视为毫秒误写，告警并按毫秒换算（封顶 600 秒）；1000 至 3600 按秒直解不告警（2000 即 33 分钟），子分钟等待直写个位数秒，旧毫秒习惯值等价迁移；1000 至 3600 按秒直解不告警（2000 即 33 分钟），子分钟等待直写个位数秒。",
         example: "await waitLoad(8)",
     },
     CmdSpec {
@@ -639,7 +639,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("pattern", "string", true),
             arg!("s", "number", false, "15"),
         ],
-        description: "等 URL 命中 glob（与 routeBlock/routeMock 同写法）的最近一个响应完成（#20，只认活动 tab）：回 {requestId,url,status,headers,body,base64Encoded,json}；命中含历史（Network 域须在触发前已开，本函数幂等开收不到已发出的响应），方言无并发，可用形态是触发后等待；体等 loadingFinished 再取（5 秒窗），失败显式 bodyError；base64 自动解码，可解析时附 json。timeout 秒口径（#51：大于 3600 按毫秒误写换算并告警，封顶 600 秒）。",
+        description: "等 URL 命中 glob（与 routeBlock/routeMock 同写法）的最近一个响应完成（#20，只认活动 tab）：回 {requestId,url,status,headers,body,base64Encoded,json}；命中含历史（Network 域须在触发前已开，本函数幂等开收不到已发出的响应），方言无并发，可用形态是触发后等待；体等 loadingFinished 再取（5 秒窗），失败显式 bodyError；base64 自动解码，可解析时附 json。timeout 秒口径（#51：大于 3600 按毫秒误写换算并告警，封顶 600 秒；1000 至 3600 按秒直解不告警（2000 即 33 分钟），子分钟等待直写个位数秒）。",
         example: r#"return await waitForResponse("https://x.test/api*")"#,
     },
     CmdSpec {
@@ -754,7 +754,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "waitIdle(s?)",
         args: &[arg!("s", "number", false, "10")],
-        description: "等 network 静默（窗口语义：起点前挂着的请求不计）。timeout 秒口径（#51）：大于 3600 视为毫秒误写，告警并按毫秒换算（封顶 600 秒）。",
+        description: "等 network 静默（窗口语义：起点前挂着的请求不计）。timeout 秒口径（#51）：大于 3600 视为毫秒误写，告警并按毫秒换算（封顶 600 秒）；1000 至 3600 按秒直解不告警（2000 即 33 分钟），子分钟等待直写个位数秒。",
         example: "await waitIdle(5)",
     },
     CmdSpec {
@@ -865,10 +865,10 @@ pub const COMMANDS: &[CmdSpec] = &[
     CmdSpec {
         name: "waitFor",
         kind: CmdKind::Session,
-        signature: "session.waitFor(method, undefined, ms?)",
+        signature: "session.waitFor(method, undefined, s?)",
         args: &[
             arg!("method", "string", true),
-            arg!("ms", "number", false, "15000"),
+            arg!("s", "number", false, "15"),
         ],
         description: "从事件缓冲取第一个 method 事件（取出即移除；超时报错，秒口径 #51）。只认活动 tab 与 browser 级事件，钉住 session（录制中）与他 tab 的不被误领；要看全缓冲用 peekEvents（不过滤）。竞速警示（#19）：loadEventFired 这类一次性事件可能在你注册前已发（假超时），等加载用 goto()/waitLoad()，等导航事件用 frameNavigated。",
         example: "await session.waitFor(\"Page.frameNavigated\", undefined, 15)",
@@ -881,7 +881,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("expression", "string", true),
             arg!("s", "number", false, "10"),
         ],
-        description: "页内谓词轮询（真 V8 表达式），等到即返回真值本身。timeout 秒口径（#51）：大于 3600 视为毫秒误写，告警并按毫秒换算（封顶 600 秒）。",
+        description: "页内谓词轮询（真 V8 表达式），等到即返回真值本身。timeout 秒口径（#51）：大于 3600 视为毫秒误写，告警并按毫秒换算（封顶 600 秒）；1000 至 3600 按秒直解不告警（2000 即 33 分钟），子分钟等待直写个位数秒。",
         example: "await session.waitJs(\"document.querySelector('#x') !== null\", 5)",
     },
     CmdSpec {

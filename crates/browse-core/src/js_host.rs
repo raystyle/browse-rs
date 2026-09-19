@@ -964,8 +964,12 @@ impl JsHost {
             "goto" => {
                 let url = str_arg(argv, 0, "goto 的 url")?;
                 let opts = argv.get(1).cloned().unwrap_or(json!({}));
-                let (tmo_ms, warn) =
-                    secs_to_ms(opts.get("timeout").and_then(Value::as_u64).unwrap_or(15));
+                let (tmo_ms, warn) = match opts.get("timeout") {
+                    None | Some(Value::Null) => secs_to_ms(15),
+                    Some(v) => v.as_u64().map(secs_to_ms).ok_or_else(|| {
+                        anyhow!("goto 的 timeout 应是整秒数（当前：{}）", preview(v))
+                    })?,
+                };
                 let idle_ms = match opts.get("waitIdle") {
                     Some(Value::Number(n)) => n.as_u64().map(|s| s * 1000),
                     Some(Value::Bool(true)) => Some(20_000),
@@ -1032,13 +1036,13 @@ impl JsHost {
             }
             "waitLoad" => {
                 // 秒口径（#51）：缺省 10 秒；旧毫秒习惯值由混用守卫换算并告警
-                let (ms, warn) = timeout_ms_of(argv, 0, 10);
+                let (ms, warn) = timeout_ms_of(argv, 0, 10, "waitLoad")?;
                 let r = crate::semantic::wait_load(&self.session, ms).await?;
                 Ok(attach_warning(r, warn))
             }
             "waitIdle" => {
                 // 秒口径（#51）：缺省 10 秒
-                let (ms, warn) = timeout_ms_of(argv, 0, 10);
+                let (ms, warn) = timeout_ms_of(argv, 0, 10, "waitIdle")?;
                 let r = crate::semantic::wait_idle(&self.session, ms).await?;
                 Ok(attach_warning(r, warn))
             }
@@ -1046,7 +1050,7 @@ impl JsHost {
             "waitForResponse" => {
                 let pat = str_arg(argv, 0, "waitForResponse 的 pattern")?;
                 // 秒口径（#51）：缺省 15 秒
-                let (ms, warn) = timeout_ms_of(argv, 1, 15);
+                let (ms, warn) = timeout_ms_of(argv, 1, 15, "waitForResponse")?;
                 let r = self.wait_for_response(pat, ms).await?;
                 Ok(attach_warning(r, warn))
             }
@@ -1193,18 +1197,29 @@ impl JsHost {
                 let bn = self.lookup_ref(r).await?;
                 let mut out = crate::semantic::click_ref(&self.session, bn).await?;
                 // waitNav（#19）：链接型点击后自动等导航稳定，免点击加
-                // waitLoad 两步；同文档锚点与纯 JS 按钮等已加载页立即返回
+                // waitLoad 两步；同文档锚点与纯 JS 按钮等已加载页立即返回。
+                // clickRef 基础回执是裸 true（布尔面），waitNav 在位时显式
+                // 构造对象形 {clicked, waitLoad[, timeoutWarning]}（评审 F2：
+                // 布尔面附不上键，静默丢弃即特性不可见）
                 let opts = argv.get(1).cloned().unwrap_or(json!({}));
                 if opts.get("waitNav").and_then(Value::as_bool) == Some(true) {
-                    let (ms, warn) =
-                        secs_to_ms(opts.get("timeout").and_then(Value::as_u64).unwrap_or(10));
+                    let (ms, warn) = match opts.get("timeout") {
+                        None | Some(Value::Null) => secs_to_ms(10),
+                        Some(v) => v.as_u64().map(secs_to_ms).ok_or_else(|| {
+                            anyhow!(
+                                "clickRef waitNav 的 timeout 应是整秒数（当前：{}）",
+                                preview(v)
+                            )
+                        })?,
+                    };
                     let wl = crate::semantic::wait_load(&self.session, ms).await?;
-                    if let Some(o) = out.as_object_mut() {
-                        o.insert("waitLoad".to_string(), wl);
-                        if let Some(w) = warn {
-                            o.insert("timeoutWarning".to_string(), json!(w));
-                        }
+                    let mut o = serde_json::Map::new();
+                    o.insert("clicked".to_string(), out.clone());
+                    o.insert("waitLoad".to_string(), wl);
+                    if let Some(w) = warn {
+                        o.insert("timeoutWarning".to_string(), json!(w));
                     }
+                    out = Value::Object(o);
                 }
                 Ok(out)
             }
@@ -1468,9 +1483,25 @@ impl JsHost {
                     .ok_or_else(|| anyhow!(
                         "waitFor 缺 method 字符串；下一步：await session.waitFor(\"Page.frameNavigated\", undefined, 15)（秒）。注意 loadEventFired 有竞速窗：事件在注册前已发则假超时（#19），等加载用 goto() 或 waitLoad()，等导航事件用 frameNavigated"
                     ))?;
-                // 秒口径（#51）：缺省 15 秒；旧毫秒习惯值由混用守卫换算并
-                // 告警（事件回执是 CDP 原形，告警走 daemon 留痕）
-                let (ms, warn) = timeout_ms_of(argv, 2, 15);
+                // 秒口径（#51）：缺省 15 秒；位置 2 优先、位置 1 容忍旧两参
+                // 形 waitFor(method, ms)（评审 G3）；旧毫秒习惯值由混用守卫
+                // 换算并告警（事件回执是 CDP 原形，告警走 daemon 留痕）
+                let raw = argv.get(2).filter(|v| !v.is_null());
+                let raw = match raw {
+                    Some(v) => Some(v),
+                    // 两参旧形：位置 1 是数值即 timeout，是 matcher 串则忽略
+                    None => argv.get(1).filter(|v| v.as_u64().is_some()),
+                };
+                let (ms, warn) = match raw {
+                    None => secs_to_ms(15),
+                    Some(v) => {
+                        let n = v.as_u64().ok_or_else(|| anyhow!(
+                            "waitFor 的 timeout 应是整秒数（当前：{}）；下一步：session.waitFor(\"Page.frameNavigated\", undefined, 15)",
+                            preview(v)
+                        ))?;
+                        secs_to_ms(n)
+                    }
+                };
                 if let Some(w) = warn {
                     eprintln!("[browse] waitFor {w}");
                 }
@@ -1498,7 +1529,7 @@ impl JsHost {
                     ))?;
                 // 秒口径（#51）：缺省 10 秒；返回值是页内原值非对象，混用
                 // 告警走 daemon 留痕
-                let (timeout_ms, warn) = timeout_ms_of(argv, 1, 10);
+                let (timeout_ms, warn) = timeout_ms_of(argv, 1, 10, "waitJs")?;
                 if let Some(w) = warn {
                     eprintln!("[browse] waitJs {w}");
                 }
@@ -2009,9 +2040,20 @@ fn secs_to_ms(v: u64) -> (u64, Option<String>) {
 }
 
 /// 取第 i 个 wait 类 timeout 实参（缺省 default_s 秒）并过 [`secs_to_ms`]
-/// 混用守卫。
-fn timeout_ms_of(argv: &[Value], i: usize, default_s: u64) -> (u64, Option<String>) {
-    secs_to_ms(argv.get(i).and_then(Value::as_u64).unwrap_or(default_s))
+/// 混用守卫；实参在位但不是整数秒形态即报错（评审 G4：不静默落缺省）。
+fn timeout_ms_of(
+    argv: &[Value],
+    i: usize,
+    default_s: u64,
+    who: &str,
+) -> Result<(u64, Option<String>)> {
+    match argv.get(i) {
+        None | Some(Value::Null) => Ok(secs_to_ms(default_s)),
+        Some(v) => v.as_u64().map(secs_to_ms).ok_or_else(|| anyhow!(
+            "{who} 的 timeout 应是整秒数（当前：{}）；下一步：秒口径直写如 waitLoad(15)，旧毫秒习惯值大于 3600 自动换算",
+            preview(v)
+        )),
+    }
 }
 
 /// 把混用告警附进结果对象（只对对象面结果有意义；附不上的调用方走
@@ -3593,8 +3635,29 @@ mod timeout_tests {
     #[test]
     fn timeout_ms_of_positional() {
         let argv = vec![serde_json::json!("x"), serde_json::json!(5)];
-        assert_eq!(timeout_ms_of(&argv, 1, 10), (5_000, None));
-        assert_eq!(timeout_ms_of(&argv, 9, 10), (10_000, None));
+        assert_eq!(
+            timeout_ms_of(&argv, 1, 10, "waitLoad").unwrap(),
+            (5_000, None)
+        );
+        assert_eq!(
+            timeout_ms_of(&argv, 9, 10, "waitLoad").unwrap(),
+            (10_000, None)
+        );
+    }
+
+    /// 实参在位但非整数秒形态即报错（评审 G4：不静默落缺省）。
+    #[test]
+    fn timeout_arg_bad_type_errors() {
+        let argv = vec![serde_json::json!("x"), serde_json::json!("30s")];
+        assert!(timeout_ms_of(&argv, 1, 10, "waitLoad").is_err());
+        let argv = vec![serde_json::json!(1.5)];
+        assert!(timeout_ms_of(&argv, 0, 10, "waitJs").is_err());
+        // null 在位视同缺省（方言可显式传 undefined）
+        let argv = vec![serde_json::json!(Value::Null)];
+        assert_eq!(
+            timeout_ms_of(&argv, 0, 10, "waitLoad").unwrap(),
+            (10_000, None)
+        );
     }
 
     /// fill 类第三参 submit 两形：布尔 true 与对象 {submit: true}。

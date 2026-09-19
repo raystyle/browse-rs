@@ -380,7 +380,7 @@
     {
       "path": "browse_core::semantic::goto",
       "kind": "function",
-      "docs": "一步导航（#19）：`Page.navigate` 加 waitLoad 一体收尾，可选再等网络静默，\n返回提交后世界的 url/title/elapsedMs。用于「去这个页且等它可用」，替代\n手写 navigate 加 waitLoad 两步；也替代 navigate 加 waitFor(loadEventFired)\n组合——后者事件已发再注册即假超时（#19 竞速），本函数走 readyState 轮询\n无此窗。\n\n`timeout_ms` 是导航加载合计预算；`idle_ms` 为 Some 时再等网络静默。\n\n# Errors\n\nnavigate 回执带 errorText；预算内 readyState 未到 complete；idle 档\n未静默。"
+      "docs": "一步导航（#19）：`Page.navigate` 加 waitLoad 一体收尾，可选再等网络静默，\n返回提交后世界的 url/title/elapsedMs。用于「去这个页且等它可用」，替代\n手写 navigate 加 waitLoad 两步；也替代 navigate 加 waitFor(loadEventFired)\n组合——后者事件已发再注册即假超时（#19 竞速），本函数走 readyState 轮询\n无此窗。\n\n`timeout_ms` 是导航加载合计预算；`idle_ms` 为 Some 时再等网络静默。\nurl/title 取自目标元数据（Target.getTargets 面），瞬时提交窗内可能\n滞后；权威读取用 `location.href` / `document.title`（评审 G7）。\n\n# Errors\n\nnavigate 回执带 errorText；预算内 readyState 未到 complete；idle 档\n未静默。"
     },
     {
       "path": "browse_core::semantic::hover_at",

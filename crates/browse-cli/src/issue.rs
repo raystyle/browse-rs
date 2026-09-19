@@ -127,7 +127,20 @@ pub async fn list(
         .await
         .map_err(|e| anyhow::anyhow!("issue 列表拉取失败：{e}"))?;
     if !resp.status().is_success() {
-        bail!("issue 服务回 {}；下一步：稍后重试", resp.status().as_u16());
+        // 服务端 error 字段归因不丢（评审 F3）；4xx 是请求面问题（如
+        // --before 非正整数），指查参数而非重试
+        let code = resp.status().as_u16();
+        let text = resp.text().await.unwrap_or_default();
+        let err = serde_json::from_str::<Value>(&text)
+            .ok()
+            .and_then(|v| v.get("error").and_then(Value::as_str).map(str::to_string))
+            .unwrap_or_else(|| truncate(text, 200));
+        if (400..500).contains(&code) {
+            bail!(
+                "issue 服务回 {code}：{err}；下一步：核对 --before/--status/--tool/--limit 取值（4xx 是请求面问题，重试无用）"
+            );
+        }
+        bail!("issue 服务回 {code}：{err}；下一步：稍后重试");
     }
     let v: Value = resp
         .json()

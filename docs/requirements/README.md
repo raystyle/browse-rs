@@ -9,7 +9,7 @@
 | REQ-003 | draft | must | browse 托管 clean-chrome（部署升级维护与自有用户数据） | null |
 | REQ-004 | implemented | must | semver 判据与封版流（0.1.0 首封） | tag v0.1.0 + 三路门禁（diary 2026-09-16 封版节） |
 | REQ-005 | implemented | should | browse update 自更新面（家族统一标准件） | self_update 单测五件 + 实弹幂等与 ark 拦截 + 评审侧双通道全链 |
-| REQ-006 | draft | must | issue 台账批次规划与批 1（时序口径与导航族） | 见下方 Roadmap；issue #51/#19/#39 |
+| REQ-006 | implemented | must | 批 1 时序口径与导航族（issue #51/#19/#39） | timeout_tests 三件单测加 e2e 批 1 块十断言加 surface 六条目；正文见 REQ-006 文件 |
 
 ## Roadmap（issue 台账批次规划）
 

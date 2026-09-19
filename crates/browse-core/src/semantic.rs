@@ -84,6 +84,8 @@ pub async fn close_tab(s: &Session, target_id: Option<&str>) -> Result<Value> {
 /// 无此窗。
 ///
 /// `timeout_ms` 是导航加载合计预算；`idle_ms` 为 Some 时再等网络静默。
+/// url/title 取自目标元数据（Target.getTargets 面），瞬时提交窗内可能
+/// 滞后；权威读取用 `location.href` / `document.title`（评审 G7）。
 ///
 /// # Errors
 ///
@@ -129,25 +131,32 @@ pub async fn go_forward(s: &Session, delta: u64) -> Result<Value> {
 
 async fn history_jump(s: &Session, delta: i64) -> Result<Value> {
     let h = s.call("Page.getNavigationHistory", json!({})).await?;
-    let idx = h
-        .pointer("/currentIndex")
-        .and_then(Value::as_i64)
-        .unwrap_or(0);
     let entries = h
         .pointer("/entries")
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
-    let to = (idx + delta).clamp(0, (entries.len() as i64).saturating_sub(1));
-    let entry = entries
-        .get(to as usize)
-        .ok_or_else(|| anyhow!("历史为空，无条目可跳；下一步：先 goto(url) 建立历史"))?;
+    if entries.is_empty() {
+        bail!("历史为空，无条目可跳；下一步：先 goto(url) 建立历史");
+    }
+    let len = entries.len() as i64;
+    let idx = h
+        .pointer("/currentIndex")
+        .and_then(Value::as_i64)
+        .filter(|i| *i >= 0 && *i < len)
+        .ok_or_else(|| anyhow!(
+            "历史 currentIndex 缺失或越界；下一步：裸调 session.Page.getNavigationHistory 看回执形态"
+        ))?;
+    let to = (idx + delta).clamp(0, len - 1);
+    let entry = &entries[to as usize];
     let fallback_url = entry
         .get("url")
         .and_then(Value::as_str)
         .unwrap_or("")
         .to_string();
-    let entry_id = entry.get("id").cloned().unwrap_or(json!(to));
+    let entry_id = entry.get("id").and_then(Value::as_i64).ok_or_else(|| anyhow!(
+        "历史条目缺 id 字段（entryId 是不透明整数，不可用索引顶替）；下一步：裸调 session.Page.getNavigationHistory 看回执形态"
+    ))?;
     s.call(
         "Page.navigateToHistoryEntry",
         json!({ "entryId": entry_id }),
@@ -775,12 +784,10 @@ pub async fn emulate(s: &Session, opts: &Value) -> Result<Value> {
 pub async fn wait_load(s: &Session, ms: u64) -> Result<Value> {
     let t0 = std::time::Instant::now();
     s.call("Page.enable", json!({})).await?;
-    let nav_budget = ms / 3;
-    if let Ok(_ev) = s.wait_for("Page.frameNavigated", nav_budget.max(200)).await {
-        // 新导航在路上，交给 readyState 收尾
-    }
-    let remain = ms.saturating_sub(t0.elapsed().as_millis() as u64).max(200);
-    let deadline = tokio::time::Instant::now() + Duration::from_millis(remain);
+    // 先查 readyState 再谈等待（评审 G5）：已加载页立即返回，不再先进
+    // frameNavigated 宽限窗白等 ms/3；导航在途时提交屏障已把页面级调用
+    // 闸到提交后，首查读到的就是新文档态
+    let deadline = tokio::time::Instant::now() + Duration::from_millis(ms.max(200));
     loop {
         let r = s
             .call(

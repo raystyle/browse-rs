@@ -400,6 +400,44 @@ l`.length === 3].join(\"|\")", returnByValue:true})).result.value"#;
             .is_some_and(|w| w.as_str().unwrap_or("").contains("毫秒误写")),
         "旧毫秒习惯值应带混用告警: {wl_ms}"
     );
+    // clickRef waitNav（#19，评审 F2 补断言）：链接型点击后回执是对象形，
+    // waitLoad.readyState 必须可见（修前布尔面附不上键、特性端到端不可见）
+    host.eval_snippet(
+        r#"await goto("data:text/html,<a href='data:text/html,<title>waitnav-target</title><h1>t</h1>'>go</a>")"#,
+    )
+    .await
+    .expect("goto 链接页");
+    let lsn = host
+        .eval_snippet("return await snapshot()")
+        .await
+        .expect("链接页 snapshot");
+    let link_ref = lsn
+        .get("nodes")
+        .and_then(Value::as_array)
+        .expect("nodes")
+        .iter()
+        .find(|n| n.get("role") == Some(&json!("link")))
+        .and_then(|n| n.get("ref"))
+        .and_then(Value::as_str)
+        .expect("链接节点应带 ref")
+        .to_string();
+    let wnav = host
+        .eval_snippet(&format!(
+            r#"return await clickRef("{link_ref}", {{waitNav: true}})"#
+        ))
+        .await
+        .expect("clickRef waitNav");
+    assert_eq!(
+        wnav.pointer("/waitLoad/readyState"),
+        Some(&json!("complete")),
+        "waitNav 回执应带 waitLoad 且已稳定: {wnav}"
+    );
+    assert_eq!(
+        wnav.get("clicked"),
+        Some(&json!(true)),
+        "clicked 基座在: {wnav}"
+    );
+
     // checkRef/uncheckRef：防呆幂等（#39）
     host.eval_snippet(r#"await goto("data:text/html,<input type='checkbox' id='c'>")"#)
         .await
