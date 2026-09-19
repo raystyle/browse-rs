@@ -135,6 +135,7 @@ assert_eq!(render(&stmts), "const tabs = await listPageTargets()");
 ## Modules
 
 - [`chrome_mgr`](chrome_mgr.md): 内嵌 Chromium 版本管理器（ADR-0007）：各版本 clean-chrome 在本仓应用
+- [`cookie_clone`](cookie_clone.md): 无头引擎登录态按域克隆（#48）：从附着浏览器热迁指定域 cookie 到
 - [`engine`](engine.md): 引擎策略：附着优先，缺则自起（ADR-0003）。
 - [`js_host`](js_host.md): 方言求值器：把 [`crate::parser`] 的语句树跑在宿主侧。
 - [`parser`](parser.md): browser-harness-js 片段方言的语法分析器（纯函数）。
@@ -191,6 +192,18 @@ assert_eq!(render(&stmts), "const tabs = await listPageTargets()");
 ## Constants
 
 - `DEFAULT_MIRROR` — R2 镜像默认基址（chrome.ohmygh.com 版本段路由，ADR-0007 决策二；
+
+
+<!-- browse_core/cookie_clone.md -->
+# browse-core::cookie_clone
+
+无头引擎登录态按域克隆（#48）：从附着浏览器热迁指定域 cookie 到
+临时实例。只读源、绝不写回（用户浏览器零改动，铁律）；全量导出
+过宽，按域过滤最小化。
+
+## Functions
+
+- `clone_domains` — 从附着浏览器克隆指定域 cookie 到目标引擎会话。
 
 
 <!-- browse_core/engine.md -->

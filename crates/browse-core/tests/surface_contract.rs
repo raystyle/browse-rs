@@ -166,6 +166,7 @@ fn help_lists_every_cli_flag() {
         "--markdown",
         "-m",
         "--timeout",
+        "--cookies",
     ];
     let mut flags: Vec<String> = src
         .split(['"', '|'])

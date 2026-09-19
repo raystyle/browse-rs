@@ -610,7 +610,7 @@
       "type": "object"
     },
     "cli.up": {
-      "description": "browse up [--headless] [--pipe] [--chrome <path>] [--profile <dir>] [--ws <url>] [--port <p>] [--proxy <url>] [--proxy-bypass <list>] [--isolated] [--idle-timeout <ms>] 显式起引擎（附着优先，缺则 spawn clean-chrome 隔离实例；--profile 自定义 user-data-dir，默认固定 profile 持久保存站点会话；--proxy/--proxy-bypass 直通 chrome 代理旗标；--isolated 隔离态 profile 引擎退出即删（给了 --profile 时 isolated 优先）；--idle-timeout 闲置回收毫秒只对新拉起的 daemon 生效）。",
+      "description": "browse up [--headless] [--pipe] [--chrome <path>] [--profile <dir>] [--ws <url>] [--port <p>] [--proxy <url>] [--proxy-bypass <list>] [--isolated] [--idle-timeout <ms>] [--cookies <域csv>] 显式起引擎（附着优先，缺则 spawn clean-chrome 隔离实例；--profile 自定义 user-data-dir，默认固定 profile 持久保存站点会话；--proxy/--proxy-bypass 直通 chrome 代理旗标；--isolated 隔离态 profile 引擎退出即删（给了 --profile 时 isolated 优先）；--idle-timeout 闲置回收毫秒只对新拉起的 daemon 生效）；--cookies 域 csv（#48）起引擎后从附着浏览器只读热迁指定域登录态（源零写回，无附着源即报错指 storageState 整包往返）。",
       "example": "browse up --headless --profile ~/profiles/proj-a",
       "input": {
         "properties": {
@@ -719,6 +719,24 @@
         },
         "required": [
           "ref"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "cloneCookies": {
+      "description": "cloneCookies(domains) 登录态按域热迁（#48）：从附着浏览器（probe_default 发现）只读取指定域 cookie 后缀匹配，Network.setCookies 灌入当前引擎；源零写回铁律；回 {cloned,matched,domains}。无附着源报错指 exportStorageState 整包往返。",
+      "example": "await cloneCookies([\"example.com\"])",
+      "input": {
+        "properties": {
+          "domains": {
+            "description": "缺省 域名字符串数组",
+            "type": "array"
+          }
+        },
+        "required": [
+          "domains"
         ],
         "type": "object"
       },

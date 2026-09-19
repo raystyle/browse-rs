@@ -92,6 +92,7 @@ async fn main() -> Result<()> {
     let mut proxy_bypass: Option<String> = None;
     let mut isolated = false;
     let mut idle_timeout: Option<String> = None;
+    let mut cookies_csv: Option<String> = None;
     let mut secrets: Option<String> = None;
 
     let mut args = std::env::args().skip(1);
@@ -124,6 +125,8 @@ async fn main() -> Result<()> {
             "--proxy-bypass" => proxy_bypass = Some(next("--proxy-bypass")?),
             "--isolated" => isolated = true,
             "--idle-timeout" => idle_timeout = Some(next("--idle-timeout")?),
+            // #48：无头起引擎时从附着浏览器按域克隆 cookie（逗号分隔多域）
+            "--cookies" => cookies_csv = Some(next("--cookies")?),
             "--secrets" => secrets = Some(next("--secrets")?),
             "--js" => js = true,
             // base64 通道只留长参：`-b` 短参是 issue new 的 --body 既有
@@ -361,6 +364,28 @@ async fn main() -> Result<()> {
                 isolated,
             })
             .await?;
+            // #48：--cookies 从附着浏览器按域热迁登录态到新引擎（只读源）
+            if let Some(csv) = &cookies_csv {
+                let domains: Vec<String> = csv
+                    .split(',')
+                    .map(|d| d.trim().to_string())
+                    .filter(|d| !d.is_empty())
+                    .collect();
+                if !domains.is_empty() {
+                    // 方言数组字面量：["a.com","b.com"] 形直接可写
+                    let arr = format!(
+                        "[{}]",
+                        domains
+                            .iter()
+                            .map(|d| serde_json::to_string(d).unwrap_or_default())
+                            .collect::<Vec<_>>()
+                            .join(",")
+                    );
+                    let code = format!("return await cloneCookies({arr})");
+                    let r = client::eval(&code, false, false).await?;
+                    println!("cookies 克隆：{r}");
+                }
+            }
             print_health(&health, json);
             Ok(())
         }

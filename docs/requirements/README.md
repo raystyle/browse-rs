@@ -13,6 +13,7 @@
 | REQ-007 | implemented | must | 批 2 token 经济与可观测三件（issue #36/#37/#49） | e2e 批 2 块加真页实弹（example.com）；正文见 REQ-007 文件 |
 | REQ-008 | implemented | should | 批 3 原语补全池（issue #35/#38/#40/#41+#24/#42，滚动切片） | 五片全落（e2e 各块与评审轮随卷 diary 批 19） |
 | REQ-009 | implemented | should | 抓取与录制批（issue #50/#43） | #50 分类器单测加实弹；#43 v1 实弹（转代码二期记档） |
+| REQ-010 | draft | should | 实例编排批（issue #48/#28） | #48 已落；#28 跨仓协同中 |
 
 ## Roadmap（issue 台账批次规划）
 

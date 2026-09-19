@@ -147,7 +147,7 @@ pub const COMMANDS: &[CmdSpec] = &[
     CmdSpec {
         name: "up",
         kind: CmdKind::Cli,
-        signature: "browse up [--headless] [--pipe] [--chrome <path>] [--profile <dir>] [--ws <url>] [--port <p>] [--proxy <url>] [--proxy-bypass <list>] [--isolated] [--idle-timeout <ms>]",
+        signature: "browse up [--headless] [--pipe] [--chrome <path>] [--profile <dir>] [--ws <url>] [--port <p>] [--proxy <url>] [--proxy-bypass <list>] [--isolated] [--idle-timeout <ms>] [--cookies <域csv>]",
         args: &[
             arg!("headless", "boolean", false, "false"),
             arg!("pipe", "boolean", false, "false"),
@@ -160,7 +160,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("isolated", "boolean", false, "false"),
             arg!("idle-timeout", "number", false, "3600000"),
         ],
-        description: "显式起引擎（附着优先，缺则 spawn clean-chrome 隔离实例；--profile 自定义 user-data-dir，默认固定 profile 持久保存站点会话；--proxy/--proxy-bypass 直通 chrome 代理旗标；--isolated 隔离态 profile 引擎退出即删（给了 --profile 时 isolated 优先）；--idle-timeout 闲置回收毫秒只对新拉起的 daemon 生效）。",
+        description: "显式起引擎（附着优先，缺则 spawn clean-chrome 隔离实例；--profile 自定义 user-data-dir，默认固定 profile 持久保存站点会话；--proxy/--proxy-bypass 直通 chrome 代理旗标；--isolated 隔离态 profile 引擎退出即删（给了 --profile 时 isolated 优先）；--idle-timeout 闲置回收毫秒只对新拉起的 daemon 生效）；--cookies 域 csv（#48）起引擎后从附着浏览器只读热迁指定域登录态（源零写回，无附着源即报错指 storageState 整包往返）。",
         example: "browse up --headless --profile ~/profiles/proj-a",
     },
     CmdSpec {
@@ -636,6 +636,14 @@ pub const COMMANDS: &[CmdSpec] = &[
         args: &[arg!("refs", "array", true, "ref 字符串数组")],
         description: "批量画框加编号徽标（#24 残余）：对一批 ref 各画框并以 ref 本身为徽标文本（与 snapshot 编号天然对齐）；任一项失败先清场再报错（不留半批框）；配合 screenshot() 取证后 highlightClear() 收场。",
         example: "await annotate([\"e1\", \"e3\"])",
+    },
+    CmdSpec {
+        name: "cloneCookies",
+        kind: CmdKind::Global,
+        signature: "cloneCookies(domains)",
+        args: &[arg!("domains", "array", true, "域名字符串数组")],
+        description: "登录态按域热迁（#48）：从附着浏览器（probe_default 发现）只读取指定域 cookie 后缀匹配，Network.setCookies 灌入当前引擎；源零写回铁律；回 {cloned,matched,domains}。无附着源报错指 exportStorageState 整包往返。",
+        example: r#"await cloneCookies(["example.com"])"#,
     },
     CmdSpec {
         name: "downloads",

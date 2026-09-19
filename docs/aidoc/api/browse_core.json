@@ -118,6 +118,16 @@
       "docs": "写登记册（先建根目录）。\n\n# Errors\n\n根目录建不出来或序列化写盘失败。"
     },
     {
+      "path": "browse_core::cookie_clone",
+      "kind": "module",
+      "docs": "无头引擎登录态按域克隆（#48）：从附着浏览器热迁指定域 cookie 到\n临时实例。只读源、绝不写回（用户浏览器零改动，铁律）；全量导出\n过宽，按域过滤最小化。"
+    },
+    {
+      "path": "browse_core::cookie_clone::clone_domains",
+      "kind": "function",
+      "docs": "从附着浏览器克隆指定域 cookie 到目标引擎会话。\n\n源发现走附着探测（9222 / DevToolsActivePort；无附着浏览器即报错带\nCTA）。域匹配是后缀（example.com 命中 .example.com 与 sub.example.com）。\n回执带迁移条数与跳过条数。\n\n# Errors\n\n无附着浏览器；源连接失败；目标 setCookies 失败。"
+    },
+    {
       "path": "browse_core::engine",
       "kind": "module",
       "docs": "引擎策略：附着优先，缺则自起（ADR-0003）。\n\nclean-chrome 专为自动化而生（`--auto-allow-devtools-connections` 免确认、\n无参数启动即开 9222），所以：\n\n1. 显式 `ws` / `port`（CLI 旗标或 `BROWSE_CDP_WS`）优先直连。\n2. 否则探测本机已开的调试口（`/json/version`@9222 -> 默认 profile 的\n   `DevToolsActivePort`），命中即附着；人机共存，绝不关用户的浏览器。\n3. 都没有就 spawn 专属实例：独立 profile、`--remote-debugging-port=0`、\n   可 `--headless`。[`Engine::shutdown`] 只终结自己 spawn 的（优雅\n   `Browser.close` -> 兜底杀进程树）。\n\n连上后自动 attach 首个 page target（没有就开 about:blank），\n让 agent 一条命令即可 `session.Page.navigate(...)`（ADR-0004）；\n片段里的显式 `session.connect` / `session.use` 仍然可覆盖。"

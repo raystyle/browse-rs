@@ -31,6 +31,7 @@
 //! ```
 
 pub mod chrome_mgr;
+pub mod cookie_clone;
 pub mod engine;
 pub mod js_host;
 pub mod parser;
