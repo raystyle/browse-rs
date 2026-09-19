@@ -53,10 +53,11 @@ impl Recorder {
 ///
 /// 未连接、`Page.startScreencast` 失败、目录建不出来。
 pub async fn start(s: Arc<Session>, opts: &Value) -> Result<Recorder> {
-    // 同会话重启垫拍（#58 实证 workaround）：recordStop 后紧接的第二次
-    // startScreencast 会零帧（竞态非恒定，插一次会话往返即活：r1=6 加拍
-    // 后 r2=2；换 tab 恒活），机理未定谳（疑 Chrome 侧订阅状态机），垫
-    // 一次廉价往返把竞态窗口关掉
+    // 同会话重启垫拍（#58/#59 定谳）：stopScreencast 的拆卸在 Chrome 侧
+    // 是异步时间窗，紧接（微秒级）的 startScreencast 落在窗内被一并拆掉
+    // 即零帧。判别实验：背靠背必零帧；中间垫任意 CDP 往返（Browser 级同
+    // 效，非会话状态）或纯 sleep 2 秒（无 CDP）都活——是时间窗非消息序。
+    // 垫一次廉价往返（毫秒级时延）已覆盖拆卸窗
     let _ = s
         .call(
             "Runtime.evaluate",
