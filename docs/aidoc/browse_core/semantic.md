@@ -25,6 +25,7 @@
 - `current_tab` — 当前活动 tab 简表 `{targetId,title,url}`；无活动 tab 返回 `null`。
 - `dblclick_ref` — 双击短 ref 元素（#23）：press/release 两轮，clickCount 递增成双击。
 - `drag_ref` — 拖拽：源 ref 中心按下，分步移到目标 ref 中心松开（#23）。
+- `element_rect` — 量元素视口矩形（#41）：滚动可见后取 rect，回 (x, y, w, h)；不可见
 - `emulate` — 视口与 UA 仿真档位（#24）：`{viewport:{width,height}, mobile, userAgent,
 - `emulate_media` — a11y 媒质仿真族（#40）：`Emulation.setEmulatedMedia` 的 features 面。
 - `emulate_media_clear` — 还原媒质仿真（#40）：`Emulation.setEmulatedMedia` 空参，五特征与媒质
@@ -34,6 +35,7 @@
 - `go_back` — 历史回退（#39）：`Page.getNavigationHistory` 取 currentIndex，回退 delta
 - `go_forward` — 历史前进（#39）：同 [`go_back`] 方向相反，钳到最新条目。
 - `goto` — 一步导航（#19）：`Page.navigate` 加 waitLoad 一体收尾，可选再等网络静默，
+- `highlight` — 持久高亮覆盖层（#41）：给元素画 2px 橙框加可选编号徽标（label），不
 - `hover_at` — 移动鼠标到视口坐标（#23）：触发 `:hover` 与悬停菜单的 mouseMoved。
 - `hover_ref` — 悬停到短 ref 元素中心（#23）：触发 CSS `:hover` 与悬停菜单。
 - `import_storage_state` — 导入会话态（#25.3）：吃 [`export_storage_state`] 的返回值或其落盘

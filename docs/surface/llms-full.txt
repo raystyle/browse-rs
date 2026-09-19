@@ -65,9 +65,12 @@
 | `sessionSet(key, value)` | 写 sessionStorage 单键（#42）：回写后回读值。 |
 | `sessionDelete(key)` | 删 sessionStorage 单键（#42）。 |
 | `sessionClear()` | 清空当前域 sessionStorage（#42，不动 localStorage）。 |
+| `highlight(ref, {label}?)` | 持久高亮覆盖层（#41）：2px 橙框不挡点击（pointer-events none），label 给定叠编号徽标；幂等（同元素刷新框位）；清场走 highlightClear()。人看 agent 在操作哪个元素。 |
+| `highlightClear()` | 移除全部高亮框与徽标（#41，按 data-browse-hl 属性）。 |
+| `annotate(refs)` | 批量画框加编号徽标（#24 残余）：对一批 ref 各画框并以 ref 本身为徽标文本（与 snapshot 编号天然对齐）；配合 screenshot() 取证后 highlightClear() 收场。 |
 | `downloads(since?)` | 下载列表（#38）：Browser.downloadWillBegin 行情加同 guid 最新 downloadProgress（state/receivedBytes/totalBytes）；落盘目录是状态目录 downloads/，捕获随 tab 入口自动开（Browser 域事件不做活动 tab 过滤）。 |
 | `downloadPath(guid, timeoutS?)` | 等下载完成后回落盘路径（#38）：completed 给 named 路径（改名未落时给 guid 原始名候选），canceled 报错，超时带当前态 CTA；guid 来自 downloads()。 |
-| `screenshot(path?, full?, opts?)` | 页内截图存文件；opts（#24）：format png/jpeg、quality（jpeg 1-100 缺省 80）、ifChanged（与既有文件逐字节相同即 skipped，省读回不省拍摄；字节可比性限同一引擎二进制）。回 {path,bytes,skipped}。同片段 navigate 后的提交窗竞速由 host 层统一等提交（#34 根因级，页面级调用闸到主框架 frameNavigated），本函数另内建 Not attached 有界重试兜底。 |
+| `screenshot(path?, full?, opts?)` | 页内截图存文件；opts（#24）：format png/jpeg、quality（jpeg 1-100 缺省 80）、ifChanged（与既有文件逐字节相同即 skipped，省读回不省拍摄；字节可比性限同一引擎二进制）。回 {path,bytes,skipped}。同片段 navigate 后的提交窗竞速由 host 层统一等提交（#34 根因级，页面级调用闸到主框架 frameNavigated），本函数另内建 Not attached 有界重试兜底；opts.ref 元素级截图（clip 到 bbox，#41）加 opts.hires/scale 高倍采样。 |
 | `pdf(path?)` | 当前页存 PDF（仅无头 chrome），回 {path,bytes}。 |
 | `newTab(url?)` | 开新 tab 并设为活动路由（先 about:blank 再 goto，防竞速假完成）；带 url 时内部等加载预算 15 秒与 goto 缺省对齐（#57 G3）。 |
 | `switchTab(targetId)` | 切活动路由（不改 Chrome 可见前景，人机共存）。 |
@@ -734,6 +737,38 @@ await sessionDelete("tmp")
 await sessionClear()
 ```
 
+## `highlight(ref, {label}?)`
+
+持久高亮覆盖层（#41）：2px 橙框不挡点击（pointer-events none），label 给定叠编号徽标；幂等（同元素刷新框位）；清场走 highlightClear()。人看 agent 在操作哪个元素。
+
+参数：
+- `ref`（string），必填
+- `label`（string，缺省 徽标文本（annotate 形态））
+
+```js
+await highlight("e3", {label: "e3"})
+```
+
+## `highlightClear()`
+
+移除全部高亮框与徽标（#41，按 data-browse-hl 属性）。
+
+
+```js
+await highlightClear()
+```
+
+## `annotate(refs)`
+
+批量画框加编号徽标（#24 残余）：对一批 ref 各画框并以 ref 本身为徽标文本（与 snapshot 编号天然对齐）；配合 screenshot() 取证后 highlightClear() 收场。
+
+参数：
+- `refs`（array，缺省 ref 字符串数组），必填
+
+```js
+await annotate(["e1", "e3"])
+```
+
 ## `downloads(since?)`
 
 下载列表（#38）：Browser.downloadWillBegin 行情加同 guid 最新 downloadProgress（state/receivedBytes/totalBytes）；落盘目录是状态目录 downloads/，捕获随 tab 入口自动开（Browser 域事件不做活动 tab 过滤）。
@@ -759,7 +794,7 @@ return await downloadPath("<guid>")
 
 ## `screenshot(path?, full?, opts?)`
 
-页内截图存文件；opts（#24）：format png/jpeg、quality（jpeg 1-100 缺省 80）、ifChanged（与既有文件逐字节相同即 skipped，省读回不省拍摄；字节可比性限同一引擎二进制）。回 {path,bytes,skipped}。同片段 navigate 后的提交窗竞速由 host 层统一等提交（#34 根因级，页面级调用闸到主框架 frameNavigated），本函数另内建 Not attached 有界重试兜底。
+页内截图存文件；opts（#24）：format png/jpeg、quality（jpeg 1-100 缺省 80）、ifChanged（与既有文件逐字节相同即 skipped，省读回不省拍摄；字节可比性限同一引擎二进制）。回 {path,bytes,skipped}。同片段 navigate 后的提交窗竞速由 host 层统一等提交（#34 根因级，页面级调用闸到主框架 frameNavigated），本函数另内建 Not attached 有界重试兜底；opts.ref 元素级截图（clip 到 bbox，#41）加 opts.hires/scale 高倍采样。
 
 参数：
 - `path`（string，缺省 state 目录时间戳名）

@@ -874,6 +874,20 @@ impl JsHost {
             }
             // 页内截图存文件，回 {path, bytes}；full 走 captureBeyondViewport
             "screenshot" => {
+                // 元素级（#41）：opts.ref 给定则 clip 到该元素 bbox（先滚动
+                // 可见再量 rect，口径同 clickRef 的量中心）
+                let opts_pre = argv
+                    .iter()
+                    .find(|v| v.is_object())
+                    .cloned()
+                    .unwrap_or(json!({}));
+                let elem_rect = if let Some(rf) = opts_pre.get("ref").and_then(Value::as_str) {
+                    let bn = self.lookup_ref(rf).await?;
+                    let object_id = crate::semantic::resolve_node_object(&self.session, bn).await?;
+                    crate::semantic::element_rect(&self.session, &object_id).await?
+                } else {
+                    None
+                };
                 let path = argv.first().and_then(Value::as_str).map(str::to_string);
                 let full = argv.get(1).and_then(Value::as_bool).unwrap_or(false);
                 // 选项对象（#24）：format jpeg/png、quality（jpeg）、ifChanged
@@ -891,6 +905,17 @@ impl JsHost {
                 let mut params = json!({ "format": format });
                 if full {
                     params["captureBeyondViewport"] = json!(true);
+                }
+                // #41：元素级 clip 与 hires（deviceScaleFactor 全采样）
+                if let Some((x, y, w, h)) = elem_rect {
+                    params["clip"] = json!({
+                        "x": x, "y": y, "width": w, "height": h, "scale": 1.0
+                    });
+                }
+                if opts.get("hires").and_then(Value::as_bool).unwrap_or(false)
+                    && let Some(scale) = opts.get("scale").and_then(Value::as_f64)
+                {
+                    params["clip"]["scale"] = json!(scale.max(1.0));
                 }
                 if format == "jpeg" {
                     params["quality"] = json!(quality.clamp(1, 100));
@@ -1684,6 +1709,60 @@ impl JsHost {
                     }
                     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
                 }
+            }
+            // ---- 人机协作视觉件（#41）----
+            "highlight" => {
+                // 持久高亮覆盖层（人看 agent 在操作哪个元素）：label 给定
+                // 时叠编号徽标（annotate 形态，与 snapshot ref 对齐由调用
+                // 方保证——ref 的序号即 label）
+                let r = str_arg(argv, 0, "highlight 的 ref")?;
+                let opts = argv.get(1).cloned().unwrap_or(json!({}));
+                let label = opts
+                    .get("label")
+                    .and_then(Value::as_str)
+                    .map(str::to_string);
+                let bn = self.lookup_ref(r).await?;
+                crate::semantic::highlight(&self.session, bn, label.as_deref()).await
+            }
+            "highlightClear" => {
+                self.session
+                    .call(
+                        "Runtime.evaluate",
+                        json!({
+                            "expression": "(() => { document.querySelectorAll('[data-browse-hl]').forEach(n => n.remove()); return true })()",
+                            "returnByValue": true
+                        }),
+                    )
+                    .await?;
+                Ok(json!(true))
+            }
+            "annotate" => {
+                // 截图叠加编号标签（#24 残余）：对一批 ref 画框加编号徽标，
+                // 截图后 highlightClear 收场
+                let refs = argv
+                    .first()
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default();
+                if refs.is_empty() {
+                    bail!(
+                        "annotate 缺 ref 数组；下一步：annotate([\"e1\", \"e3\"])，ref 来自最近一次 snapshot()"
+                    );
+                }
+                let mut drawn = 0usize;
+                for (i, rv) in refs.iter().enumerate() {
+                    let r = rv.as_str().ok_or_else(|| {
+                        anyhow!(
+                            "annotate 的第 {} 项应是 ref 字符串（当前：{}）",
+                            i + 1,
+                            preview(rv)
+                        )
+                    })?;
+                    let bn = self.lookup_ref(r).await?;
+                    crate::semantic::highlight(&self.session, bn, Some(r)).await?;
+                    drawn += 1;
+                }
+                Ok(json!({ "drawn": drawn }))
             }
             // ---- a11y 媒质仿真族（#40）----
             "emulateMedia" => {
@@ -3172,7 +3251,7 @@ const PREVIEW_HEAD_ITEMS: usize = 8;
 /// 全局函数 CTA 清单（#33 G6 单一真相）：「未知函数」提示由此派生，
 /// `global_cta_covers_catalog` 测试把它与 surface 目录的 Global 条目绑死；
 /// 增删全局必须同步这里（value-methods 是方法面族条目，不在此列）。
-const GLOBALS_CTA: &str = "listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/hostFunctions()/snapshot(opts?)/findRefs(q,opts?)/console(opts?)/jsErrors(since?)/requests(opts?)/requestDetail(idxOrId,opts?)/detect()/cookies(domain?)/cookieGet(name)/cookieSet(name,value,opts?)/cookieDelete(name,domain?)/cookiesClear()/localGet(k)/localSet(k,v)/localDelete(k)/localClear()/sessionGet(k)/sessionSet(k,v)/sessionDelete(k)/sessionClear()/mouseMove(x,y)/mouseDown(button?)/mouseUp(button?)/mouseWheel(dx,dy)/hoverAt(x,y)/dropFiles(ref,paths)/downloads(since?)/downloadPath(guid,s?)/emulateMedia(opts?)/emulateMediaClear()/screenshot(path?, full?)/pdf(path?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/goto(url,opts?)/goBack(delta?)/goForward(delta?)/reload(opts?)/clickAt(x,y,opts?)/fillInput(sel,text,submit?)/clickRef(ref,opts?)/checkRef(ref)/uncheckRef(ref)/fillRef(ref,text,submit?)/selectOption(ref,value)/pressKey(key)/dialogStatus()/dialogAccept(text?)/dialogDismiss()/routeBlock(pattern)/routeMock(pattern,body,opts?)/routeClear()/waitLoad(s?)/waitIdle(s?)/waitForResponse(pattern,s?)/responseBody(requestId)/pageEval(js)/hoverRef(ref)/hoverAt(x,y)/dblclickRef(ref)/dragRef(src,dst)/keydown(key)/keyup(key)/typeRef(ref,text)/emulate(opts)/setInitScript(code)/exportStorageState()/importStorageState(state)/JSON.parse(string)/JSON.stringify(value,indent?)/recordStart(opts?)/recordStop()/chromeInstall(opts?)/chromeList()/chromeUse(version)/chromeUpdate()/chromeRemove(version)/chromeDoctor()/print(x)";
+const GLOBALS_CTA: &str = "listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/hostFunctions()/snapshot(opts?)/findRefs(q,opts?)/console(opts?)/jsErrors(since?)/requests(opts?)/requestDetail(idxOrId,opts?)/detect()/cookies(domain?)/cookieGet(name)/cookieSet(name,value,opts?)/cookieDelete(name,domain?)/cookiesClear()/localGet(k)/localSet(k,v)/localDelete(k)/localClear()/sessionGet(k)/sessionSet(k,v)/sessionDelete(k)/sessionClear()/mouseMove(x,y)/mouseDown(button?)/mouseUp(button?)/mouseWheel(dx,dy)/hoverAt(x,y)/dropFiles(ref,paths)/highlight(ref,opts?)/highlightClear()/annotate(refs)/downloads(since?)/downloadPath(guid,s?)/emulateMedia(opts?)/emulateMediaClear()/screenshot(path?, full?)/pdf(path?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/goto(url,opts?)/goBack(delta?)/goForward(delta?)/reload(opts?)/clickAt(x,y,opts?)/fillInput(sel,text,submit?)/clickRef(ref,opts?)/checkRef(ref)/uncheckRef(ref)/fillRef(ref,text,submit?)/selectOption(ref,value)/pressKey(key)/dialogStatus()/dialogAccept(text?)/dialogDismiss()/routeBlock(pattern)/routeMock(pattern,body,opts?)/routeClear()/waitLoad(s?)/waitIdle(s?)/waitForResponse(pattern,s?)/responseBody(requestId)/pageEval(js)/hoverRef(ref)/hoverAt(x,y)/dblclickRef(ref)/dragRef(src,dst)/keydown(key)/keyup(key)/typeRef(ref,text)/emulate(opts)/setInitScript(code)/exportStorageState()/importStorageState(state)/JSON.parse(string)/JSON.stringify(value,indent?)/recordStart(opts?)/recordStop()/chromeInstall(opts?)/chromeList()/chromeUse(version)/chromeUpdate()/chromeRemove(version)/chromeDoctor()/print(x)";
 
 /// 容器预览：头部 JSON 截断（留尾注位），超帽尾注总项数；小容器输出
 /// 与全量形一致。不与 [`trunc_preview`] 叠用（双省略号）。

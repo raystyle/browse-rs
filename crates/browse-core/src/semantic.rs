@@ -605,6 +605,95 @@ pub async fn click_at_opts(
 /// mouseWheel 缺省落点。进程级单份（daemon 单引擎单活动页，口径够用）。
 static LAST_MOUSE: std::sync::Mutex<Option<(i64, i64)>> = std::sync::Mutex::new(None);
 
+/// 量元素视口矩形（#41）：滚动可见后取 rect，回 (x, y, w, h)；不可见
+/// 返回 None（调用方决定报错或全页截）。pub 供 js_host 的元素级截图用。
+///
+/// # Errors
+///
+/// 页内求值失败。
+pub async fn element_rect(s: &Session, object_id: &str) -> Result<Option<(f64, f64, f64, f64)>> {
+    let r = s
+        .call(
+            "Runtime.callFunctionOn",
+            json!({
+                "objectId": object_id,
+                "functionDeclaration": r#"function(){
+                    this.scrollIntoView({block: 'center'});
+                    const r = this.getBoundingClientRect();
+                    if (!this.isConnected || (!r.width && !r.height)) return null;
+                    return JSON.stringify({x: r.x, y: r.y, w: r.width, h: r.height});
+                }"#,
+                "returnByValue": true
+            }),
+        )
+        .await?;
+    let v = r
+        .pointer("/result/value")
+        .and_then(Value::as_str)
+        .and_then(|t| serde_json::from_str::<Value>(t).ok());
+    Ok(v.map(|v| {
+        (
+            v.get("x").and_then(Value::as_f64).unwrap_or(0.0),
+            v.get("y").and_then(Value::as_f64).unwrap_or(0.0),
+            v.get("w").and_then(Value::as_f64).unwrap_or(0.0),
+            v.get("h").and_then(Value::as_f64).unwrap_or(0.0),
+        )
+    }))
+}
+
+/// 持久高亮覆盖层（#41）：给元素画 2px 橙框加可选编号徽标（label），不
+/// 挡点击（pointer-events: none）；幂等（同元素重复高亮刷新框位）。清场
+/// 走上层 highlightClear（按 data-browse-hl 属性移除）。
+///
+/// # Errors
+///
+/// 元素不可见（量不到 rect）或求值失败。
+pub async fn highlight(s: &Session, backend_node_id: i64, label: Option<&str>) -> Result<Value> {
+    let object_id = resolve_node_object(s, backend_node_id).await?;
+    let r = s
+        .call(
+            "Runtime.callFunctionOn",
+            json!({
+                "objectId": object_id,
+                "functionDeclaration": r#"function(label){
+                    this.scrollIntoView({block: 'center'});
+                    const r = this.getBoundingClientRect();
+                    if (!this.isConnected || (!r.width && !r.height)) return false;
+                    const key = 'browse-hl-' + (this.dataset.browseHlKey || Math.random().toString(36).slice(2));
+                    this.dataset.browseHlKey = key;
+                    let box = document.getElementById(key);
+                    if (!box) {
+                        box = document.createElement('div');
+                        box.id = key; box.dataset.browseHl = '1';
+                        box.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483647;border:2px solid #ff8c00;background:rgba(255,140,0,.12)';
+                        document.documentElement.appendChild(box);
+                    }
+                    box.style.left = r.x + 'px'; box.style.top = r.y + 'px';
+                    box.style.width = r.width + 'px'; box.style.height = r.height + 'px';
+                    if (label) {
+                        let tag = document.getElementById(key + '-tag') || (() => {
+                            const t = document.createElement('div');
+                            t.id = key + '-tag'; t.dataset.browseHl = '1';
+                            t.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483647;background:#ff8c00;color:#fff;font:bold 12px monospace;padding:1px 4px;border-radius:3px';
+                            document.documentElement.appendChild(t); return t;
+                        })();
+                        tag.textContent = label;
+                        tag.style.left = r.x + 'px'; tag.style.top = (r.y - 16) + 'px';
+                    }
+                    return true;
+                }"#,
+                "arguments": [json!({ "value": label.unwrap_or("") })],
+                "returnByValue": true
+            }),
+        )
+        .await?;
+    let ok = r.pointer("/result/value") == Some(&json!(true));
+    if !ok {
+        bail!("highlight 量不到元素（不可见或已失效）；下一步：重新 snapshot() 取新 ref");
+    }
+    Ok(json!(true))
+}
+
 /// 鼠标按键白名单（#35 评审 G1）：非法值当场报错列合法值，不靠 CDP 的
 /// Invalid mouse button（Playwright 别名 primary/secondary 会静默不派发）。
 fn validate_button(button: &str) -> Result<()> {
@@ -1319,7 +1408,7 @@ pub async fn wait_idle(s: &Session, ms: u64) -> Result<Value> {
 /// [`crate::js_host`]（每次 `snapshot()` 整表替换），本层只管把
 /// backendNodeId 变成 focus/click；引用失效是被动发现的（导航后节点
 /// 没了，`DOM.resolveNode` 报错 -> CTA 重新 snapshot）。
-async fn resolve_node_object(s: &Session, backend_node_id: i64) -> Result<String> {
+pub(crate) async fn resolve_node_object(s: &Session, backend_node_id: i64) -> Result<String> {
     match s
         .call("DOM.resolveNode", json!({ "backendNodeId": backend_node_id }))
         .await

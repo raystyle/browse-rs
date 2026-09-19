@@ -1013,6 +1013,79 @@ l`.length === 3].join(\"|\")", returnByValue:true})).result.value"#;
     assert_eq!(body, "e2e-download-body", "下载落盘内容应一致: {body}");
     let _ = tokio::fs::remove_file(&dpath).await;
 
+    // ---- #41/#24 视觉件 ----
+    // highlight 画框（副作用可观察）加 clear；annotate 批量加元素级截图
+    host.eval_snippet(
+        r#"await routeMock("http://vis.test/*", "<button id=v style='width:80px;height:40px'>V</button>", {contentType: "text/html"}); await goto("http://vis.test/x", {timeout: 10})"#,
+    )
+    .await
+    .expect("goto 视觉页");
+    let vs = host
+        .eval_snippet("return await snapshot()")
+        .await
+        .expect("snapshot");
+    let v_ref = vs
+        .get("nodes")
+        .and_then(Value::as_array)
+        .and_then(|a| {
+            a.iter()
+                .find(|n| {
+                    n.get("name") == Some(&json!("V"))
+                        && n.get("role") != Some(&json!("StaticText"))
+                })
+                .and_then(|n| n.get("ref"))
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .or_else(|| {
+            vs.get("nodes").and_then(Value::as_array).and_then(|a| {
+                a.iter()
+                    .find(|n| n.get("name") == Some(&json!("V")))
+                    .and_then(|n| n.get("ref"))
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            })
+        })
+        .expect("V 节点 ref");
+    host.eval_snippet(&format!(
+        r#"await highlight("{v_ref}", {{label: "{v_ref}"}})"#
+    ))
+    .await
+    .expect("highlight");
+    let hl = host
+        .eval_snippet(
+            r#"return (await session.Runtime.evaluate({expression:"document.querySelectorAll('[data-browse-hl]').length", returnByValue:true})).result.value"#,
+        )
+        .await
+        .expect("数高亮层");
+    assert_eq!(hl, json!(2), "框加徽标两层应在: {hl}");
+    // 元素级截图：clip 尺寸有界（小于全页也非零）
+    let shot_el = host
+        .eval_snippet(&format!(
+            r#"return await screenshot(null, false, {{ref: "{v_ref}"}})"#
+        ))
+        .await
+        .expect("元素截图");
+    let el_bytes = shot_el.get("bytes").and_then(Value::as_u64).unwrap_or(0);
+    assert!(el_bytes > 0, "元素截图应有内容: {shot_el}");
+    if let Some(p) = shot_el.get("path").and_then(Value::as_str) {
+        tokio::fs::remove_file(p).await.ok();
+    }
+    // annotate 批量加 clear
+    host.eval_snippet(&format!(r#"await annotate(["{v_ref}"])"#))
+        .await
+        .expect("annotate");
+    host.eval_snippet("await highlightClear()")
+        .await
+        .expect("clear");
+    let cleared = host
+        .eval_snippet(
+            r#"return (await session.Runtime.evaluate({expression:"document.querySelectorAll('[data-browse-hl]').length", returnByValue:true})).result.value"#,
+        )
+        .await
+        .expect("数清理后");
+    assert_eq!(cleared, json!(0), "clear 后零残留: {cleared}");
+
     // screenshot：存文件、字节数为正、清场
     let shot = host
         .eval_snippet("return await screenshot()")

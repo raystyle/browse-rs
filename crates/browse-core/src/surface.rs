@@ -578,6 +578,33 @@ pub const COMMANDS: &[CmdSpec] = &[
         example: "await sessionClear()",
     },
     CmdSpec {
+        name: "highlight",
+        kind: CmdKind::Global,
+        signature: "highlight(ref, {label}?)",
+        args: &[
+            arg!("ref", "string", true),
+            arg!("label", "string", false, "徽标文本（annotate 形态）"),
+        ],
+        description: "持久高亮覆盖层（#41）：2px 橙框不挡点击（pointer-events none），label 给定叠编号徽标；幂等（同元素刷新框位）；清场走 highlightClear()。人看 agent 在操作哪个元素。",
+        example: "await highlight(\"e3\", {label: \"e3\"})",
+    },
+    CmdSpec {
+        name: "highlightClear",
+        kind: CmdKind::Global,
+        signature: "highlightClear()",
+        args: &[],
+        description: "移除全部高亮框与徽标（#41，按 data-browse-hl 属性）。",
+        example: "await highlightClear()",
+    },
+    CmdSpec {
+        name: "annotate",
+        kind: CmdKind::Global,
+        signature: "annotate(refs)",
+        args: &[arg!("refs", "array", true, "ref 字符串数组")],
+        description: "批量画框加编号徽标（#24 残余）：对一批 ref 各画框并以 ref 本身为徽标文本（与 snapshot 编号天然对齐）；配合 screenshot() 取证后 highlightClear() 收场。",
+        example: "await annotate([\"e1\", \"e3\"])",
+    },
+    CmdSpec {
         name: "downloads",
         kind: CmdKind::Global,
         signature: "downloads(since?)",
@@ -605,7 +632,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("full", "boolean", false, "false"),
             arg!("opts", "object", false, "{format,quality,ifChanged}"),
         ],
-        description: "页内截图存文件；opts（#24）：format png/jpeg、quality（jpeg 1-100 缺省 80）、ifChanged（与既有文件逐字节相同即 skipped，省读回不省拍摄；字节可比性限同一引擎二进制）。回 {path,bytes,skipped}。同片段 navigate 后的提交窗竞速由 host 层统一等提交（#34 根因级，页面级调用闸到主框架 frameNavigated），本函数另内建 Not attached 有界重试兜底。",
+        description: "页内截图存文件；opts（#24）：format png/jpeg、quality（jpeg 1-100 缺省 80）、ifChanged（与既有文件逐字节相同即 skipped，省读回不省拍摄；字节可比性限同一引擎二进制）。回 {path,bytes,skipped}。同片段 navigate 后的提交窗竞速由 host 层统一等提交（#34 根因级，页面级调用闸到主框架 frameNavigated），本函数另内建 Not attached 有界重试兜底；opts.ref 元素级截图（clip 到 bbox，#41）加 opts.hires/scale 高倍采样。",
         example: r#"return await screenshot(null, false, {ifChanged: true})"#,
     },
     CmdSpec {

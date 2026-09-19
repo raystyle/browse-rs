@@ -378,6 +378,11 @@
       "docs": "拖拽：源 ref 中心按下，分步移到目标 ref 中心松开（#23）。\n\n鼠标事件序列实现，覆盖 pointer/mouse 型拖拽（sortable、拖放上传区）；\n原生 HTML5 `draggable`（dragstart/dragover/drop 语义）不在序列内，\n该类页面走页面侧合成事件或 `Input.dispatchDragEvent`（待后续批）。\n\n# Errors\n\n任一 ref 失效或元素不可见。"
     },
     {
+      "path": "browse_core::semantic::element_rect",
+      "kind": "function",
+      "docs": "量元素视口矩形（#41）：滚动可见后取 rect，回 (x, y, w, h)；不可见\n返回 None（调用方决定报错或全页截）。pub 供 js_host 的元素级截图用。\n\n# Errors\n\n页内求值失败。"
+    },
+    {
       "path": "browse_core::semantic::emulate",
       "kind": "function",
       "docs": "视口与 UA 仿真档位（#24）：`{viewport:{width,height}, mobile, userAgent,\ndeviceScaleFactor}` 全可省；省 viewport 只设 UA。`mobile: true` 触发\n移动仿真（含 touch），同站常更省 token。\n\n# Errors\n\n未连接或 CDP 覆写失败。"
@@ -421,6 +426,11 @@
       "path": "browse_core::semantic::goto",
       "kind": "function",
       "docs": "一步导航（#19）：`Page.navigate` 加 waitLoad 一体收尾，可选再等网络静默，\n返回提交后世界的 url/title/elapsedMs。用于「去这个页且等它可用」，替代\n手写 navigate 加 waitLoad 两步；也替代 navigate 加 waitFor(loadEventFired)\n组合——后者事件已发再注册即假超时（#19 竞速），本函数走 readyState 轮询\n无此窗。\n\n`timeout_ms` 是导航加载合计预算；`idle_ms` 为 Some 时再等网络静默。\nurl/title 取自目标元数据（Target.getTargets 面），瞬时提交窗内可能\n滞后；权威读取用 `location.href` / `document.title`（评审 G7）。\n\n# Errors\n\nnavigate 回执带 errorText；预算内 readyState 未到 complete；idle 档\n未静默。"
+    },
+    {
+      "path": "browse_core::semantic::highlight",
+      "kind": "function",
+      "docs": "持久高亮覆盖层（#41）：给元素画 2px 橙框加可选编号徽标（label），不\n挡点击（pointer-events: none）；幂等（同元素重复高亮刷新框位）。清场\n走上层 highlightClear（按 data-browse-hl 属性移除）。\n\n# Errors\n\n元素不可见（量不到 rect）或求值失败。"
     },
     {
       "path": "browse_core::semantic::hover_at",
