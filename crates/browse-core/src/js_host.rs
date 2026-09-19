@@ -2370,9 +2370,49 @@ impl JsHost {
                     bail!("已在录制（至多一场）；下一步：先 await recordStop() 收这一场，再开新的");
                 }
                 let r = crate::record::start(self.session.clone(), &opts).await?;
+                // #43 视觉增强：cursor 画跟随光标元素、showActions 点击处闪
+                // 圈（screencast 帧里可见，回放可读性）
+                if opts.get("cursor").and_then(Value::as_bool).unwrap_or(false) {
+                    let _ = self
+                        .session
+                        .call(
+                            "Runtime.evaluate",
+                            json!({
+                                "expression": "(() => { let c = document.getElementById('browse-rec-cursor'); if (!c) { c = document.createElement('div'); c.id = 'browse-rec-cursor'; c.style.cssText = 'position:absolute;width:14px;height:14px;border-radius:50%;background:rgba(255,140,0,.85);border:2px solid #fff;z-index:2147483647;pointer-events:none;transition:left .08s,top .08s'; document.documentElement.appendChild(c); } return true })()",
+                                "returnByValue": true
+                            }),
+                        )
+                        .await;
+                }
+                if opts
+                    .get("showActions")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false)
+                {
+                    let _ = self
+                        .session
+                        .call(
+                            "Runtime.evaluate",
+                            json!({
+                                "expression": "(() => { addEventListener('click', (e) => { const f = document.createElement('div'); f.style.cssText = 'position:absolute;left:' + (e.pageX - 22) + 'px;top:' + (e.pageY - 22) + 'px;width:44px;height:44px;border-radius:50%;border:3px solid #ff8c00;z-index:2147483647;pointer-events:none;transition:transform .5s,opacity .5s'; document.documentElement.appendChild(f); requestAnimationFrame(() => { f.style.transform = 'scale(2.2)'; f.style.opacity = '0'; }); setTimeout(() => f.remove(), 600); }, true); return true })()",
+                                "returnByValue": true
+                            }),
+                        )
+                        .await;
+                }
                 let brief = r.brief();
                 *rec = Some(r);
                 Ok(brief)
+            }
+            "recordChapter" => {
+                // #43 章节标记：录制中插章节，落 record 目录 chapters.jsonl
+                let title = str_arg(argv, 0, "recordChapter 的标题")?;
+                let rec = self.record.lock().await;
+                let r = rec.as_ref().ok_or_else(|| {
+                    anyhow!("当前没有录制；下一步：先 await recordStart() 再插章节")
+                })?;
+                let frames = crate::record::chapter(r, title)?;
+                Ok(json!({ "chapter": title, "atFrames": frames }))
             }
             "recordStop" => {
                 let rec = self
@@ -2383,7 +2423,20 @@ impl JsHost {
                     .ok_or_else(|| anyhow!(
                         "当前没有录制；下一步：先 await recordStart({{everyNthFrame:2}}) 开一场（可选抽帧/限宽）"
                     ))?;
-                crate::record::stop(&self.session, rec).await
+                let r = crate::record::stop(&self.session, rec).await?;
+                // #43 清场：光标元素移除（showActions 的监听随 stopScreencast
+                // 后的整页卸载/下一次 recordStart 才彻底消，闪烁圈自移除）
+                let _ = self
+                    .session
+                    .call(
+                        "Runtime.evaluate",
+                        json!({
+                            "expression": "(() => { document.getElementById('browse-rec-cursor')?.remove(); return true })()",
+                            "returnByValue": true
+                        }),
+                    )
+                    .await;
+                Ok(r)
             }
             other => bail!(
                 "未知函数 {other}；下一步：可用全局 {GLOBALS_CTA}；CDP 走 session.<Domain>.<method>(params)"
@@ -3289,7 +3342,7 @@ const PREVIEW_HEAD_ITEMS: usize = 8;
 /// 全局函数 CTA 清单（#33 G6 单一真相）：「未知函数」提示由此派生，
 /// `global_cta_covers_catalog` 测试把它与 surface 目录的 Global 条目绑死；
 /// 增删全局必须同步这里（value-methods 是方法面族条目，不在此列）。
-const GLOBALS_CTA: &str = "listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/hostFunctions()/snapshot(opts?)/findRefs(q,opts?)/console(opts?)/jsErrors(since?)/requests(opts?)/requestDetail(idxOrId,opts?)/detect()/cookies(domain?)/cookieGet(name)/cookieSet(name,value,opts?)/cookieDelete(name,domain?)/cookiesClear()/localGet(k)/localSet(k,v)/localDelete(k)/localClear()/sessionGet(k)/sessionSet(k,v)/sessionDelete(k)/sessionClear()/mouseMove(x,y)/mouseDown(button?)/mouseUp(button?)/mouseWheel(dx,dy)/hoverAt(x,y)/dropFiles(ref,paths)/highlight(ref,opts?)/highlightClear()/annotate(refs)/downloads(since?)/downloadPath(guid,s?)/emulateMedia(opts?)/emulateMediaClear()/screenshot(path?, full?)/pdf(path?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/goto(url,opts?)/goBack(delta?)/goForward(delta?)/reload(opts?)/clickAt(x,y,opts?)/fillInput(sel,text,submit?)/clickRef(ref,opts?)/checkRef(ref)/uncheckRef(ref)/fillRef(ref,text,submit?)/selectOption(ref,value)/pressKey(key)/dialogStatus()/dialogAccept(text?)/dialogDismiss()/routeBlock(pattern)/routeMock(pattern,body,opts?)/routeClear()/waitLoad(s?)/waitIdle(s?)/waitForResponse(pattern,s?)/responseBody(requestId)/pageEval(js)/hoverRef(ref)/hoverAt(x,y)/dblclickRef(ref)/dragRef(src,dst)/keydown(key)/keyup(key)/typeRef(ref,text)/emulate(opts)/setInitScript(code)/exportStorageState()/importStorageState(state)/JSON.parse(string)/JSON.stringify(value,indent?)/recordStart(opts?)/recordStop()/chromeInstall(opts?)/chromeList()/chromeUse(version)/chromeUpdate()/chromeRemove(version)/chromeDoctor()/print(x)";
+const GLOBALS_CTA: &str = "listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/hostFunctions()/snapshot(opts?)/findRefs(q,opts?)/console(opts?)/jsErrors(since?)/requests(opts?)/requestDetail(idxOrId,opts?)/detect()/cookies(domain?)/cookieGet(name)/cookieSet(name,value,opts?)/cookieDelete(name,domain?)/cookiesClear()/localGet(k)/localSet(k,v)/localDelete(k)/localClear()/sessionGet(k)/sessionSet(k,v)/sessionDelete(k)/sessionClear()/mouseMove(x,y)/mouseDown(button?)/mouseUp(button?)/mouseWheel(dx,dy)/hoverAt(x,y)/dropFiles(ref,paths)/highlight(ref,opts?)/highlightClear()/annotate(refs)/downloads(since?)/downloadPath(guid,s?)/emulateMedia(opts?)/emulateMediaClear()/screenshot(path?, full?)/pdf(path?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/goto(url,opts?)/goBack(delta?)/goForward(delta?)/reload(opts?)/clickAt(x,y,opts?)/fillInput(sel,text,submit?)/clickRef(ref,opts?)/checkRef(ref)/uncheckRef(ref)/fillRef(ref,text,submit?)/selectOption(ref,value)/pressKey(key)/dialogStatus()/dialogAccept(text?)/dialogDismiss()/routeBlock(pattern)/routeMock(pattern,body,opts?)/routeClear()/waitLoad(s?)/waitIdle(s?)/waitForResponse(pattern,s?)/responseBody(requestId)/pageEval(js)/hoverRef(ref)/hoverAt(x,y)/dblclickRef(ref)/dragRef(src,dst)/keydown(key)/keyup(key)/typeRef(ref,text)/emulate(opts)/setInitScript(code)/exportStorageState()/importStorageState(state)/JSON.parse(string)/JSON.stringify(value,indent?)/recordStart(opts?)/recordChapter(title)/recordStop()/chromeInstall(opts?)/chromeList()/chromeUse(version)/chromeUpdate()/chromeRemove(version)/chromeDoctor()/print(x)";
 
 /// 容器预览：头部 JSON 截断（留尾注位），超帽尾注总项数；小容器输出
 /// 与全量形一致。不与 [`trunc_preview`] 叠用（双省略号）。

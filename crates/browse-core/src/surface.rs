@@ -1122,8 +1122,16 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "recordStart(opts?)",
         args: &[arg!("opts", "object", false, "{everyNthFrame:1}")],
-        description: "开始录屏（Screencast 帧流落盘；everyNthFrame 源端抽帧、maxWidth/maxHeight 限宽高）。",
+        description: "开始录屏（Screencast 帧流落盘；everyNthFrame 源端抽帧、maxWidth/maxHeight 限宽高）；opts（#43）cursor 画跟随光标元素加 showActions 点击处闪圈（screencast 帧可见，回放可读；stop 自动清）。",
         example: "return await recordStart({everyNthFrame: 2})",
+    },
+    CmdSpec {
+        name: "recordChapter",
+        kind: CmdKind::Global,
+        signature: "recordChapter(title)",
+        args: &[arg!("title", "string", true)],
+        description: "录制中插章节标记（#43）：按当前帧计数追加到录制目录 chapters.jsonl；回放器可跳章。",
+        example: "await recordChapter(\"登录流程\")",
     },
     CmdSpec {
         name: "recordStop",

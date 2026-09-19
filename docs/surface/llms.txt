@@ -120,7 +120,8 @@
 | `exportStorageState()` | 导出会话态（#25.3）：cookies 全量加当前页 origin 的 localStorage；多 origin 逐个切 tab 再导。 |
 | `importStorageState(state 或 path)` | 导入会话态（#25.3）：吃 exportStorageState 的返回值或其落盘文件路径，回两边计数。 |
 | `waitIdle(s?)` | 等 network 静默（窗口语义：起点前挂着的请求不计）。timeout 秒口径（#51）：不小于 1000 视为毫秒误写，换算并告警，封顶 600 秒（#57 F1 判据收紧，1000 至 3600 不再静默秒直解）；秒直写三位数内（上界 999 秒）。 |
-| `recordStart(opts?)` | 开始录屏（Screencast 帧流落盘；everyNthFrame 源端抽帧、maxWidth/maxHeight 限宽高）。 |
+| `recordStart(opts?)` | 开始录屏（Screencast 帧流落盘；everyNthFrame 源端抽帧、maxWidth/maxHeight 限宽高）；opts（#43）cursor 画跟随光标元素加 showActions 点击处闪圈（screencast 帧可见，回放可读；stop 自动清）。 |
+| `recordChapter(title)` | 录制中插章节标记（#43）：按当前帧计数追加到录制目录 chapters.jsonl；回放器可跳章。 |
 | `recordStop()` | 停止录制，回 {frames,bytes,dir,sessionChanged}（PNG 已在盘上；录制中被换靶则 true，帧流钉住不中断）。 |
 | `hostFunctions()` | 本目录的运行时探针（agent 自描述，schema/清单同源）。 |
 | `print(x)` | 把值打到 daemon stderr（调试用）。 |

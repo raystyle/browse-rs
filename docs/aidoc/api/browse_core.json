@@ -263,6 +263,11 @@
       "docs": "承载一场进行中的录制，聚合目录、计数器、停泵旗标与泵任务句柄。"
     },
     {
+      "path": "browse_core::record::chapter",
+      "kind": "function",
+      "docs": "插章节标记（#43）：按当前帧计数追加一行到录制目录 chapters.jsonl。\n\n# Errors\n\n落盘 IO 失败。"
+    },
+    {
       "path": "browse_core::record::start",
       "kind": "function",
       "docs": "开始一场屏幕录制，帧由常驻泵任务落盘。\n\n`opts`（都可省）：`everyNthFrame`（抽帧，源端剪辑）、`maxWidth`/`maxHeight`\n（缩放）、`quality`（JPEG 质量；本实现恒 PNG，留作向后兼容）。帧写\n`<state>/record-<ts>/frame-NNNNNN.png`。\n\n# Errors\n\n未连接、`Page.startScreencast` 失败、目录建不出来。"

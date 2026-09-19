@@ -9,7 +9,7 @@
 //! 注意：帧也走事件缓冲（上限 1000），长录制会挤掉旧事件；录短段，
 //! 要完整事件流先 peek 再录。
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use cdp::Session;
 use serde_json::{Value, json};
 use std::path::PathBuf;
@@ -108,6 +108,28 @@ pub async fn start(s: Arc<Session>, opts: &Value) -> Result<Recorder> {
         handle,
         recorded_sid,
     })
+}
+
+/// 插章节标记（#43）：按当前帧计数追加一行到录制目录 chapters.jsonl。
+///
+/// # Errors
+///
+/// 落盘 IO 失败。
+pub fn chapter(rec: &Recorder, title: &str) -> Result<u64> {
+    let frames = rec.frames.load(Ordering::Relaxed);
+    use std::io::Write;
+    let line = format!(
+        "{{\"atFrames\":{frames},\"title\":{}}}
+",
+        serde_json::to_string(title)?
+    );
+    std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(rec.dir.join("chapters.jsonl"))
+        .and_then(|mut f| f.write_all(line.as_bytes()))
+        .map_err(|e| anyhow!("章节落盘失败：{e}"))?;
+    Ok(frames)
 }
 
 /// 停止录制：停泵 -> 末冲（200ms 窗口内迟到的帧也收）->
