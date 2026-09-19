@@ -1462,7 +1462,7 @@ impl JsHost {
                     .filter(|e| {
                         from_active_session(&active, e)
                             && (filter.is_empty()
-                                || e.pointer("/response/url")
+                                || e.pointer("/params/response/url")
                                     .and_then(Value::as_str)
                                     .is_some_and(|u| u.contains(filter)))
                     })

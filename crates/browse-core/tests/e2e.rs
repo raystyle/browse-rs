@@ -1106,9 +1106,49 @@ return await responseBody(evs[0].params.requestId)"#,
     )
     .await
     .expect("B 打 403");
-    host.eval_snippet(r#"await session.waitJs("true", 1)"#)
+    // B 侧先证在位（评审二轮 G：弱等待下信号可能没落缓冲，A 侧断言会假绿）
+    let b_req = host
+        .eval_snippet(r#"return await requests({filter: "http://b403.test"})"#)
         .await
-        .ok();
+        .expect("B requests");
+    // data: 页 URL 内嵌脚本文本也含目标串（Document 行 unavoidable），对照
+    // 点改为：过滤列表里存在 status 403 的 Fetch 行
+    let b_rows = b_req
+        .get("requests")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let b403_idx = b_rows
+        .iter()
+        .find(|r| r.get("status") == Some(&json!(403)))
+        .and_then(|r| r.get("index"))
+        .cloned()
+        .expect("B 上应见 403 请求（对照点）");
+    let b_con = host
+        .eval_snippet(r#"return await console({minLevel: "error"})"#)
+        .await
+        .expect("B console");
+    assert!(
+        b_con
+            .get("messages")
+            .and_then(Value::as_array)
+            .is_some_and(|ms| ms
+                .iter()
+                .any(|m| m.get("text") == Some(&json!("from-tab-B")))),
+        "B 上应见自己的 console.error（对照点）: {b_con}"
+    );
+    // F2 的 index 加 filter 路径：requests 过滤列表的 index 0 喂 requestDetail 同参对齐
+    let b_detail = host
+        .eval_snippet(&format!(
+            r#"return await requestDetail({b403_idx}, {{filter: "http://b403.test"}})"#
+        ))
+        .await
+        .expect("requestDetail index+filter");
+    assert_eq!(
+        b_detail.get("url"),
+        Some(&json!("http://b403.test/x")),
+        "index 加 filter 应取到 B 的 403 条目: {b_detail}"
+    );
     // 切回 A：detect 必须 ok、console error 档不见 B 的错
     if let Some(a) = &a_id {
         host.eval_snippet(&format!(r#"await switchTab("{a}")"#))
