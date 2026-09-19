@@ -17,7 +17,6 @@ use browse_core::snippet_complete;
 use rustyline::DefaultEditor;
 use rustyline::error::ReadlineError;
 use std::io::IsTerminal;
-use tokio::io::{AsyncBufReadExt, BufReader};
 
 /// CLI 入口解析出的形态：缺省求值或生命周期子命令。
 enum Mode {
@@ -73,6 +72,8 @@ async fn main() -> Result<()> {
     let mut headless = false;
     let mut pipe = false;
     let mut json = false;
+    let mut js = false;
+    let mut b64 = false;
     let mut llms = false;
     let mut full = false;
     let mut repl = false;
@@ -113,6 +114,10 @@ async fn main() -> Result<()> {
             "--isolated" => isolated = true,
             "--idle-timeout" => idle_timeout = Some(next("--idle-timeout")?),
             "--secrets" => secrets = Some(next("--secrets")?),
+            "--js" => js = true,
+            // base64 通道只留长参：`-b` 短参是 issue new 的 --body 既有
+            // 契约（REQ-057），不夺权
+            "--b64" => b64 = true,
             "--json" => json = true,
             "--llms" => llms = true,
             "--repl" => repl = true,
@@ -234,6 +239,17 @@ async fn main() -> Result<()> {
     }
 
     // 维护命令：从 surface 目录重生成 schema/llms（提交 docs/surface/）
+    // -b/--b64 通道（#22）：片段实参按 base64 解码（PowerShell 引号与
+    // 编码一并绕开；方言与 --js 两形态通用），坏串报 CTA
+    if b64 {
+        for snip in &mut snippets {
+            *snip = browse_cli::client::decode_arg_b64(snip).unwrap_or_else(|e| {
+                eprintln!("{e:#}");
+                std::process::exit(2);
+            });
+        }
+    }
+
     if let Some(dir) = gen_surface {
         let p = std::path::PathBuf::from(&dir);
         browse_core::surface::write_surface_files(&p)?;
@@ -414,14 +430,19 @@ async fn main() -> Result<()> {
             // REPL 须 --repl 显式进；stdin 管道批处理形态不回归。
             if snippets.is_empty() {
                 if repl {
-                    return run_tty(new_tab).await;
+                    if js {
+                        eprintln!("browse: --js 与 --repl 不同行（REPL 是方言交互面，退出 2）");
+                        std::process::exit(2);
+                    }
+                    return run_tty(new_tab, js).await;
                 }
                 if std::io::stdin().is_terminal() {
                     print_help();
                     return Ok(());
                 }
-                // 管道批处理不回归；空管道（EOF 无内容）视同裸调用出帮助体
-                let n = run_stdin(new_tab).await?;
+                // 管道批处理不回归；空管道（EOF 无内容）视同裸调用出帮助体；
+                // --js 空片段裸调用 = stdin 全量 JS 形态（#22）
+                let n = run_stdin(new_tab, js, b64).await?;
                 if n == 0 {
                     print_help();
                 }
@@ -430,6 +451,7 @@ async fn main() -> Result<()> {
             run_eval(
                 snippets,
                 new_tab,
+                js,
                 ws,
                 port,
                 chrome,
@@ -461,6 +483,7 @@ fn mode_is_eval(m: &Mode) -> bool {
 async fn run_eval(
     snippets: Vec<String>,
     new_tab: bool,
+    js: bool,
     ws: Option<String>,
     port: Option<u16>,
     chrome: Option<String>,
@@ -515,13 +538,13 @@ async fn run_eval(
     // 空片段的裸调用分支已在 Mode::Eval 臂前置处理（帮助体 / 管道 / --repl），
     // 进到这里必带片段
     for snip in &snippets {
-        run_snip(snip, new_tab).await;
+        run_snip(snip, new_tab, js).await;
     }
     Ok(())
 }
 
-async fn run_snip(snip: &str, new_tab: bool) {
-    match client::eval(snip, new_tab).await {
+async fn run_snip(snip: &str, new_tab: bool, js: bool) {
+    match client::eval(snip, new_tab, js).await {
         Ok(v) => {
             // 大值落盘（artifact 降级形态）：stdout 只回路径与预览
             let s = match browse_cli::render::render_or_drop_sync(&v) {
@@ -635,7 +658,7 @@ fn print_health(h: &serde_json::Value, json: bool) {
     );
 }
 
-async fn run_tty(new_tab: bool) -> Result<()> {
+async fn run_tty(new_tab: bool, js: bool) -> Result<()> {
     let mut rl = DefaultEditor::new()?;
     let mut buf = String::new();
     loop {
@@ -654,7 +677,7 @@ async fn run_tty(new_tab: bool) -> Result<()> {
         }
         if line.trim() == "." {
             if !buf.trim().is_empty() {
-                run_snip(&buf, new_tab).await;
+                run_snip(&buf, new_tab, js).await;
             }
             buf.clear();
             continue;
@@ -664,34 +687,53 @@ async fn run_tty(new_tab: bool) -> Result<()> {
         }
         buf.push_str(&line);
         if snippet_complete(&buf) {
-            run_snip(&buf, new_tab).await;
+            run_snip(&buf, new_tab, js).await;
             buf.clear();
         }
     }
     if !buf.trim().is_empty() {
-        run_snip(&buf, new_tab).await;
+        run_snip(&buf, new_tab, js).await;
     }
     Ok(())
 }
 
 /// 管道批处理；返回实际求值的段数（零段 = 空管道，裸调用面据此出帮助体）。
-async fn run_stdin(new_tab: bool) -> Result<usize> {
+///
+/// 形态（#22）：方言走括号配平分段；`--js` 走整段 stdin 一次求值（JS 的
+/// 语句边界不由括号配平决定）；`--b64` 先整段 base64 解码再进各自形态
+/// （`cat x.js.b64 | browse --js --b64` 即管道版全量 JS）。
+async fn run_stdin(new_tab: bool, js: bool, b64: bool) -> Result<usize> {
+    let mut raw = String::new();
+    tokio::io::AsyncReadExt::read_to_string(&mut tokio::io::stdin(), &mut raw).await?;
+    let text = if b64 {
+        let t = raw.trim();
+        if t.is_empty() {
+            return Ok(0);
+        }
+        browse_cli::client::decode_arg_b64(t).unwrap_or_else(|e| {
+            eprintln!("{e:#}");
+            std::process::exit(2);
+        })
+    } else {
+        raw
+    };
+    if js {
+        // 全量 JS：整段一次求值（空段视同空管道，由裸调用面出帮助体）
+        if text.trim().is_empty() {
+            return Ok(0);
+        }
+        run_snip(&text, new_tab, js).await;
+        return Ok(1);
+    }
     // 行号口径注记（#33 G4）：本路径跳过空行攒 buf，报错行号相对实收
     // 片段（与 -e 直传的原始行号可能差前导空行数）
-    let mut stdin = BufReader::new(tokio::io::stdin());
-    let mut line = String::new();
-    let mut buf = String::new();
     let mut ran = 0usize;
-    loop {
-        line.clear();
-        let n = stdin.read_line(&mut line).await?;
-        if n == 0 {
-            break;
-        }
-        let trimmed = line.trim_end_matches(['\n', '\r']);
+    let mut buf = String::new();
+    for line in text.lines() {
+        let trimmed = line.trim_end_matches(['\r']);
         if trimmed.trim() == "." {
             if !buf.trim().is_empty() {
-                run_snip(&buf, new_tab).await;
+                run_snip(&buf, new_tab, js).await;
                 ran += 1;
             }
             buf.clear();
@@ -702,13 +744,13 @@ async fn run_stdin(new_tab: bool) -> Result<usize> {
         }
         buf.push_str(trimmed);
         if snippet_complete(&buf) {
-            run_snip(&buf, new_tab).await;
+            run_snip(&buf, new_tab, js).await;
             ran += 1;
             buf.clear();
         }
     }
     if !buf.trim().is_empty() {
-        run_snip(&buf, new_tab).await;
+        run_snip(&buf, new_tab, js).await;
         ran += 1;
     }
     Ok(ran)

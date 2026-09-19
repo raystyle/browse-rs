@@ -22,6 +22,15 @@ Rust 没有免费 V8。bh（Node）靠 daemon 里的真 V8 跑片段；样例 br
 属于页内真 V8。因为样例方言已被验证够用、且解释器（parser.rs 纯函数）
 可被契约测试完全锁住，所以移植比重新发明更便宜。
 
+修订（2026-09-19，issue #22 用户裁定「开受限旁路」）：新增全量 JS 的
+受限直达面，方言主体地位不变。三件：方言宿主函数 `pageEval(js)`（等价
+`Runtime.evaluate` 加 returnByValue 加 awaitPromise，值序列化回传）、
+CLI `browse --js '<JS>'` 形态（/eval 带 `js` 标志直走宿主侧 eval_js，
+不经方言解析器，消多层引号转义）、`-b` base64 通道（PowerShell 引号与
+编码一并绕开，方言与 JS 两形态通用）。分工口径：方言管 CDP 编排与
+宿主便捷函数，`--js`/`pageEval` 管页面逻辑。当年否掉的「子命令操作面」
+仍然否着（没有 goto/click 子命令链），本修订只开语言旁路不开操作面。
+
 ## Consequences
 
 - 好：与样例/上游片段语义一致，样例 README 的例子原样可跑。

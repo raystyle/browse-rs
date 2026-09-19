@@ -158,11 +158,11 @@ pub async fn ensure_daemon_with_env(envs: &[(&str, String)]) -> Result<()> {
 /// # Errors
 ///
 /// HTTP 失败或 daemon 求值失败（语法错、CDP 错、守卫拦截、超时）。
-pub async fn eval(code: &str, new_tab: bool) -> Result<Value> {
+pub async fn eval(code: &str, new_tab: bool, js: bool) -> Result<Value> {
     let c = client();
     let resp = c
         .post(format!("{}/eval", http()))
-        .json(&json!({ "code": code, "new_tab": new_tab }))
+        .json(&json!({ "code": code, "new_tab": new_tab, "js": js }))
         .send()
         .await
         .context("POST /eval")?;
@@ -178,6 +178,46 @@ pub async fn eval(code: &str, new_tab: bool) -> Result<Value> {
                 .unwrap_or("未知错误")
         ))
     }
+}
+
+/// 解码 `-b/--b64` 通道的片段实参（#22）：标准 base64 解码为 UTF-8
+/// 字符串。PowerShell 与复杂 shell 的引号与编码面一并绕开（方言与
+/// `--js` 两形态通用）。
+///
+/// # Errors
+///
+/// 实参不是合法 base64，或解码后不是 UTF-8 文本（错误带生成 base64 的
+/// 可照抄命令 CTA）。
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(browse_cli::client::decode_arg_b64("cmV0dXJuIDE=").unwrap(), "return 1");
+/// // 空白容忍（PowerShell 折行形）
+/// assert_eq!(
+///     browse_cli::client::decode_arg_b64("cmV0\ndXJuIDE=").unwrap(),
+///     "return 1"
+/// );
+/// assert!(browse_cli::client::decode_arg_b64("!!!").is_err());
+/// ```
+pub fn decode_arg_b64(s: &str) -> Result<String> {
+    // 字母表先行校验：宿主 base64_decode 查表对非法字符得 0（静默出垃圾），
+    // 通道面要给出错而不是喂垃圾给引擎
+    let alphabet_ok = s.bytes().all(|b| {
+        b.is_ascii_alphanumeric() || b == b'+' || b == b'/' || b == b'=' || b.is_ascii_whitespace()
+    });
+    if !alphabet_ok {
+        anyhow::bail!(
+            "-b 实参不是 base64 字母表（A-Za-z0-9+/= 与空白）；下一步：base64 -w0 <文件> 生成（PowerShell 用 [Convert]::ToBase64String）"
+        );
+    }
+    let bytes = browse_core::js_host::base64_decode(s).map_err(|e| {
+        anyhow!(
+            "-b 实参不是合法 base64：{e}；下一步：base64 -w0 <文件> 生成（PowerShell 用 [Convert]::ToBase64String([IO.File]::ReadAllBytes(\"<文件>\"))）"
+        )
+    })?;
+    String::from_utf8(bytes)
+        .map_err(|_| anyhow!("-b 解码后不是 UTF-8 文本；下一步：确认原文是方言片段或 JS 源码文本"))
 }
 
 /// GET /health 取 daemon 状态面；daemon 不在时报可照抄的拉起提示。

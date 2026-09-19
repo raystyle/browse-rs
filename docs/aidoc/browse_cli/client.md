@@ -6,6 +6,7 @@ daemon 客户端：本地 HTTP 调用 + 首次使用自动拉起 detached daemon
 
 - `daemon_alive` — 探测 daemon 是否在跑：GET /health 通即为在。
 - `daemon_bind` — 返回 daemon 监听的 `host:port` 串；多实例由 `BROWSE_NAME` 派生端口（ADR-0006）。
+- `decode_arg_b64` — 解码 `-b/--b64` 通道的片段实参（#22）：标准 base64 解码为 UTF-8
 - `engine_up` — POST /engine/up 显式起引擎，走 ensure 全链（附着优先缺则 spawn）。
 - `ensure_daemon` — daemon 不在跑时 detached 拉起 `browse --serve` 并探活到通；已在跑则直接返回。
 - `ensure_daemon_with_env` — 同 [`ensure_daemon`]，但给新拉起的 daemon 进程注入环境变量

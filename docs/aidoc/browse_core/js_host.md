@@ -12,6 +12,7 @@
 
 ## Functions
 
+- `base64_decode` — 标准字母表的 base64 解码，容忍空白，不引 crate。
 - `load_secrets` — 加载 dotenv 形密钥文件（#25.4）：`KEY=VALUE` 行，`#` 注释与空行忽略，
 - `mask_secrets` — 对值做脱敏（#25.4）：字符串里出现任何密钥值即整值换 `***`（保守全换，
 - `mask_secrets_str` — 对错误/回显串做子串脱敏（#25.4 评审 G4）：只换密钥值出现处，保留

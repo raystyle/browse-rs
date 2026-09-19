@@ -142,6 +142,24 @@
       "output": "runtime JSON（回值随页面与 CDP 而定）",
       "type": "object"
     },
+    "cli.b64-flag": {
+      "description": "browse --b64 '<base64>' base64 通道（#22）：片段实参（或 --js 的 JS 实参）按 base64 解码后再派发；空实参加管道 = 整段 stdin base64 解码（--js 管道版即 cat x.js.b64 | browse --js --b64）。PowerShell 引号与编码面一并绕开；bash 生成 base64 -w0 <文件>，PowerShell 用 [Convert]::ToBase64String。无短参（-b 是 issue new --body 的既有契约）。",
+      "example": "browse --js --b64 $(printf '%s' '1+1' | base64)",
+      "input": {
+        "properties": {
+          "base64": {
+            "description": "缺省 或空参走管道整段解码",
+            "type": "string"
+          }
+        },
+        "required": [
+          "base64"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
     "cli.chrome-doctor": {
       "description": "browse chrome doctor 托管 Chromium 部署体检（在位/文件基线/pin；AppContainer ACE 仅 Windows 有值，缺则 hints 给 icacls 修法，#32）。",
       "example": "browse chrome doctor",
@@ -371,6 +389,28 @@
         },
         "required": [
           "id"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "cli.js-flag": {
+      "description": "browse --js '<JS 源码>' 全量 JS 受限旁路（#22，ADR-0002 修订）：不经方言解析器直发 Runtime.evaluate（returnByValue 加 awaitPromise），return 值序列化回传；模板字符串/正则/函数声明直接写，消多层引号转义。分工：方言管 CDP 编排，--js 管页面逻辑。空实参加管道 = 整段 stdin 一次求值（配 --b64 先解码）。不可序列化值（DOM 节点、Date、Map、RegExp 等，含容器内元素）在 returnByValue 下序列化成 {}，CLI 按空容器口径零输出；要值就在 JS 里自己 JSON.stringify 或取原语（.textContent/.outerHTML）。与 --repl 不同行。",
+      "example": "browse --js 'return (() => { const f = s => s.length; return f(\"ab\"); })()'",
+      "input": {
+        "properties": {
+          "js": {
+            "description": "",
+            "type": "string"
+          },
+          "stdin": {
+            "description": "缺省 空实参时整段管道读",
+            "type": "any"
+          }
+        },
+        "required": [
+          "js"
         ],
         "type": "object"
       },
@@ -893,6 +933,24 @@
           }
         },
         "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "pageEval": {
+      "description": "pageEval(js) 全量 JS 一次求值（#22 受限旁路的方言内形态）：直发 Runtime.evaluate（returnByValue 加 awaitPromise），值序列化回传；模板字符串/正则/函数声明直接写。CLI 侧等价 browse --js。",
+      "example": "return await pageEval(\"(() => { const xs = [1,2,3]; return xs.map(x => x * 2).join(','); })()\")",
+      "input": {
+        "properties": {
+          "js": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "js"
+        ],
         "type": "object"
       },
       "output": "runtime JSON（回值随页面与 CDP 而定）",

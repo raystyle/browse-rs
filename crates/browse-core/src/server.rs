@@ -24,11 +24,14 @@ use tokio::net::TcpListener;
 /// 描述 POST /eval 的请求体。
 #[derive(Debug, Deserialize)]
 pub struct EvalRequest {
-    /// 方言片段源码（或裸 JS，由 body 形态决定，见 [`serve`]）。
+    /// 方言片段源码；`js` 为真时是全量 JS（不经方言解析器，#22 旁路）。
     pub code: String,
     /// 求值前先新开 about:blank tab（`browse --new-tab` 面）。
     #[serde(default)]
     pub new_tab: bool,
+    /// 全量 JS 形态（`browse --js` 面，#22）：走 [`JsHost::eval_js`]。
+    #[serde(default)]
+    pub js: bool,
 }
 
 /// 描述 POST /engine/up 的请求体。
@@ -207,6 +210,16 @@ struct AppState {
     daemon: Arc<Daemon>,
 }
 
+/// /eval 的语言分流（#22）：`js` 旗标走全量 JS 旁路（[`JsHost::eval_js`]，
+/// 不经方言解析器），缺省走方言片段。
+async fn run_eval_code(host: &JsHost, code: &str, js: bool) -> anyhow::Result<Value> {
+    if js {
+        host.eval_js(code).await
+    } else {
+        host.eval_snippet(code).await
+    }
+}
+
 async fn eval_handler(
     State(st): State<AppState>,
     Json(req): Json<EvalRequest>,
@@ -230,14 +243,16 @@ async fn eval_handler(
     {
         return err_response(e);
     }
-    let outcome = tokio::time::timeout(eval_timeout(), d.host.eval_snippet(&req.code)).await;
+    // 分流（#22）：js 旗标走全量 JS 旁路，缺省走方言
+    let outcome =
+        tokio::time::timeout(eval_timeout(), run_eval_code(&d.host, &req.code, req.js)).await;
     let value = match outcome {
         Ok(Ok(v)) => v,
         Ok(Err(e)) => {
             // 撞上「还没连」的片段：兜底拉引擎重试一次
             if format!("{e:#}").contains("Not connected") {
                 match d.engine.ensure(&d.spec).await {
-                    Ok(_) => match d.host.eval_snippet(&req.code).await {
+                    Ok(_) => match run_eval_code(&d.host, &req.code, req.js).await {
                         Ok(v) => v,
                         Err(e2) => return err_response(e2),
                     },

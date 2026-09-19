@@ -464,6 +464,73 @@ impl JsHost {
         Ok(last)
     }
 
+    /// 全量 JS 一次求值（#22 受限旁路，ADR-0002 修订）：不经方言解析器，
+    /// 直发 `Runtime.evaluate`（returnByValue 加 awaitPromise），表达式
+    /// 值序列化回传。分工口径：方言管 CDP 编排与宿主便捷函数，本面与
+    /// 方言全局 `pageEval(js)`（同一能力的方言内形态）管页面逻辑（模板
+    /// 字符串、正则、函数声明等真 V8 语法直接写）。
+    ///
+    /// 顶层 `return` 桥（#22）：先原样发，SyntaxError 认出「Illegal
+    /// return statement」后包 async IIFE（换行定界）重发一次——方言习惯
+    /// （声明几条加末尾 return，任意位置）不罚脚，已合法的 JS 语义不变。
+    ///
+    /// # Errors
+    ///
+    /// - 未连接（先 `browse up` 或片段先 connect）。
+    /// - 页内抛错（错误带 exceptionDetails 与调试 CTA）。
+    /// - 结果不可 JSON 序列化（如 DOM 节点；错误带取原语的 CTA，
+    ///   不静默空——undefined 回 null）。
+    /// - CDP 调用失败。
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # // no_run：需要已连接引擎的活动 session
+    /// # async fn demo(host: &browse_core::JsHost) -> anyhow::Result<()> {
+    /// let v = host.eval_js("(() => { const f = s => s.toUpperCase(); return f('ok'); })()").await;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn eval_js(&self, js: &str) -> Result<Value> {
+        // 先原样发（表达式形与合法 JS 语义不变）；顶层 return 形在 V8 非法
+        // （方言习惯：声明几条加末尾 return），SyntaxError 认出后包
+        // async IIFE 重发一次——async 修 await 合法性，换行定界防片段的
+        // 行尾注释吞掉闭合括号（评审三洞全收）
+        let r = self.evaluate_js_once(js).await?;
+        if exception_text(&r).is_some_and(|t| t.contains("Illegal return statement")) {
+            let wrapped = format!("(async () => {{\n{js}\n}})()");
+            return self.finish_js(&self.evaluate_js_once(&wrapped).await?);
+        }
+        self.finish_js(&r)
+    }
+
+    /// [`Self::eval_js`] 的单发腿：直发 `Runtime.evaluate`，返回 CDP 原始
+    /// 结果（exceptionDetails 与值提取由 [`Self::finish_js`] 收口）。
+    async fn evaluate_js_once(&self, js: &str) -> Result<Value> {
+        self.session
+            .call(
+                "Runtime.evaluate",
+                json!({ "expression": js, "returnByValue": true, "awaitPromise": true }),
+            )
+            .await
+            .map_err(|e| anyhow!("Runtime.evaluate 失败：{e:#}"))
+    }
+
+    /// [`Self::eval_js`] 的收口腿：页内抛错带描述与 CTA；值缺失（undefined）
+    /// 回 null。边界（评审 G 两层实弹定谳）：`returnByValue` 下 Chrome 把
+    /// 不可序列化值（DOM 节点、Date、Map、RegExp、容器内元素）一律序列化
+    /// 成 `value:{}` 且不带 subtype——与真空对象协议层不可区分，不硬造
+    /// 判据，按空容器口径渲染（CLI 零输出），CTA 写在 surface 的 js-flag
+    /// 条目（JS 里自己 JSON.stringify 或取原语）。
+    fn finish_js(&self, r: &Value) -> Result<Value> {
+        if let Some(text) = exception_text(r) {
+            bail!(
+                "页内抛错：{text}；下一步：改用 session.waitJs 轮询等条件，或先 console.log 打中间值定位"
+            );
+        }
+        Ok(r.pointer("/result/value").cloned().unwrap_or(Value::Null))
+    }
+
     async fn eval_expr(&self, e: &Expr) -> Result<Value> {
         self.eval_expr_boxed(e).await
     }
@@ -939,6 +1006,11 @@ impl JsHost {
                 let pat = str_arg(argv, 0, "waitForResponse 的 pattern")?;
                 let ms = argv.get(1).and_then(Value::as_u64).unwrap_or(15_000);
                 self.wait_for_response(pat, ms).await
+            }
+            // ---- 全量 JS 旁路（#22，ADR-0002 修订）：页面逻辑直达 ----
+            "pageEval" => {
+                let js = str_arg(argv, 0, "pageEval 的 JS 源码")?;
+                self.eval_js(js).await
             }
             "responseBody" => {
                 let rid = str_arg(argv, 0, "responseBody 的 requestId")?;
@@ -1711,6 +1783,15 @@ fn connect_opts(v: Option<&Value>) -> ConnectOptions {
 // ---- 值方法面与 JSON 命名空间（#21）：方言结果在宿主侧的小加工 ----
 // 纯函数、无控制流；页面内逻辑仍走 Runtime.evaluate（分工见 --llms 手册）。
 
+/// 取 Runtime.evaluate 结果里的异常描述（exceptionDetails 的 description
+/// 优先、text 兜底），无异常返回 None。
+fn exception_text(r: &Value) -> Option<&str> {
+    r.get("exceptionDetails")?
+        .pointer("/exception/description")
+        .or_else(|| r.get("exceptionDetails")?.get("text"))
+        .and_then(Value::as_str)
+}
+
 /// 把 `Network.getResponseBody` 的返回解码成 `{body, base64Encoded}`：
 /// base64 响应自动解码为 UTF-8 文本（#20）。
 ///
@@ -1975,7 +2056,7 @@ const PREVIEW_HEAD_ITEMS: usize = 8;
 /// 全局函数 CTA 清单（#33 G6 单一真相）：「未知函数」提示由此派生，
 /// `global_cta_covers_catalog` 测试把它与 surface 目录的 Global 条目绑死；
 /// 增删全局必须同步这里（value-methods 是方法面族条目，不在此列）。
-const GLOBALS_CTA: &str = "listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/hostFunctions()/snapshot()/screenshot(path?, full?)/pdf(path?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/clickAt(x,y)/fillInput(sel,text)/clickRef(ref)/fillRef(ref,text)/selectOption(ref,value)/pressKey(key)/dialogStatus()/dialogAccept(text?)/dialogDismiss()/routeBlock(pattern)/routeMock(pattern,body,opts?)/routeClear()/waitLoad(ms?)/waitIdle(ms?)/waitForResponse(pattern,ms?)/responseBody(requestId)/hoverRef(ref)/hoverAt(x,y)/dblclickRef(ref)/dragRef(src,dst)/keydown(key)/keyup(key)/typeRef(ref,text)/emulate(opts)/setInitScript(code)/exportStorageState()/importStorageState(state)/JSON.parse(string)/JSON.stringify(value,indent?)/recordStart(opts?)/recordStop()/chromeInstall(opts?)/chromeList()/chromeUse(version)/chromeUpdate()/chromeRemove(version)/chromeDoctor()/print(x)";
+const GLOBALS_CTA: &str = "listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/hostFunctions()/snapshot()/screenshot(path?, full?)/pdf(path?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/clickAt(x,y)/fillInput(sel,text)/clickRef(ref)/fillRef(ref,text)/selectOption(ref,value)/pressKey(key)/dialogStatus()/dialogAccept(text?)/dialogDismiss()/routeBlock(pattern)/routeMock(pattern,body,opts?)/routeClear()/waitLoad(ms?)/waitIdle(ms?)/waitForResponse(pattern,ms?)/responseBody(requestId)/pageEval(js)/hoverRef(ref)/hoverAt(x,y)/dblclickRef(ref)/dragRef(src,dst)/keydown(key)/keyup(key)/typeRef(ref,text)/emulate(opts)/setInitScript(code)/exportStorageState()/importStorageState(state)/JSON.parse(string)/JSON.stringify(value,indent?)/recordStart(opts?)/recordStop()/chromeInstall(opts?)/chromeList()/chromeUse(version)/chromeUpdate()/chromeRemove(version)/chromeDoctor()/print(x)";
 
 /// 容器预览：头部 JSON 截断（留尾注位），超帽尾注总项数；小容器输出
 /// 与全量形一致。不与 [`trunc_preview`] 叠用（双省略号）。
@@ -2052,7 +2133,20 @@ pub fn render_result(v: &Value) -> String {
 }
 
 /// 标准字母表的 base64 解码，容忍空白，不引 crate。
-pub(crate) fn base64_decode(s: &str) -> Result<Vec<u8>> {
+///
+/// # Errors
+///
+/// 输入含字母表与空白外的字符，或长度不是 4 的倍数（解码出无意义数据）。
+///
+/// # Examples
+///
+/// ```
+/// let bytes = browse_core::js_host::base64_decode("aGk=").unwrap();
+/// assert_eq!(bytes, b"hi");
+/// // 空白容忍（PowerShell 折行输出形）
+/// assert!(browse_core::js_host::base64_decode("aG\nk=").is_ok());
+/// ```
+pub fn base64_decode(s: &str) -> Result<Vec<u8>> {
     const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut val = [0u8; 256];
     for (i, b) in TABLE.iter().enumerate() {
@@ -2394,6 +2488,210 @@ return JSON.stringify(JSON.parse(raw).items.slice(0, 1))"#,
             .await
             .unwrap();
         assert_eq!(v, json!(8));
+    }
+
+    /// 全量 JS 旁路（#22）：eval_js 直发 Runtime.evaluate（returnByValue 加
+    /// awaitPromise 双开），方言 pageEval 同能力；页内抛错带 exceptionDetails
+    /// 与 CTA；缺参类型感知。
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn page_eval_js_bypass() {
+        use std::io::{Read, Write};
+        use std::os::unix::net::UnixStream;
+        use std::sync::Mutex;
+        let (sa, ba) = UnixStream::pair().unwrap();
+        let (sb, bb) = UnixStream::pair().unwrap();
+        let session = cdp::Session::new();
+        session.connect_pipes(sa, sb).await.expect("管道连接");
+        session.set_active_session(Some("S1".into())).await;
+        let host = JsHost::new(session.clone());
+        let seen: Arc<Mutex<Vec<(String, bool, bool)>>> = Arc::new(Mutex::new(Vec::new()));
+        let peer_out = Arc::new(Mutex::new(ba));
+        let (seen_p, peer_out_p) = (seen.clone(), peer_out.clone());
+        std::thread::spawn(move || {
+            let mut bb = bb;
+            let mut buf = Vec::<u8>::new();
+            let mut chunk = [0u8; 4096];
+            loop {
+                let n = match bb.read(&mut chunk) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => n,
+                };
+                buf.extend_from_slice(&chunk[..n]);
+                while let Some(pos) = buf.iter().position(|&b| b == 0) {
+                    let frame: Vec<u8> = buf.drain(..=pos).collect();
+                    let Ok(v) = serde_json::from_slice::<Value>(&frame[..frame.len() - 1]) else {
+                        continue;
+                    };
+                    let Some(id) = v.get("id").cloned() else {
+                        continue;
+                    };
+                    let expr = v
+                        .pointer("/params/expression")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string();
+                    let rbv = v
+                        .pointer("/params/returnByValue")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false);
+                    let awp = v
+                        .pointer("/params/awaitPromise")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false);
+                    seen_p.lock().unwrap().push((expr.clone(), rbv, awp));
+                    // 抛错探针：表达式带 throw 时回 exceptionDetails
+                    let resp = if expr.contains("throw new Error") {
+                        json!({"id": id, "result": {
+                            "result": {"type": "object", "subtype": "error"},
+                            "exceptionDetails": {
+                                "text": "Uncaught",
+                                "exception": {"description": "Error: boom\n    at <anonymous>:1:7"}
+                            }
+                        }})
+                    } else {
+                        json!({"id": id, "result": {"result": {"type": "number", "value": 42}}})
+                    };
+                    if let Ok(mut out) = peer_out_p.lock() {
+                        let _ = out.write_all(serde_json::to_string(&resp).unwrap().as_bytes());
+                        let _ = out.write_all(&[0]);
+                    }
+                }
+            }
+        });
+        // 方言形态：pageEval
+        let v = host
+            .eval_snippet(r#"return await pageEval("1+1")"#)
+            .await
+            .expect("pageEval");
+        assert_eq!(v, json!(42));
+        // 直发形态：eval_js
+        let v = host.eval_js("document.title").await.expect("eval_js");
+        assert_eq!(v, json!(42));
+        {
+            let seen = seen.lock().unwrap();
+            assert_eq!(seen.len(), 2, "两次求值各一发: {seen:?}");
+            for (expr, rbv, awp) in seen.iter() {
+                assert!(
+                    *rbv && *awp,
+                    "returnByValue 加 awaitPromise 必须双开: {expr:?} rbv={rbv} awp={awp}"
+                );
+            }
+        }
+        // 页内抛错：错误带描述与 CTA
+        let e = host
+            .eval_js("throw new Error('boom')")
+            .await
+            .expect_err("抛错应上抛");
+        let msg = format!("{e:#}");
+        assert!(
+            msg.contains("页内抛错") && msg.contains("boom") && msg.contains("下一步"),
+            "{msg}"
+        );
+        // 缺参/类型感知
+        let e = host
+            .eval_snippet("await pageEval(1)")
+            .await
+            .expect_err("非字符串应报 CTA");
+        assert!(format!("{e:#}").contains("pageEval 的 JS 源码"), "{e:#}");
+    }
+
+    /// return 桥三洞（评审 F）加不可序列化面（评审 G）：先原样发，
+    /// Illegal return 认出后包 async IIFE（换行定界）重发；值缺失区分
+    /// undefined（null）与不可序列化（CTA）。
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn eval_js_return_bridge_and_unserializable() {
+        use std::io::{Read, Write};
+        use std::os::unix::net::UnixStream;
+        use std::sync::Mutex;
+        let (sa, ba) = UnixStream::pair().unwrap();
+        let (sb, bb) = UnixStream::pair().unwrap();
+        let session = cdp::Session::new();
+        session.connect_pipes(sa, sb).await.expect("管道连接");
+        session.set_active_session(Some("S1".into())).await;
+        let host = JsHost::new(session.clone());
+        let seen: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let peer_out = Arc::new(Mutex::new(ba));
+        let (seen_p, peer_out_p) = (seen.clone(), peer_out.clone());
+        std::thread::spawn(move || {
+            let mut bb = bb;
+            let mut buf = Vec::<u8>::new();
+            let mut chunk = [0u8; 4096];
+            loop {
+                let n = match bb.read(&mut chunk) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => n,
+                };
+                buf.extend_from_slice(&chunk[..n]);
+                while let Some(pos) = buf.iter().position(|&b| b == 0) {
+                    let frame: Vec<u8> = buf.drain(..=pos).collect();
+                    let Ok(v) = serde_json::from_slice::<Value>(&frame[..frame.len() - 1]) else {
+                        continue;
+                    };
+                    let Some(id) = v.get("id").cloned() else {
+                        continue;
+                    };
+                    let expr = v
+                        .pointer("/params/expression")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string();
+                    seen_p.lock().unwrap().push(expr.clone());
+                    // 未包装的含 return 形 → Illegal return（模拟 V8 顶层）；
+                    // 节点取值 → 无 value 的遥控对象；undefined → 无 value
+                    let resp = if !expr.starts_with("(async () =>") && expr.contains("return") {
+                        json!({"id": id, "result": {
+                            "result": {"type": "object"},
+                            "exceptionDetails": {"text": "Uncaught",
+                                "exception": {"description": "SyntaxError: Illegal return statement"}}
+                        }})
+                    } else if expr.contains("document.body") {
+                        // 真机形状（评审定谳）：returnByValue 下节点是 value:{}
+                        // 无 subtype，与空对象不可区分
+                        json!({"id": id, "result": {"result": {"type": "object", "value": {}}}})
+                    } else if expr.contains("undefined") {
+                        json!({"id": id, "result": {"result": {"type": "undefined"}}})
+                    } else {
+                        json!({"id": id, "result": {"result": {"type": "number", "value": 42}}})
+                    };
+                    if let Ok(mut out) = peer_out_p.lock() {
+                        let _ = out.write_all(serde_json::to_string(&resp).unwrap().as_bytes());
+                        let _ = out.write_all(&[0]);
+                    }
+                }
+            }
+        });
+        // 洞一：return 不在句首（声明加末尾 return）→ 重试包装修发
+        let v = host
+            .eval_js("const t = 1;\nreturn t")
+            .await
+            .expect("声明加 return 形应经桥修过");
+        assert_eq!(v, json!(42));
+        {
+            let seen = seen.lock().unwrap();
+            assert_eq!(seen.len(), 2, "应先原样发再重发: {seen:?}");
+            assert!(
+                seen[1].starts_with("(async () => {"),
+                "重发应是 async IIFE 包装: {:?}",
+                seen[1]
+            );
+            assert!(
+                seen[1].contains('\n'),
+                "换行定界（行尾注释不吞闭合）: {:?}",
+                seen[1]
+            );
+        }
+        // 已合法的 return 开头单语句：也走原样发加重发（假对端同形），值回传
+        let v = host.eval_js("return 1").await.expect("裸 return 形");
+        assert_eq!(v, json!(42));
+        // 不可序列化（真机形状）：value:{} 原样回传（协议层与空对象
+        // 不可区分，CTA 在 surface 手册句，不硬造判据——评审定谳）
+        let v = host.eval_js("document.body").await.expect("节点形");
+        assert_eq!(v, json!({}), "returnByValue 下节点序列化成空对象: {v}");
+        // undefined：回 null
+        let v = host.eval_js("undefined").await.expect("undefined");
+        assert_eq!(v, json!(null));
     }
 
     /// waitForResponse 体就绪等待（#20 评审 F 回归锁）：内存管道假 CDP

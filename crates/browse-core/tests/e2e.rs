@@ -161,6 +161,44 @@ l`.length === 3].join(\"|\")", returnByValue:true})).result.value"#;
     let via_esc = host.eval_snippet(esc_probe).await.expect("转义面 evaluate");
     assert_eq!(via_esc, via_tpl, "A/B：模板形与手工转义形必须同值");
 
+    // #22 全量 JS 旁路（真 V8）：函数声明/模板字符串/正则直接写零转义，
+    // 方言 pageEval 与宿主 eval_js 两入口同值；中文 emoji 往返；大对象
+    // returnByValue；页内抛错带 CTA
+    // IIFE 包裹：V8 全局词法环境跨求值复用（两次 const 同名会撞），声明收进函数域
+    let js = "(() => { function twice(x) { return x * 2; }\nconst s = `n=${twice(21)}`;\nreturn [/\\d/.test(s), s, '中文🚚'].join('|'); })()";
+    // 方言侧程序化转义（反斜杠/引号/换行），两入口载荷严格同源
+    let esc = js
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n");
+    let via_global = host
+        .eval_snippet(&format!(r#"return await pageEval("{esc}")"#))
+        .await
+        .expect("pageEval 真 V8");
+    let via_js = host.eval_js(js).await.expect("eval_js 真 V8");
+    assert_eq!(via_global, via_js, "两入口同值: {via_global:?}");
+    let got = via_js.as_str().unwrap_or_default();
+    assert!(
+        got.contains("n=42") && got.contains("中文🚚"),
+        "模板与中文 emoji 往返: {got:?}"
+    );
+    // 大对象 returnByValue：百键对象完整回传
+    let big = host
+        .eval_js("Object.fromEntries(Array.from({length: 100}, (_, i) => [\"k\" + i, i]))")
+        .await
+        .expect("大对象 returnByValue");
+    assert_eq!(big.pointer("/k99"), Some(&json!(99)), "{big:?}");
+    // 页内抛错：错误带描述与 CTA（不许裸错误码）
+    let threw = host
+        .eval_js("throw new Error('e2e-boom')")
+        .await
+        .expect_err("抛错应上抛");
+    let threw_msg = format!("{threw:#}");
+    assert!(
+        threw_msg.contains("e2e-boom") && threw_msg.contains("下一步"),
+        "抛错应带描述与 CTA: {threw_msg}"
+    );
+
     // snapshot：AX 树精简节点，含按钮
     host.eval_snippet(
         r#"await session.Page.navigate({url:"data:text/html,<title>ax</title><button onclick='window.go=5'>GoGo</button><input value=\"hi\">"})"#,

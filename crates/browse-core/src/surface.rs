@@ -107,6 +107,25 @@ pub const COMMANDS: &[CmdSpec] = &[
         example: "printf '%s\\n' 'const t = await listPageTargets()' 'return t[0].url' | browse",
     },
     CmdSpec {
+        name: "js-flag",
+        kind: CmdKind::Cli,
+        signature: "browse --js '<JS 源码>'",
+        args: &[
+            arg!("js", "string", true),
+            arg!("stdin", "any", false, "空实参时整段管道读"),
+        ],
+        description: "全量 JS 受限旁路（#22，ADR-0002 修订）：不经方言解析器直发 Runtime.evaluate（returnByValue 加 awaitPromise），return 值序列化回传；模板字符串/正则/函数声明直接写，消多层引号转义。分工：方言管 CDP 编排，--js 管页面逻辑。空实参加管道 = 整段 stdin 一次求值（配 --b64 先解码）。不可序列化值（DOM 节点、Date、Map、RegExp 等，含容器内元素）在 returnByValue 下序列化成 {}，CLI 按空容器口径零输出；要值就在 JS 里自己 JSON.stringify 或取原语（.textContent/.outerHTML）。与 --repl 不同行。",
+        example: r#"browse --js 'return (() => { const f = s => s.length; return f("ab"); })()'"#,
+    },
+    CmdSpec {
+        name: "b64-flag",
+        kind: CmdKind::Cli,
+        signature: "browse --b64 '<base64>'",
+        args: &[arg!("base64", "string", true, "或空参走管道整段解码")],
+        description: "base64 通道（#22）：片段实参（或 --js 的 JS 实参）按 base64 解码后再派发；空实参加管道 = 整段 stdin base64 解码（--js 管道版即 cat x.js.b64 | browse --js --b64）。PowerShell 引号与编码面一并绕开；bash 生成 base64 -w0 <文件>，PowerShell 用 [Convert]::ToBase64String。无短参（-b 是 issue new --body 的既有契约）。",
+        example: r#"browse --js --b64 $(printf '%s' '1+1' | base64)"#,
+    },
+    CmdSpec {
         name: "new-tab-flag",
         kind: CmdKind::Cli,
         signature: "browse --new-tab '<片段>'",
@@ -549,6 +568,14 @@ pub const COMMANDS: &[CmdSpec] = &[
         args: &[arg!("pattern", "string", true), arg!("ms", "int", false)],
         description: "等 URL 命中 glob（与 routeBlock/routeMock 同写法）的最近一个响应完成（#20，只认活动 tab）：回 {requestId,url,status,headers,body,base64Encoded,json}；命中含历史（Network 域须在触发前已开，本函数幂等开收不到已发出的响应），方言无并发，可用形态是触发后等待；体等 loadingFinished 再取（5 秒窗），失败显式 bodyError；base64 自动解码，可解析时附 json。",
         example: r#"return await waitForResponse("https://x.test/api*")"#,
+    },
+    CmdSpec {
+        name: "pageEval",
+        kind: CmdKind::Global,
+        signature: "pageEval(js)",
+        args: &[arg!("js", "string", true)],
+        description: "全量 JS 一次求值（#22 受限旁路的方言内形态）：直发 Runtime.evaluate（returnByValue 加 awaitPromise），值序列化回传；模板字符串/正则/函数声明直接写。CLI 侧等价 browse --js。",
+        example: r#"return await pageEval("(() => { const xs = [1,2,3]; return xs.map(x => x * 2).join(','); })()")"#,
     },
     CmdSpec {
         name: "responseBody",
