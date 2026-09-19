@@ -1529,6 +1529,17 @@ pub async fn click_ref_opts(
                     if (!this.isConnected || (!r.width && !r.height)) return null;
                     const el = this;
                     const x = r.x + r.width/2, y = r.y + r.height/2;
+                    // #47 跨 frame 坐标提升：节点在 iframe 内时 rect 是该
+                    // frame 的局部系，Input 派发要顶层视口系——沿
+                    // frameElement 链累加偏移
+                    let vx = x, vy = y, w = window;
+                    while (w !== w.parent) {
+                        const fe = w.frameElement;
+                        if (!fe) break;
+                        const frr = fe.getBoundingClientRect();
+                        vx += frr.x; vy += frr.y;
+                        w = w.parent;
+                    }
                     // 下降进同源 iframe：点在 frame 上时解析到 frame 内元素
                     let d = document, lx = x, ly = y;
                     let hit = d.elementFromPoint(lx, ly);
@@ -1559,7 +1570,7 @@ pub async fn click_ref_opts(
                                 blocker += '.' + hit.className.trim().split(/\s+/).slice(0, 2).join('.');
                         }
                     }
-                    return JSON.stringify({x: x, y: y, blocker: blocker});
+                    return JSON.stringify({x: vx, y: vy, blocker: blocker});
                 }"#,
                 "returnByValue": true
             }),

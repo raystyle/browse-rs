@@ -1086,6 +1086,82 @@ l`.length === 3].join(\"|\")", returnByValue:true})).result.value"#;
         .expect("数清理后");
     assert_eq!(cleared, json!(0), "clear 后零残留: {cleared}");
 
+    // ---- #47 iframe 与 shadow DOM 穿透 ----
+    // 同源 iframe：pierce 快照见按钮，clickRef 跨 frame 点击（坐标提升）
+    host.eval_snippet(
+        r#"await goto("data:text/html,<div id=host></div><iframe id=f1 width=200 height=80 srcdoc='<button id=b1></button>'></iframe>", {timeout: 15})"#,
+    )
+    .await
+    .expect("goto iframe 页");
+    host.eval_snippet(
+        r#"await pageEval("document.querySelector('#f1').contentDocument.getElementById('b1').addEventListener('click', () => { parent.document.title = 'hit47' })")"#,
+    )
+    .await
+    .expect("挂监听");
+    let ps = host
+        .eval_snippet("return await snapshot({pierce: true})")
+        .await
+        .expect("pierce snapshot");
+    let btn47 = ps
+        .get("nodes")
+        .and_then(Value::as_array)
+        .and_then(|a| {
+            a.iter()
+                .find(|n| n.get("role") == Some(&json!("button")))
+                .and_then(|n| n.get("ref"))
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .expect("pierce 应见 iframe 内按钮");
+    host.eval_snippet(r#"await pageEval("document.title = ''")"#)
+        .await
+        .ok();
+    host.eval_snippet(&format!(r#"await clickRef("{btn47}")"#))
+        .await
+        .expect("跨 frame 点击");
+    let hit = host
+        .eval_snippet(r#"return (await session.Runtime.evaluate({expression:"document.title", returnByValue:true})).result.value"#)
+        .await
+        .expect("读 title");
+    assert_eq!(
+        hit,
+        json!("hit47"),
+        "iframe 内按钮点击应命中（坐标提升）: {hit}"
+    );
+    // shadow DOM：pierce 见 input，fillRef 填写回读
+    host.eval_snippet(
+        r#"await pageEval("document.getElementById('host').attachShadow({mode:'open'}).innerHTML = '<input id=si value=orig>'")"#,
+    )
+    .await
+    .expect("建 shadow");
+    let ps2 = host
+        .eval_snippet("return await snapshot({pierce: true})")
+        .await
+        .expect("pierce 2");
+    let si47 = ps2
+        .get("nodes")
+        .and_then(Value::as_array)
+        .and_then(|a| {
+            a.iter()
+                .find(|n| {
+                    n.get("role") == Some(&json!("input")) && n.get("name") == Some(&json!("si"))
+                })
+                .and_then(|n| n.get("ref"))
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .expect("pierce 应见 shadow input");
+    host.eval_snippet(&format!(r#"await fillRef("{si47}", "sh-filled")"#))
+        .await
+        .expect("shadow fill");
+    let sv = host
+        .eval_snippet(
+            r#"return (await session.Runtime.evaluate({expression:"document.getElementById('host').shadowRoot.getElementById('si').value", returnByValue:true})).result.value"#,
+        )
+        .await
+        .expect("读 shadow 值");
+    assert_eq!(sv, json!("sh-filled"), "shadow input 填写应生效: {sv}");
+
     // screenshot：存文件、字节数为正、清场
     let shot = host
         .eval_snippet("return await screenshot()")

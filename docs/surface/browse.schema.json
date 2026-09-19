@@ -704,7 +704,7 @@
       "type": "object"
     },
     "clickRef": {
-      "description": "clickRef(ref, opts?) 按 snapshot 短 ref 点击：滚动可见、量中心、遮挡命中测试（被盖即拒绝并报遮挡物）、trusted 派发；opts（#35）button/clickCount 与 waitNav 可同给；opts.waitNav 链接型点击后走有界提交等待（#19）：grace 窗（2 秒或 timeout 较小者）内探到导航即等加载收尾（waitLoad.settled=nav），无导航迹象即返回（waitLoad.settled=no-nav，同文档锚点与 JS 按钮不再误等全窗），timeout 秒口径。",
+      "description": "clickRef(ref, opts?) 按 snapshot 短 ref 点击：滚动可见、量中心、遮挡命中测试（被盖即拒绝并报遮挡物）、trusted 派发；opts（#35）button/clickCount 与 waitNav 可同给；opts.waitNav 链接型点击后走有界提交等待（#19）：grace 窗（2 秒或 timeout 较小者）内探到导航即等加载收尾（waitLoad.settled=nav），无导航迹象即返回（waitLoad.settled=no-nav，同文档锚点与 JS 按钮不再误等全窗），timeout 秒口径；同源 iframe 内节点坐标沿 frameElement 链提升到顶层视口系（#47）。",
       "example": "await clickRef(\"e3\", {waitNav: true})",
       "input": {
         "properties": {
@@ -2261,7 +2261,7 @@
       "type": "object"
     },
     "snapshot": {
-      "description": "snapshot(opts?) AX 树快照：nodes 带 role/name/value/childIds/短 ref（e1、e2…），引用表的唯一来源；url/title 走 CDP 查询面，页面主世界零写入（无注入痕）。opts（#36 捕获与检索分离）：ref 取该元素子树（snapshot(e34) 部分展开），depth 限深（大页先浅扫再部分展开省 token）；ref 只盖过滤后的可见集。",
+      "description": "snapshot(opts?) AX 树快照：nodes 带 role/name/value/childIds/短 ref（e1、e2…），引用表的唯一来源；url/title 走 CDP 查询面，页面主世界零写入（无注入痕）。opts（#36 捕获与检索分离）：ref 取该元素子树（snapshot(e34) 部分展开），depth 限深（大页先浅扫再部分展开省 token）；ref 只盖过滤后的可见集；pierce（#47）：同源 iframe 与 shadow DOM 内容穿透（DOM.getDocument pierce，AX 树不含它们），节点带 ref 可直接 clickRef/fillRef（跨 frame 坐标已提升）；OOPIF 跨域不覆盖（需子 session attach）。",
       "example": "const s = await snapshot({depth: 2})",
       "input": {
         "properties": {

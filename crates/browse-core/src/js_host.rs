@@ -283,6 +283,66 @@ impl JsHost {
             .await;
     }
 
+    /// DOM 穿透投影（#47）：getDocument depth -1 pierce true 走
+    /// contentDocument（同源 iframe）与 shadowRoots；元素节点投影为
+    /// {id, role=nodeName, name=可见文本/id/aria, backendNodeId, frameId 无
+    /// （DOM 节点不带，AX 面才有）}。与 AX 投影同名节点由 ref 去重面
+    /// 合并（ref 盖章时 backendNodeId 相同即同节点自然去重做不到——由
+    /// 调用方接受重复，ref 唯一性由计数器保）。
+    async fn pierce_dom_nodes(&self) -> Result<Vec<Value>> {
+        let r = self
+            .call_commit_retry("DOM.getDocument", json!({ "depth": -1, "pierce": true }))
+            .await?;
+        let mut out = Vec::new();
+        let root = r.get("root").cloned().unwrap_or(json!({}));
+        Self::walk_pierced(&root, &mut out, 0);
+        Ok(out)
+    }
+
+    fn walk_pierced(n: &Value, out: &mut Vec<Value>, depth: usize) {
+        if depth > 24 {
+            return;
+        }
+        let name_tag = n.get("nodeName").and_then(Value::as_str).unwrap_or("");
+        if let Some(bn) = n.get("backendNodeId").and_then(Value::as_i64) {
+            // 元素节点才投影（#text 等无 bn 的跳过；nodeName #开头的是非元素）
+            if !name_tag.starts_with('#') {
+                let attrs = n.get("attributes").cloned().unwrap_or(json!([]));
+                let idv = attrs
+                    .as_array()
+                    .and_then(|a| a.iter().position(|x| x == &json!("id")))
+                    .and_then(|p| attrs.as_array().and_then(|a| a.get(p + 1)).cloned())
+                    .and_then(|v| v.as_str().map(str::to_string))
+                    .unwrap_or_default();
+                let aria = attrs
+                    .as_array()
+                    .and_then(|a| a.iter().position(|x| x == &json!("aria-label")))
+                    .and_then(|p| attrs.as_array().and_then(|a| a.get(p + 1)).cloned())
+                    .and_then(|v| v.as_str().map(str::to_string))
+                    .unwrap_or_default();
+                let name = if !aria.is_empty() { aria } else { idv };
+                out.push(json!({
+                    "id": bn,
+                    "role": name_tag.to_lowercase(),
+                    "name": name,
+                    "frameId": Value::Null,
+                    "value": Value::Null,
+                    "backendNodeId": bn,
+                }));
+            }
+        }
+        for key in ["children", "shadowRoots"] {
+            if let Some(cs) = n.get(key).and_then(Value::as_array) {
+                for c in cs {
+                    Self::walk_pierced(c, out, depth + 1);
+                }
+            }
+        }
+        if let Some(cd) = n.get("contentDocument") {
+            Self::walk_pierced(cd, out, depth + 1);
+        }
+    }
+
     async fn ax_projected(&self) -> Result<(Vec<Value>, HashMap<i64, i64>)> {
         let r = self
             .call_commit_retry("Accessibility.getFullAXTree", json!({}))
@@ -325,10 +385,13 @@ impl JsHost {
                 {
                     parent.insert(c, id);
                 }
+                // frameId 透传（#47）：AX 节点原生带，同源 iframe 内容在
+                // getFullAXTree 里以子树出现（实弹），跨 frame ref 表生效
                 Some(json!({
                     "id": id,
                     "role": role,
                     "name": name,
+                    "frameId": n.get("frameId"),
                     "value": n.get("value").and_then(|v| v.get("value")),
                     "checked": n.get("checked"),
                     "pressed": n.get("pressed"),
@@ -996,6 +1059,18 @@ impl JsHost {
                     .cloned()
                     .unwrap_or(json!({}));
                 let (mut nodes, parent) = self.ax_projected().await?;
+                // pierce（#47）：同源 iframe 与 shadow DOM 内容不在顶层 AX
+                // 树（实弹），DOM.getDocument depth -1 pierce true 穿透走
+                // contentDocument 加 shadowRoots；节点带 backendNodeId 可
+                // 直接进 ref 表（clickRef/fillRef 跨 frame 生效）。OOPIF
+                // 的跨域隔离不吃 pierce（需 auto-attach 子 session），v1
+                // 不覆盖已在 surface 披露
+                if opts.get("pierce").and_then(Value::as_bool).unwrap_or(false) {
+                    let extra = self.pierce_dom_nodes().await?;
+                    if !extra.is_empty() {
+                        nodes.extend(extra);
+                    }
+                }
                 // 子树过滤（ref）：命中节点的可见子树
                 if let Some(rf) = opts.get("ref").and_then(Value::as_str) {
                     let bn = self.lookup_ref(rf).await?;
@@ -1355,6 +1430,7 @@ impl JsHost {
                         Some(json!({
                             "ref": r, "hit": hit,
                             "id": n.get("id"), "role": n.get("role"),
+                            "frameId": n.get("frameId"),
                             "name": n.get("name"), "value": n.get("value"),
                             "checked": n.get("checked"), "disabled": n.get("disabled"),
                             "backendNodeId": bn,
