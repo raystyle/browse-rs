@@ -107,6 +107,9 @@ pub struct Session {
     /// （pushState 走 navigatedWithinDocument）与 iframe 导航不递增。
     /// 快照引用表的代际失效由它支撑，页面侧零写入。
     doc_gens: Arc<Mutex<HashMap<String, u64>>>,
+    /// auto-attach 得到的子 session（#60 OOPIF）：targetId -> sessionId，
+    /// 供 snapshot 按子 session 拉各自 AX 树
+    child_sessions: Arc<Mutex<HashMap<String, String>>>,
     /// 提交屏障水位（#34 根因级）：sessionId -> 设屏时的事件 seq。
     /// 跨文档 navigate 回执后记录，后续页面级 [`Session::call`] 等
     /// 水位后的主框架 frameNavigated 再放行；满足或超时即清。
@@ -140,12 +143,33 @@ impl Session {
             pinned_sessions: Arc::new(Mutex::new(HashSet::new())),
             doc_gens: Arc::new(Mutex::new(HashMap::new())),
             commit_barrier: Arc::new(Mutex::new(HashMap::new())),
+            child_sessions: Arc::new(Mutex::new(HashMap::new())),
         })
     }
 
     /// 连接是否仍活着：WS/管道读循环存活期间为 true。
     pub fn is_connected(&self) -> bool {
         self.connected.load(Ordering::Relaxed)
+    }
+
+    /// 开 OOPIF auto-attach（#60）：flatten 形，跨域 iframe 自附着成子
+    /// session（事件 attachedToTarget 记账进 child_sessions）。幂等。
+    ///
+    /// # Errors
+    ///
+    /// 未连接或 CDP 拒绝。
+    pub async fn enable_auto_attach(&self) -> Result<()> {
+        self.call(
+            "Target.setAutoAttach",
+            json!({ "autoAttach": true, "waitForDebuggerOnStart": false, "flatten": true }),
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// auto-attach 子 session 表快照（#60）：targetId -> sessionId。
+    pub async fn child_sessions(&self) -> HashMap<String, String> {
+        self.child_sessions.lock().await.clone()
     }
 
     /// 返回当前连接纪元（每次 open_ws/connect_pipes 自增）：上层用它
@@ -253,6 +277,7 @@ impl Session {
         let seq_r = self.next_seq.clone();
         let dialog_r = self.pending_dialog.clone();
         let gens_r = self.doc_gens.clone();
+        let children_r = self.child_sessions.clone();
         let flag = self.connected.clone();
         let dead_pending = self.pending.clone();
         let epoch = self.conn_epoch.fetch_add(1, Ordering::Relaxed) + 1;
@@ -265,7 +290,16 @@ impl Session {
                     break;
                 }
                 if let Ok(v) = serde_json::from_str::<Value>(&t) {
-                    route(v, &pending_r, &events_r, &seq_r, &dialog_r, &gens_r).await;
+                    route(
+                        v,
+                        &pending_r,
+                        &events_r,
+                        &seq_r,
+                        &dialog_r,
+                        &gens_r,
+                        &children_r,
+                    )
+                    .await;
                 }
             }
             // 只有自己仍是当前连接才翻死线：旧连接的泵在重连后迟到退出
@@ -366,6 +400,7 @@ impl Session {
         let seq_r = self.next_seq.clone();
         let dialog_r = self.pending_dialog.clone();
         let gens_r = self.doc_gens.clone();
+        let children_r = self.child_sessions.clone();
         let flag = self.connected.clone();
         let epoch = self.conn_epoch.fetch_add(1, Ordering::Relaxed) + 1;
         let epoch_r = self.conn_epoch.clone();
@@ -398,7 +433,16 @@ impl Session {
                 while let Some(pos) = carry.iter().position(|&c| c == 0) {
                     let frame: Vec<u8> = carry.drain(..=pos).collect();
                     if let Ok(v) = serde_json::from_slice(&frame[..frame.len() - 1]) {
-                        route(v, &pending_r, &events_r, &seq_r, &dialog_r, &gens_r).await;
+                        route(
+                            v,
+                            &pending_r,
+                            &events_r,
+                            &seq_r,
+                            &dialog_r,
+                            &gens_r,
+                            &children_r,
+                        )
+                        .await;
                     }
                 }
             }
@@ -983,6 +1027,7 @@ async fn route(
     next_seq: &AtomicI64,
     dialog: &Arc<Mutex<Option<Value>>>,
     gens: &Arc<Mutex<HashMap<String, u64>>>,
+    children: &Arc<Mutex<HashMap<String, String>>>,
 ) {
     if let Some(id) = v.get("id").and_then(|x| x.as_i64()) {
         if let Some(tx) = pending.lock().await.remove(&id) {
@@ -995,6 +1040,21 @@ async fn route(
             }
             Some("Page.javascriptDialogClosed") => {
                 *dialog.lock().await = None;
+            }
+            // #60 OOPIF auto-attach：子 session 记账（事件自身已带子
+            // sessionId，后续该 session 的事件照常进缓冲）
+            Some("Target.attachedToTarget")
+                if let (Some(tid), Some(sid)) = (
+                    v.pointer("/params/targetInfo/targetId").and_then(Value::as_str),
+                    v.pointer("/params/sessionId").and_then(Value::as_str),
+                )
+                    // 只记 iframe 型（#60）：browser 级 auto-attach 会带上
+                    // 其他 page 型 target，混进 snapshot 是噪音
+                    && v.pointer("/params/targetInfo/type").and_then(Value::as_str)
+                        == Some("iframe") =>
+            {
+                let (t, c) = (tid.to_string(), sid.to_string());
+                children.lock().await.insert(t, c);
             }
             // 主框架导航（frame 无 parentId）递增该 session 的文档代（#30）：
             // 主文档被换，旧 backendNodeId 全体作废；iframe 导航（有
@@ -1519,6 +1579,7 @@ mod tests {
     #[tokio::test]
     async fn ring_buffer_caps() {
         let s = Session::new();
+        let children_t = s.child_sessions.clone();
         let pending = Arc::new(Mutex::new(HashMap::new()));
         for i in 0..(EVENT_BUFFER_CAP + 10) {
             route(
@@ -1528,6 +1589,7 @@ mod tests {
                 &s.next_seq,
                 &s.pending_dialog,
                 &s.doc_gens,
+                &children_t,
             )
             .await;
         }
@@ -1563,6 +1625,7 @@ mod tests {
     }
 
     async fn route_all(s: &Session, events: Vec<Value>) {
+        let children_t = s.child_sessions.clone();
         let pending = Arc::new(Mutex::new(HashMap::new()));
         for e in events {
             route(
@@ -1572,6 +1635,7 @@ mod tests {
                 &s.next_seq,
                 &s.pending_dialog,
                 &s.doc_gens,
+                &children_t,
             )
             .await;
         }

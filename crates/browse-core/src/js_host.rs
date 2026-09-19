@@ -1070,6 +1070,54 @@ impl JsHost {
                     if !extra.is_empty() {
                         nodes.extend(extra);
                     }
+                    // #60 OOPIF：跨域 iframe 走子 session AX 树（DOM
+                    // pierce 不含跨域 contentDocument），每个子 session
+                    // 各拉一次 getFullAXTree 投影进同一 ref 表
+                    let children = self.session.child_sessions().await;
+                    for (tid, sid) in children {
+                        if let Ok(r) = self
+                            .session
+                            .call_on("Accessibility.getFullAXTree", json!({}), &sid)
+                            .await
+                            && let Some(arr) = r.get("nodes").and_then(Value::as_array)
+                        {
+                            for n in arr {
+                                let role = n
+                                    .pointer("/role/value")
+                                    .and_then(Value::as_str)
+                                    .unwrap_or("");
+                                if matches!(
+                                    role,
+                                    "generic"
+                                        | "InlineTextBox"
+                                        | "presentation"
+                                        | "none"
+                                        | "RootWebArea"
+                                ) {
+                                    continue;
+                                }
+                                let name = n
+                                    .pointer("/name/value")
+                                    .and_then(Value::as_str)
+                                    .unwrap_or("");
+                                if name.is_empty() && n.get("backendDOMNodeId").is_none() {
+                                    continue;
+                                }
+                                if let Some(bn) = n.get("backendDOMNodeId").and_then(Value::as_i64)
+                                {
+                                    nodes.push(json!({
+                                        "id": n.get("nodeId"),
+                                        "role": role,
+                                        "name": name,
+                                        "frameId": tid,
+                                        "value": n.get("value").and_then(|v| v.get("value")),
+                                        "backendNodeId": bn,
+                                        "oopif": true,
+                                    }));
+                                }
+                            }
+                        }
+                    }
                 }
                 // 子树过滤（ref）：命中节点的可见子树
                 if let Some(rf) = opts.get("ref").and_then(Value::as_str) {
@@ -3138,6 +3186,16 @@ pub(crate) async fn ensure_page_enabled(session: &Session, sid: &str) {
     // Network。幂等；晚开域之前的旧事件收不到（自开域后起算）
     let _ = session.call_on("Runtime.enable", json!({}), sid).await;
     let _ = session.call_on("Network.enable", json!({}), sid).await;
+    // #60 OOPIF auto-attach：跨域 iframe 自附着成子 session（幂等），
+    // snapshot pierce 时按子 session 拉各自 AX 树
+    let _ = session
+        .call(
+            "Target.setAutoAttach",
+            json!({
+                "autoAttach": true, "waitForDebuggerOnStart": false, "flatten": true
+            }),
+        )
+        .await;
     // #38 下载捕获：落盘到状态目录 downloads 子目录并开事件（browser 级
     // 幂等）
     let _ = session
