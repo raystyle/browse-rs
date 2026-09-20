@@ -24,7 +24,7 @@ Rust workspace（crates/cdp、browse-core、browse-cli）。公开契约以 `///
 - 文档链接只用 intra-doc（`` [`Session::call`] ``）
 - I/O 类示例标 no_run，不标 ignore
 - spawn 引擎保持 `--no-sandbox`（SxS 部署沙箱打不开自身 exe，见 ADR-0003）
-- 遇缺陷当场一键反馈：`browse issue new <标题> --body <正文>`（issues.ohmygh.com，REQ-057 契约；自动署名 tool=browse 加版本/平台/host；agent 作业中发现 browse 自身缺陷先提 issue 再绕行）
+- 遇缺陷当场一键反馈：`browse issue new <标题> --acceptance <验收> --body <正文>`（账本真源 ledger.ohmygh.com，REQ-063 契约；写入走 Ed25519 五头签名道，先 `browse ledger keygen` 且公钥 kid 总台在册；旧 issues.ohmygh.com 只读保役；agent 作业中发现 browse 自身缺陷先提 issue 再绕行，契约实弹先 `--dry-run` 预览零入账）
 
 ## Must not
 

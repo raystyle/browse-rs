@@ -158,8 +158,6 @@ fn help_lists_every_cli_flag() {
     let exempt = [
         "--gen-surface",
         "--body",
-        "--tool",
-        "--status",
         "--limit",
         "--before",
         "--dry-run",
@@ -167,6 +165,20 @@ fn help_lists_every_cli_flag() {
         "-m",
         "--timeout",
         "--cookies",
+        "--kind",
+        "--name",
+        "--type",
+        "--acceptance",
+        "--note",
+        "--digest",
+        "--git-range",
+        "--summary",
+        "--dep",
+        "--outcome",
+        "--git-sha",
+        "--current",
+        "--env",
+        "--force",
     ];
     let mut flags: Vec<String> = src
         .split(['"', '|'])

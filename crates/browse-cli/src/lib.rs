@@ -8,5 +8,12 @@
 
 pub mod client;
 pub mod fetch;
-pub mod issue;
+pub mod ledger;
 pub mod render;
+
+/// 环境敏感测试的进程级互斥锁（评审 F1）：ledger 测试会 set/remove 进程级
+/// env（`BROWSE_NAME`/`BROWSE_LEDGER_PRIVATE_KEY`），同二进制并行跑会互
+/// 踩出「公钥不配对」类假故障；env 敏感测试开头各取此锁（hst TEST_ENV_LOCK
+/// 同款）。
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) static TEST_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());

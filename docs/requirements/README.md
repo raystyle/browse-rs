@@ -19,7 +19,7 @@
 
 ## Roadmap（issue 台账批次规划）
 
-> 台账真源是 issues.ohmygh.com（tool=browse），本节只排批次与依赖，不复制验收正文（防第二真相）。每批开工立对应 REQ（draft 到 implemented，trace 指 issue id 与验收证据），批完成走 omc 关单。确立 2026-09-19，覆盖当时全部 23 条 open。
+> 台账真源自 v0.8.0 起是 ledger.ohmygh.com（REQ-063，browse 仓 issue/artifact 命令族；旧 issues.ohmygh.com 只读保役，2026-09-20 前的批次记录以旧站为准），本节只排批次与依赖，不复制验收正文（防第二真相）。每批开工立对应 REQ（draft 到 implemented，trace 指 issue id 与验收证据），批完成走 omc 关单。确立 2026-09-19，覆盖当时全部 23 条 open。
 
 | 批 | 条目（issue id） | 主题 | 依赖 |
 |---|---|---|---|

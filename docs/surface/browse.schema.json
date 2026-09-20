@@ -178,6 +178,126 @@
       "output": "runtime JSON（回值随页面与 CDP 而定）",
       "type": "object"
     },
+    "cli.artifact-attest": {
+      "description": "browse artifact attest <id> --type <t> 产物事件（REQ-063 六型）：attest_dev/attest_prod/verification_failed/promote/demote/supersede；id 须 36 字 UUID 形（browse artifact list 取真值）。",
+      "example": "browse artifact attest 66857bb2-d1ae-4977-97df-8ab41cc37399 --type attest_prod",
+      "input": {
+        "properties": {
+          "id": {
+            "description": "",
+            "type": "string"
+          },
+          "note": {
+            "description": "",
+            "type": "string"
+          },
+          "type": {
+            "description": "缺省 attest_dev",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "cli.artifact-list": {
+      "description": "browse artifact list [--current] [--env dev|prod] 产物列表（GET 免签）：current=1 投影当前有效集，env 过滤。",
+      "example": "browse artifact list --current --env prod",
+      "input": {
+        "properties": {
+          "current": {
+            "description": "缺省 false",
+            "type": "boolean"
+          },
+          "env": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "cli.artifact-promote": {
+      "description": "browse artifact promote <id> [--note <n>] 提升产物为当前有效（promote 糖，等价 artifact attest <id> --type promote）。",
+      "example": "browse artifact promote 66857bb2-d1ae-4977-97df-8ab41cc37399",
+      "input": {
+        "properties": {
+          "id": {
+            "description": "",
+            "type": "string"
+          },
+          "note": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "cli.artifact-publish": {
+      "description": "browse artifact publish --name <n> --kind <k> --digest <d> [--dep <d>]… 产物共享库发布（REQ-063）：kind 十五枚举必填（binary/experience/lesson/research/prototype/…），digest=正文或记录哈希（sha256:<64hex>），POST 签名道，回 {ok,artifact_id}。",
+      "example": "browse artifact publish --name browse-0.8 --kind prototype --digest sha256:... --version 0.8.0 --dep github.com/raystyle/hst_rs",
+      "input": {
+        "properties": {
+          "dep": {
+            "description": "缺省 可重复：依赖出处，回溯链即证据链",
+            "type": "string"
+          },
+          "digest": {
+            "description": "",
+            "type": "string"
+          },
+          "git-range": {
+            "description": "",
+            "type": "string"
+          },
+          "git-sha": {
+            "description": "缺省 关联 git sha",
+            "type": "string"
+          },
+          "kind": {
+            "description": "",
+            "type": "string"
+          },
+          "name": {
+            "description": "",
+            "type": "string"
+          },
+          "outcome": {
+            "description": "缺省 experience 类 success|failure",
+            "type": "string"
+          },
+          "summary": {
+            "description": "",
+            "type": "string"
+          },
+          "version": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "digest"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
     "cli.b64-flag": {
       "description": "browse --b64 '<base64>' base64 通道（#22）：片段实参（或 --js 的 JS 实参）按 base64 解码后再派发；空实参加管道 = 整段 stdin base64 解码（--js 管道版即 cat x.js.b64 | browse --js --b64）。PowerShell 引号与编码面一并绕开；bash 生成 base64 -w0 <文件>，PowerShell 用 [Convert]::ToBase64String。无短参（-b 是 issue new --body 的既有契约）。",
       "example": "browse --js --b64 $(printf '%s' '1+1' | base64)",
@@ -393,8 +513,35 @@
       "output": "runtime JSON（回值随页面与 CDP 而定）",
       "type": "object"
     },
+    "cli.issue-close": {
+      "description": "browse issue close <号> --digest <sha256:...> 账本关单链（REQ-063）：result 事件引 digest 先行，status=done 收尾，服务端校验。",
+      "example": "browse issue close 3 --digest sha256:b8277c4fb02b21909d42027ecdce73d1d3bbed001298ca1a2eccafbd892f1444 --note \"随 0.8.0\"",
+      "input": {
+        "properties": {
+          "digest": {
+            "description": "",
+            "type": "string"
+          },
+          "n": {
+            "description": "",
+            "type": "number"
+          },
+          "note": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "n",
+          "digest"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
     "cli.issue-list": {
-      "description": "browse issue list [--status <s>] [--limit <n>] [--tool <t>] [--before <id>] 列 issue（新到旧；默认本工具，--tool 换过滤；默认 limit 100 即服务端上限，返回 count 是本次返回条数非在册总数，恰打满时 stderr 出截断提示（#52）；--before <id> 是 keyset 游标翻更早一页（#53））。",
+      "description": "browse issue list [--limit <n>] [--before <id>] 列 issue（账本面）：count 是返回条数非在册总数，has_more 权威，打满即 stderr 截断提示。",
       "example": "browse issue list --limit 10",
       "input": {
         "properties": {
@@ -405,14 +552,6 @@
           "limit": {
             "description": "缺省 100",
             "type": "number"
-          },
-          "status": {
-            "description": "",
-            "type": "string"
-          },
-          "tool": {
-            "description": "缺省 browse",
-            "type": "string"
           }
         },
         "required": [],
@@ -422,12 +561,24 @@
       "type": "object"
     },
     "cli.issue-new": {
-      "description": "browse issue new <标题> [--body <正文>] [--dry-run] 一键缺陷反馈：自动署名 tool=browse 加版本加平台加主机；--dry-run 同规校验并预览载荷零网络副作用（#57 G6，契约实弹走它别落生产台账）。",
-      "example": "browse issue new <标题> --body <复现步骤>",
+      "description": "browse issue new <标题> --acceptance <验收> [--kind bug|improvement] [--body <正文>] [--dry-run] 账本 issue 流开单（REQ-063，真源 ledger.ohmygh.com）：acceptance 必填（关单 result 的完成判据锚）；POST 五头签名道，回执 {ok,issue,event}（列表行的 issue_n 见 issue list）；--dry-run 本地校验加载荷预览零网络（账本只增不可撤，契约实弹先走它）。",
+      "example": "browse issue new \"修复 X\" --kind bug --acceptance \"测试过\" --dry-run",
       "input": {
         "properties": {
+          "acceptance": {
+            "description": "",
+            "type": "string"
+          },
           "body": {
-            "description": "缺省 旗标缺省吃管道 stdin",
+            "description": "缺省 管道 stdin",
+            "type": "string"
+          },
+          "dry-run": {
+            "description": "缺省 false",
+            "type": "boolean"
+          },
+          "kind": {
+            "description": "缺省 bug",
             "type": "string"
           },
           "title": {
@@ -436,7 +587,8 @@
           }
         },
         "required": [
-          "title"
+          "title",
+          "acceptance"
         ],
         "type": "object"
       },
@@ -444,8 +596,8 @@
       "type": "object"
     },
     "cli.issue-show": {
-      "description": "browse issue show <id> 看 issue 详情。",
-      "example": "browse issue show 42",
+      "description": "browse issue show <id> 看单条 issue 详情（projection 加 timeline）。",
+      "example": "browse issue show 3",
       "input": {
         "properties": {
           "id": {
@@ -478,6 +630,22 @@
         "required": [
           "js"
         ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "cli.ledger-keygen": {
+      "description": "browse ledger keygen [--force] Ed25519 密钥对生成（REQ-063）：私钥落 ~/.browse-rs/ledger/ed25519.key（0600 不打印），公钥 JWK 与 kid 打印供总台在册。",
+      "example": "browse ledger keygen",
+      "input": {
+        "properties": {
+          "force": {
+            "description": "缺省 false",
+            "type": "boolean"
+          }
+        },
+        "required": [],
         "type": "object"
       },
       "output": "runtime JSON（回值随页面与 CDP 而定）",
