@@ -2097,11 +2097,15 @@ impl JsHost {
             // 命令面先行（事件面 schema 冻结，引擎通路裁定只改内部接线）
             "engineWaitForResponse" => {
                 let pat = str_arg(argv, 0, "engineWaitForResponse 的 pattern")?;
-                let opts = argv.get(1).cloned().unwrap_or(json!({}));
-                let mut params = json!({ "pattern": pat });
-                if let Some(t) = opts.get("timeoutMs").and_then(Value::as_u64) {
-                    params["timeoutMs"] = json!(t);
+                if pat.is_empty() {
+                    bail!(
+                        "engineWaitForResponse 的 pattern 不能为空（空串会匹配所有请求）；下一步：给 url:/api/、status:200 等具体条件"
+                    );
                 }
+                // 冻结面有 timeoutMs 但引擎骨架不实作（评审 F1）：不透传
+                // 伪参数（真 chrome 对未知参数宽容但假对端实测拒绝），超时
+                // 由调用方在事件面自管（waitFor responseReady 或 peekEvents）
+                let params = json!({ "pattern": pat });
                 match self.session.call("Browse.waitForResponse", params).await {
                     Ok(r) => Ok(r),
                     Err(e) => {
