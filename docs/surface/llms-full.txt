@@ -75,7 +75,7 @@
 | `semanticSnapshot(opts?)` | 引擎层语义快照（#27 批 1）：Browse.semanticSnapshot 直出紧凑语义树或 markdown（引擎内 AX 遍历，替代 JS 侧 379 节点路径）；引擎须 clean-chrome 扩展域版（--enable-features=CleanChromeBrowseDomain），否则报错带回退口径（snapshot({pierce:true})）。 |
 | `subscribeChanges({selector, kinds?})` | 引擎层变更订阅（#27 批 2）：Browse.subscribeChanges 订阅 DOM 子树变更（引擎内 MutationObserver 零页面痕迹）；selector 必填（缺则本函数当场报错带 CTA，不落引擎 -32602），kinds 缺省三类全收；回 {subscriptionId}；推送走 Browse.changesPushed 事件，事件形 {subscriptionId, changes: string[]}（每行一条紧凑变更描述，如 childList DIV#t +1 -0），在发起订阅的 page session 上投递：peekEvents 不过滤可全量读，waitFor 只认活动 tab（换 tab 后要读旧 session 的推送就用 peekEvents）。引擎须扩展域版（--enable-features=CleanChromeBrowseDomain），否则 -32601 报错指路；取消走 unsubscribeChanges(sub)。 |
 | `unsubscribeChanges(subscriptionId)` | 取消变更订阅（#27 批 2）：Browse.unsubscribeChanges 静默取消；引擎侧已知响应偶失（功能生效，引擎日记在册），本调用可能无回执或报超时，按订阅已静默处理，勿依赖响应体重试。 |
-| `engineWaitForResponse(pattern, opts?)` | 引擎层响应等待（#27 批 3）：Browse.waitForResponse 引擎内 pattern 订阅，登记即回 {waitId} 不阻塞；命中推送 Browse.responseReady 事件。pattern 支持 url:/api/、status:200、method:POST、type:json 逗号 AND 组合；匹配语义是 URL 子串非 glob。与 JS 侧 waitForResponse 三点差分：登记即回不阻塞（JS 侧阻塞到命中）、URL 子串非 glob 通配、无内置超时（调用方在事件面自管 waitFor/peekEvents）。引擎须扩展域版（命令骨架已绿事件面在途），否则 -32601 报错指路 JS 侧替代。 |
+| `engineWaitForResponse(pattern)` | 引擎层响应等待（#27 批 3）：Browse.waitForResponse 引擎内 pattern 订阅，登记即回 {waitId} 不阻塞；命中推送 Browse.responseReady 事件。pattern 支持 url:/api/、status:200、method:POST、type:json 逗号 AND 组合；匹配语义是 URL 子串非 glob。与 JS 侧 waitForResponse 三点差分：登记即回不阻塞（JS 侧阻塞到命中）、URL 子串非 glob 通配、无内置超时（调用方在事件面自管 waitFor/peekEvents）。引擎须扩展域版（命令骨架已绿事件面在途），否则 -32601 报错指路 JS 侧替代。 |
 | `engineCancelWait(waitId)` | 取消引擎层响应等待（#27 批 3）：Browse.cancelWait 静默取消。 |
 | `cloneCookies(domains)` | 登录态按域热迁（#48）：从附着浏览器（probe_default 发现）只读取指定域 cookie 后缀匹配，Network.setCookies 灌入当前引擎；源零写回铁律；回 {cloned,matched,domains}。无附着源（probe_default 只探 9222 与默认 profile 的 DevToolsActivePort，其他端口的附着态取不到）报错指 exportStorageState 整包往返；域匹配不区分大小写、输入前导点剥掉；cloned 小于 matched 时回 failed 与 firstError。 |
 | `downloads(since?)` | 下载列表（#38）：Browser.downloadWillBegin 行情加同 guid 最新 downloadProgress（state/receivedBytes/totalBytes）；落盘目录是状态目录 downloads/，捕获随 tab 入口自动开（Browser 域事件不做活动 tab 过滤）。 |
@@ -864,13 +864,12 @@ const s = await subscribeChanges({selector: "#feed"})
 await unsubscribeChanges("1:abc")
 ```
 
-## `engineWaitForResponse(pattern, opts?)`
+## `engineWaitForResponse(pattern)`
 
 引擎层响应等待（#27 批 3）：Browse.waitForResponse 引擎内 pattern 订阅，登记即回 {waitId} 不阻塞；命中推送 Browse.responseReady 事件。pattern 支持 url:/api/、status:200、method:POST、type:json 逗号 AND 组合；匹配语义是 URL 子串非 glob。与 JS 侧 waitForResponse 三点差分：登记即回不阻塞（JS 侧阻塞到命中）、URL 子串非 glob 通配、无内置超时（调用方在事件面自管 waitFor/peekEvents）。引擎须扩展域版（命令骨架已绿事件面在途），否则 -32601 报错指路 JS 侧替代。
 
 参数：
 - `pattern`（string），必填
-- `timeoutMs`（number）
 
 ```js
 const w = await engineWaitForResponse("url:/api/")

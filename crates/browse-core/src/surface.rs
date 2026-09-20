@@ -698,11 +698,8 @@ pub const COMMANDS: &[CmdSpec] = &[
     CmdSpec {
         name: "engineWaitForResponse",
         kind: CmdKind::Global,
-        signature: "engineWaitForResponse(pattern, opts?)",
-        args: &[
-            arg!("pattern", "string", true),
-            arg!("timeoutMs", "number", false),
-        ],
+        signature: "engineWaitForResponse(pattern)",
+        args: &[arg!("pattern", "string", true)],
         description: "引擎层响应等待（#27 批 3）：Browse.waitForResponse 引擎内 pattern 订阅，登记即回 {waitId} 不阻塞；命中推送 Browse.responseReady 事件。pattern 支持 url:/api/、status:200、method:POST、type:json 逗号 AND 组合；匹配语义是 URL 子串非 glob。与 JS 侧 waitForResponse 三点差分：登记即回不阻塞（JS 侧阻塞到命中）、URL 子串非 glob 通配、无内置超时（调用方在事件面自管 waitFor/peekEvents）。引擎须扩展域版（命令骨架已绿事件面在途），否则 -32601 报错指路 JS 侧替代。",
         example: "const w = await engineWaitForResponse(\"url:/api/\")",
     },
