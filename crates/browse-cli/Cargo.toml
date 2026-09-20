@@ -16,13 +16,13 @@ base64 = { workspace = true }
 ed25519-dalek = { workspace = true }
 browse-core = { path = "../browse-core" }
 cdp = { path = "../cdp" }
+ledger-client = { workspace = true }
 reqwest = { workspace = true }
 rustyline = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 rand = "0.8"
-ureq = { workspace = true }
 tokio = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]

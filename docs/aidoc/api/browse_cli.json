@@ -85,37 +85,17 @@
     {
       "path": "browse_cli::ledger",
       "kind": "module",
-      "docs": "账本面（REQ-063 仓级公共账本客户端，Phase 3 CLI 原生集成）：\nissue 流（bug 加 improvement 任务的立项、事件与关单）加 artifact 流\n（产物共享库 publish 加 attest 加 promote）。真源 = ledger.ohmygh.com\n（替代 issues.ohmygh.com 客户端面；旧服务过渡保役，REQ-063 切换策）。\n写入五头签名道（Ed25519）：私钥运行时从 env `BROWSE_LEDGER_PRIVATE_KEY`\n（base64url seed）或本地密档 `~/.browse-rs/ledger/ed25519.key` 读（不进仓不\n进 argv）；公钥 JWK 常量内置（身份分发面，总台在册）。GET 不签名不\n受配额；写入 per-key 50 条每 UTC 日，幂等命中不耗（服务端契约）。"
-    },
-    {
-      "path": "browse_cli::ledger::ARTIFACT_KINDS",
-      "kind": "constant",
-      "docs": "artifact kind 集（服务端 ARTIFACT_KINDS 同源）。"
-    },
-    {
-      "path": "browse_cli::ledger::ATTEST_TYPES",
-      "kind": "constant",
-      "docs": "attestation 类型集（服务端 ATTEST_TYPES 同源）。"
-    },
-    {
-      "path": "browse_cli::ledger::ISSUE_EVENT_TYPES",
-      "kind": "constant",
-      "docs": "issue 事件类型集（服务端 ISSUE_EVENT_TYPES 同源）。"
+      "docs": " 账本薄适配层（REQ-063；总台修正令 2026-09-20 收口）：签名道与只增面\n 全在 ledger-client crate（github.com/raystyle/ledger-rs v0.1.1，全舰队\n 唯一实现；v0.1.0 有 URL 拼接舰队级缺陷已避），本层只留本仓身份面\n（公钥 JWK 常量与 kid 派生）、密档管理\n （base64url seed，env `BROWSE_LEDGER_PRIVATE_KEY` 或本地密档双通道）、\n 命令面本地校验、`--dry-run` 载荷预览与 #52 家族截断提示。CLI 只增不关\n 不删：issue close 与 artifact promote/demote/supersede 面已移除，关闭\n 与删除唯一道 = 开发工作台经 herdr 委托 omc 工位执行（`omc ledger issue\n status <repo> <n> <to>` 与 `omc ledger issue delete`）。真源 =\n ledger.ohmygh.com（替代 issues.ohmygh.com 客户端面；旧服务只读保役）。"
     },
     {
       "path": "browse_cli::ledger::ISSUE_KINDS",
       "kind": "constant",
-      "docs": "issue kind 集（服务端 ISSUE_KINDS 同源）：bug（BUG 错误任务）与\nimprovement（改进优化任务），缺省 bug。"
-    },
-    {
-      "path": "browse_cli::ledger::ISSUE_STATUSES",
-      "kind": "constant",
-      "docs": "issue 状态集（服务端 ISSUE_STATUSES 同源；done 须先有 result 事件）。"
+      "docs": "issue kind 集（服务端 ISSUE_KINDS 同源，本地预检省一次网络往返）：bug\n（BUG 错误任务）与 improvement（改进优化任务）。"
     },
     {
       "path": "browse_cli::ledger::PUBKEY_JWK",
       "kind": "constant",
-      "docs": "本仓公钥 JWK（REQ-063 裁 2：常量集成进 CLI；字母键序紧凑形，kid 即\n其 sha256hex）。私钥恒在提交侧（env 或本地密档），不进仓。"
+      "docs": "本仓公钥 JWK（REQ-063 裁 2：常量集成进 CLI；字母键序紧凑形，kid 即\n其 sha256hex，与舰队派生约定一致）。私钥恒在提交侧（env 或本地密档），\n不进仓。"
     },
     {
       "path": "browse_cli::ledger::REPO_ID",
@@ -123,34 +103,14 @@
       "docs": "本仓账本身份（REQ-063：repo_id = 规范化 remote）。"
     },
     {
-      "path": "browse_cli::ledger::artifact_attest",
-      "kind": "function",
-      "docs": "artifact 事件（POST /repos/`<id>`/artifacts/`<id>`/attestations）：type 见\n[`ATTEST_TYPES`]；payload 对象（attest_prod 强制 env=prod、promote 缺\nname 时服务端补 artifact 名）。\n\n# Errors\n\n失败返回 `String` 错误（本地校验、网络与解析类、服务端 error 透传）。"
-    },
-    {
-      "path": "browse_cli::ledger::artifact_publish",
-      "kind": "function",
-      "docs": "artifact 发布（POST /repos/`<id>`/artifacts）：digest = 正文或记录哈希\n（库不收二进制实体）；deps[] 记依赖出处（回溯链即证据链）。\n\n# Errors\n\n失败返回 `String` 错误（本地校验、网络与解析类、服务端 error 透传）。"
-    },
-    {
-      "path": "browse_cli::ledger::artifacts_list",
-      "kind": "function",
-      "docs": "artifact 列表（GET）：current=1 投影当前有效集，env 过滤 dev|prod。\n\n# Errors\n\n失败返回 `String` 错误（网络与解析类、服务端 error 透传）。"
-    },
-    {
       "path": "browse_cli::ledger::clamp_issue_limit",
       "kind": "function",
       "docs": "issue list 的 limit 钳制（1 至 100，服务端上限；#52 家族标准）：钳制\n单源，命令面默认值与饱和提示判定共用。"
     },
     {
-      "path": "browse_cli::ledger::issue_close",
+      "path": "browse_cli::ledger::client",
       "kind": "function",
-      "docs": "issue 关单链（result 引 digest 先行，status to=done 收尾；REQ-063 关\n单完成判据）。返回两事件回执数组。\n# Errors\n\n失败返回 `String` 错误（两段任一失败即止，已写段不回滚——账本只增）。"
-    },
-    {
-      "path": "browse_cli::ledger::issue_event",
-      "kind": "function",
-      "docs": "issue 事件（POST /repos/`<id>`/issues/`<n>`/events）：type 见\n[`ISSUE_EVENT_TYPES`]；payload 对象随 type（status 带 to；result 带\ndigest）。status=done 由服务端校验须先有 result。\n\n# Errors\n\n失败返回 `String` 错误（本地校验、网络与解析类、服务端 error 透传）。"
+      "docs": "组装标准客户端（签名道与只增面在 ledger-client；本仓身份面注入）。\n\n# Errors\n\n私钥载入失败（见 [`load_keypair`]）。"
     },
     {
       "path": "browse_cli::ledger::issue_list_saturated",
@@ -163,24 +123,9 @@
       "docs": " issue list 饱和提示行（#52/#53 家族标准）：返回条数打满钳制后 limit\n（或 before 翻页面 has_more 为真）时出此行到 stderr，指向 `--status`\n 不适用（账本列表无状态过滤）故给 `--limit` 提高、`--before` 翻更旧\n 一页与账本网页面；不饱和不出。"
     },
     {
-      "path": "browse_cli::ledger::issue_open",
-      "kind": "function",
-      "docs": "issue 开单（POST /repos/`<id>`/issues）：title trim 后 1 至 200，kind 缺\n省 bug，acceptance 验收条件（关单 result 引 digest 即完成判据）。\n\n# Errors\n\n失败返回 `String` 错误（本地校验、网络与解析类、服务端 error 透传）。"
-    },
-    {
       "path": "browse_cli::ledger::issue_open_dry_run",
       "kind": "function",
       "docs": "issue 开单的 dry-run（#57 G6 评审强制项，账本面保留）：本地同规校验加\n将发送 body 与签名基形预览（ts/nonce/idem 占位），零网络零签名——账本\n只增不可撤且 per-key 日配额，误发测试单不可回收，契约实弹先走这里。\n\n# Errors\n\n本地校验失败（title 空或超 200、kind 出集）；不含任何网络类错误。"
-    },
-    {
-      "path": "browse_cli::ledger::issue_show",
-      "kind": "function",
-      "docs": "issue 详情（GET /repos/`<id>`/issues/`<n>`）：projection 加 timeline。\n\n# Errors\n\n失败返回 `String` 错误（网络与解析类、服务端 error 透传）。"
-    },
-    {
-      "path": "browse_cli::ledger::issues_list",
-      "kind": "function",
-      "docs": "issue 列表（GET，家族形）：limit 缺省 100（钳制 1 至 100），before\nkeyset 游标，`more=1` 使 has_more 恒在（与 before 无关，服务端契约）。\n\n# Errors\n\n失败返回 `String` 错误（网络与解析类、服务端 error 透传）。"
     },
     {
       "path": "browse_cli::ledger::key_id",
@@ -190,17 +135,12 @@
     {
       "path": "browse_cli::ledger::keygen_write",
       "kind": "function",
-      "docs": "密钥对生成（一次性或轮换）：写私钥密档（0600，目录 `~/.browse-rs/ledger/`）\n并返回 (kid, JWK, 旧 kid)；私钥不打印不进 argv，公钥 JWK 供总台在册\n（在册后方可写入）。在位密档非 `--force` 即拒（防静默销毁）。\n# Errors\n\n失败返回 `String` 错误（路径与写入类）。"
+      "docs": "密钥对生成（一次性或轮换）：写私钥密档（0600）并返回 (kid, JWK, 旧\nkid)；私钥不打印不进 argv，公钥 JWK 供总台在册（在册后方可写入）。\n在位密档非 `--force` 即拒（防静默销毁）。\n\n# Errors\n\n失败返回 `String` 错误（路径与写入类）。"
     },
     {
-      "path": "browse_cli::ledger::ledger_base",
+      "path": "browse_cli::ledger::load_keypair",
       "kind": "function",
-      "docs": "账本基址（env `BROWSE_LEDGER_URL` 覆盖，测与灰度）。"
-    },
-    {
-      "path": "browse_cli::ledger::load_signing_key",
-      "kind": "function",
-      "docs": "载入签名私钥：env `BROWSE_LEDGER_PRIVATE_KEY`（base64url seed）优先，\n次本地密档。不进 argv 不进仓。\n\n# Errors\n\nenv 值或密档内容非 base64url 32 字节 seed，或密档不可读。"
+      "docs": "载入账本身份：env `BROWSE_LEDGER_PRIVATE_KEY`（base64url seed）优先，\n次本地密档；构造标准 crate 的 [`ledger_client::KeyPair`]（kid 与 JWK 由\n其按舰队约定派生）。不进 argv 不进仓。\n\n# Errors\n\nenv 值或密档内容非 base64url 32 字节 seed，或密档不可读。"
     },
     {
       "path": "browse_cli::ledger::pairing_ok",
@@ -211,11 +151,6 @@
       "path": "browse_cli::ledger::private_key_path",
       "kind": "function",
       "docs": "私钥密档路径（`~/.browse-rs/ledger/ed25519.key`，内容 = base64url 32 字节\nseed；0600 由 keygen 落）。\n\n# Errors\n\n密档根解析失败。"
-    },
-    {
-      "path": "browse_cli::ledger::signature_base",
-      "kind": "function",
-      "docs": "签名基构造（服务端 signatureBase 同源）：`v1\\nPOST\\n<路径>\\n<ts>\\n\n<nonce>\\n<idem>\\n<sha256hex(body)>` 各行换行连。纯函数可单测。"
     },
     {
       "path": "browse_cli::ledger::validate_artifact_id",

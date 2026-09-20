@@ -27,13 +27,11 @@
 | `browse chrome remove <版本>` | 删已装版本（目录加登记一起清；pin 指向的拒删，先 use 切走）。 |
 | `browse chrome doctor` | 托管 Chromium 部署体检（在位/文件基线/pin；AppContainer ACE 仅 Windows 有值，缺则 hints 给 icacls 修法，#32）。 |
 | `browse fetch <url> [--markdown|-m] [--timeout <s>]` | 一次性只读抓取（#50）：HTTP 直取零浏览器成本；三条件升级引擎（正文空、墙词、少于 20 词）走 goto 加页内抽取（懒拉起）；回 {via, title, text, upgradedFrom}。对照 waitForResponse：这是无会话一次性抓取。 |
-| `browse issue new <标题> --acceptance <验收> [--kind bug|improvement] [--body <正文>] [--dry-run]` | 账本 issue 流开单（REQ-063，真源 ledger.ohmygh.com）：acceptance 必填（关单 result 的完成判据锚）；POST 五头签名道，回执 {ok,issue,event}（列表行的 issue_n 见 issue list）；--dry-run 本地校验加载荷预览零网络（账本只增不可撤，契约实弹先走它）。 |
+| `browse issue new <标题> --acceptance <验收> [--kind bug|improvement] [--body <正文>] [--dry-run]` | 账本 issue 流开单（REQ-063，真源 ledger.ohmygh.com，签名道在标准 crate ledger-client）：acceptance 必填（完成判据锚）；回执 {ok,issue}；--dry-run 本地校验加载荷与签名基预览零网络（账本只增不可撤，契约实弹先走它）；关单走 omc 工位（browse 侧只增不关不删，总台修正令 2026-09-20）。 |
 | `browse issue list [--limit <n>] [--before <id>]` | 列 issue（账本面）：count 是返回条数非在册总数，has_more 权威，打满即 stderr 截断提示。 |
 | `browse issue show <id>` | 看单条 issue 详情（projection 加 timeline）。 |
-| `browse issue close <号> --digest <sha256:...>` | 账本关单链（REQ-063）：result 事件引 digest 先行，status=done 收尾，服务端校验。 |
-| `browse artifact publish --name <n> --kind <k> --digest <d> [--dep <d>]…` | 产物共享库发布（REQ-063）：kind 十五枚举必填（binary/experience/lesson/research/prototype/…），digest=正文或记录哈希（sha256:<64hex>），POST 签名道，回 {ok,artifact_id}。 |
-| `browse artifact attest <id> --type <t>` | 产物事件（REQ-063 六型）：attest_dev/attest_prod/verification_failed/promote/demote/supersede；id 须 36 字 UUID 形（browse artifact list 取真值）。 |
-| `browse artifact promote <id> [--note <n>]` | 提升产物为当前有效（promote 糖，等价 artifact attest <id> --type promote）。 |
+| `browse artifact publish --name <n> --kind <k> --digest <d> [--dep <d>]…` | 产物共享库发布（REQ-063，参数面随标准 crate ledger-client 收口）：kind 十五枚举必填（binary/experience/lesson/research/prototype/…），digest=正文或记录哈希（sha256:<64hex>），回 {ok,artifact_id}。 |
+| `browse artifact attest <id> --type <t>` | 产物验证事件（三型：attest_dev/attest_prod/verification_failed；promote/demote/supersede 归 omc 工位，总台修正令 2026-09-20 收口）；id 须 36 字 UUID 形（browse artifact list 取真值）。 |
 | `browse artifact list [--current] [--env dev|prod]` | 产物列表（GET 免签）：current=1 投影当前有效集，env 过滤。 |
 | `browse ledger keygen [--force]` | Ed25519 密钥对生成（REQ-063）：私钥落 ~/.browse-rs/ledger/ed25519.key（0600 不打印），公钥 JWK 与 kid 打印供总台在册。 |
 | `browse snippets list [site]` | 列片段库（#44，#45 组合生态）：状态目录 snippets/ 下递归走访（<site>/<task>.js 天然分层），每文件取首行 // 注释头当摘要。先查库再写新片段的纪律入口。 |
@@ -396,7 +394,7 @@ browse fetch https://example.com
 
 ## `browse issue new <标题> --acceptance <验收> [--kind bug|improvement] [--body <正文>] [--dry-run]`
 
-账本 issue 流开单（REQ-063，真源 ledger.ohmygh.com）：acceptance 必填（关单 result 的完成判据锚）；POST 五头签名道，回执 {ok,issue,event}（列表行的 issue_n 见 issue list）；--dry-run 本地校验加载荷预览零网络（账本只增不可撤，契约实弹先走它）。
+账本 issue 流开单（REQ-063，真源 ledger.ohmygh.com，签名道在标准 crate ledger-client）：acceptance 必填（完成判据锚）；回执 {ok,issue}；--dry-run 本地校验加载荷与签名基预览零网络（账本只增不可撤，契约实弹先走它）；关单走 omc 工位（browse 侧只增不关不删，总台修正令 2026-09-20）。
 
 参数：
 - `title`（string），必填
@@ -432,22 +430,9 @@ browse issue list --limit 10
 browse issue show 3
 ```
 
-## `browse issue close <号> --digest <sha256:...>`
-
-账本关单链（REQ-063）：result 事件引 digest 先行，status=done 收尾，服务端校验。
-
-参数：
-- `n`（number），必填
-- `digest`（string），必填
-- `note`（string）
-
-```js
-browse issue close 3 --digest sha256:b8277c4fb02b21909d42027ecdce73d1d3bbed001298ca1a2eccafbd892f1444 --note "随 0.8.0"
-```
-
 ## `browse artifact publish --name <n> --kind <k> --digest <d> [--dep <d>]…`
 
-产物共享库发布（REQ-063）：kind 十五枚举必填（binary/experience/lesson/research/prototype/…），digest=正文或记录哈希（sha256:<64hex>），POST 签名道，回 {ok,artifact_id}。
+产物共享库发布（REQ-063，参数面随标准 crate ledger-client 收口）：kind 十五枚举必填（binary/experience/lesson/research/prototype/…），digest=正文或记录哈希（sha256:<64hex>），回 {ok,artifact_id}。
 
 参数：
 - `name`（string），必填
@@ -455,10 +440,8 @@ browse issue close 3 --digest sha256:b8277c4fb02b21909d42027ecdce73d1d3bbed00129
 - `digest`（string），必填
 - `version`（string）
 - `git-range`（string）
-- `summary`（string）
+- `note`（string）
 - `dep`（string，缺省 可重复：依赖出处，回溯链即证据链）
-- `outcome`（string，缺省 experience 类 success|failure）
-- `git-sha`（string，缺省 关联 git sha）
 
 ```js
 browse artifact publish --name browse-0.8 --kind prototype --digest sha256:... --version 0.8.0 --dep github.com/raystyle/hst_rs
@@ -466,7 +449,7 @@ browse artifact publish --name browse-0.8 --kind prototype --digest sha256:... -
 
 ## `browse artifact attest <id> --type <t>`
 
-产物事件（REQ-063 六型）：attest_dev/attest_prod/verification_failed/promote/demote/supersede；id 须 36 字 UUID 形（browse artifact list 取真值）。
+产物验证事件（三型：attest_dev/attest_prod/verification_failed；promote/demote/supersede 归 omc 工位，总台修正令 2026-09-20 收口）；id 须 36 字 UUID 形（browse artifact list 取真值）。
 
 参数：
 - `id`（string），必填
@@ -475,18 +458,6 @@ browse artifact publish --name browse-0.8 --kind prototype --digest sha256:... -
 
 ```js
 browse artifact attest 66857bb2-d1ae-4977-97df-8ab41cc37399 --type attest_prod
-```
-
-## `browse artifact promote <id> [--note <n>]`
-
-提升产物为当前有效（promote 糖，等价 artifact attest <id> --type promote）。
-
-参数：
-- `id`（string），必填
-- `note`（string）
-
-```js
-browse artifact promote 66857bb2-d1ae-4977-97df-8ab41cc37399
 ```
 
 ## `browse artifact list [--current] [--env dev|prod]`

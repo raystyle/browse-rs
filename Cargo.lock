@@ -128,6 +128,7 @@ dependencies = [
  "browse-core",
  "cdp",
  "ed25519-dalek",
+ "ledger-client",
  "rand 0.8.8",
  "reqwest",
  "rustyline",
@@ -135,7 +136,6 @@ dependencies = [
  "serde_json",
  "sha2",
  "tokio",
- "ureq",
  "windows-sys 0.59.0",
 ]
 
@@ -851,6 +851,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "ledger-client"
+version = "0.1.1"
+source = "git+https://github.com/raystyle/ledger-rs?tag=v0.1.1#0c9fc085776c9507de7e4453f2493491b86166d1"
+dependencies = [
+ "base64",
+ "ed25519-dalek",
+ "rand 0.8.8",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.20",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.189"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1261,7 +1276,6 @@ version = "0.23.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6725596c3f2c3a0aef021139e145d4eafe314a6623e4680ca83852b2c67ab2ba"
 dependencies = [
- "log",
  "once_cell",
  "ring",
  "rustls-pki-types",
@@ -1782,22 +1796,6 @@ name = "untrusted"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
-
-[[package]]
-name = "ureq"
-version = "2.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02d1a66277ed75f640d608235660df48c8e3c19f3b4edb6a263315626cc3c01d"
-dependencies = [
- "base64",
- "flate2",
- "log",
- "once_cell",
- "rustls",
- "rustls-pki-types",
- "url",
- "webpki-roots 0.26.11",
-]
 
 [[package]]
 name = "url"

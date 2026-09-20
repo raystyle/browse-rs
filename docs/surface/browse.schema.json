@@ -179,7 +179,7 @@
       "type": "object"
     },
     "cli.artifact-attest": {
-      "description": "browse artifact attest <id> --type <t> 产物事件（REQ-063 六型）：attest_dev/attest_prod/verification_failed/promote/demote/supersede；id 须 36 字 UUID 形（browse artifact list 取真值）。",
+      "description": "browse artifact attest <id> --type <t> 产物验证事件（三型：attest_dev/attest_prod/verification_failed；promote/demote/supersede 归 omc 工位，总台修正令 2026-09-20 收口）；id 须 36 字 UUID 形（browse artifact list 取真值）。",
       "example": "browse artifact attest 66857bb2-d1ae-4977-97df-8ab41cc37399 --type attest_prod",
       "input": {
         "properties": {
@@ -224,30 +224,8 @@
       "output": "runtime JSON（回值随页面与 CDP 而定）",
       "type": "object"
     },
-    "cli.artifact-promote": {
-      "description": "browse artifact promote <id> [--note <n>] 提升产物为当前有效（promote 糖，等价 artifact attest <id> --type promote）。",
-      "example": "browse artifact promote 66857bb2-d1ae-4977-97df-8ab41cc37399",
-      "input": {
-        "properties": {
-          "id": {
-            "description": "",
-            "type": "string"
-          },
-          "note": {
-            "description": "",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id"
-        ],
-        "type": "object"
-      },
-      "output": "runtime JSON（回值随页面与 CDP 而定）",
-      "type": "object"
-    },
     "cli.artifact-publish": {
-      "description": "browse artifact publish --name <n> --kind <k> --digest <d> [--dep <d>]… 产物共享库发布（REQ-063）：kind 十五枚举必填（binary/experience/lesson/research/prototype/…），digest=正文或记录哈希（sha256:<64hex>），POST 签名道，回 {ok,artifact_id}。",
+      "description": "browse artifact publish --name <n> --kind <k> --digest <d> [--dep <d>]… 产物共享库发布（REQ-063，参数面随标准 crate ledger-client 收口）：kind 十五枚举必填（binary/experience/lesson/research/prototype/…），digest=正文或记录哈希（sha256:<64hex>），回 {ok,artifact_id}。",
       "example": "browse artifact publish --name browse-0.8 --kind prototype --digest sha256:... --version 0.8.0 --dep github.com/raystyle/hst_rs",
       "input": {
         "properties": {
@@ -263,10 +241,6 @@
             "description": "",
             "type": "string"
           },
-          "git-sha": {
-            "description": "缺省 关联 git sha",
-            "type": "string"
-          },
           "kind": {
             "description": "",
             "type": "string"
@@ -275,11 +249,7 @@
             "description": "",
             "type": "string"
           },
-          "outcome": {
-            "description": "缺省 experience 类 success|failure",
-            "type": "string"
-          },
-          "summary": {
+          "note": {
             "description": "",
             "type": "string"
           },
@@ -513,33 +483,6 @@
       "output": "runtime JSON（回值随页面与 CDP 而定）",
       "type": "object"
     },
-    "cli.issue-close": {
-      "description": "browse issue close <号> --digest <sha256:...> 账本关单链（REQ-063）：result 事件引 digest 先行，status=done 收尾，服务端校验。",
-      "example": "browse issue close 3 --digest sha256:b8277c4fb02b21909d42027ecdce73d1d3bbed001298ca1a2eccafbd892f1444 --note \"随 0.8.0\"",
-      "input": {
-        "properties": {
-          "digest": {
-            "description": "",
-            "type": "string"
-          },
-          "n": {
-            "description": "",
-            "type": "number"
-          },
-          "note": {
-            "description": "",
-            "type": "string"
-          }
-        },
-        "required": [
-          "n",
-          "digest"
-        ],
-        "type": "object"
-      },
-      "output": "runtime JSON（回值随页面与 CDP 而定）",
-      "type": "object"
-    },
     "cli.issue-list": {
       "description": "browse issue list [--limit <n>] [--before <id>] 列 issue（账本面）：count 是返回条数非在册总数，has_more 权威，打满即 stderr 截断提示。",
       "example": "browse issue list --limit 10",
@@ -561,7 +504,7 @@
       "type": "object"
     },
     "cli.issue-new": {
-      "description": "browse issue new <标题> --acceptance <验收> [--kind bug|improvement] [--body <正文>] [--dry-run] 账本 issue 流开单（REQ-063，真源 ledger.ohmygh.com）：acceptance 必填（关单 result 的完成判据锚）；POST 五头签名道，回执 {ok,issue,event}（列表行的 issue_n 见 issue list）；--dry-run 本地校验加载荷预览零网络（账本只增不可撤，契约实弹先走它）。",
+      "description": "browse issue new <标题> --acceptance <验收> [--kind bug|improvement] [--body <正文>] [--dry-run] 账本 issue 流开单（REQ-063，真源 ledger.ohmygh.com，签名道在标准 crate ledger-client）：acceptance 必填（完成判据锚）；回执 {ok,issue}；--dry-run 本地校验加载荷与签名基预览零网络（账本只增不可撤，契约实弹先走它）；关单走 omc 工位（browse 侧只增不关不删，总台修正令 2026-09-20）。",
       "example": "browse issue new \"修复 X\" --kind bug --acceptance \"测试过\" --dry-run",
       "input": {
         "properties": {

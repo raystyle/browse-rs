@@ -55,7 +55,7 @@ enum Mode {
         dry: bool,
     },
     /// `browse issue list [--limit <n>] [--before <id>]`：列 issue（账本面；count 是返回条数，has_more 权威）。
-    IssueList { limit: u32, before: Option<String> },
+    IssueList { limit: u32, before: Option<u64> },
     /// `browse issue show <id>`：看 issue 详情。
     IssueShow(String),
     /// `browse snippets list [site]`：列片段库（#44）。
@@ -64,32 +64,23 @@ enum Mode {
     SnippetsShow(String),
     /// `browse fetch <url> [--markdown] [--timeout <s>]`：一次性只读抓取（#50）。
     Fetch { url: String, timeout_s: u64 },
-    /// `browse issue close <号> --digest <sha256:...>`：账本关单链（result 引 digest 先行，status=done 收尾）。
-    IssueClose {
-        n: String,
-        digest: String,
-        note: Option<String>,
-    },
-    /// `browse artifact publish --name <n> --kind <k> --digest <d>`：产物共享库发布（REQ-063；--dep 可重复记依赖出处）。
+    /// `browse issue close` 面已移除（总台修正令 2026-09-20 收口：关闭与删除唯一道 = omc 工位经 herdr 委托）。
+    /// `browse artifact publish --name <n> --kind <k> --digest <d>`：产物共享库发布（REQ-063；--dep 可重复记依赖出处；参数面随标准 crate ledger-client 收窄）。
     ArtifactPublish {
         name: String,
         kind: String,
         digest: String,
         version: Option<String>,
         git_range: Option<String>,
-        summary: Option<String>,
+        note: Option<String>,
         deps: Vec<String>,
-        outcome: Option<String>,
-        git_sha: Option<String>,
     },
-    /// `browse artifact attest <id> --type <t>`：产物事件（attest_dev/prod/verification_failed/promote/demote/supersede）。
+    /// `browse artifact attest <id> --type <t>`：产物验证事件（attest_dev/attest_prod/verification_failed 三型；promote/demote/supersede 归 omc）。
     ArtifactAttest {
         id: String,
         ev_type: String,
         note: Option<String>,
     },
-    /// `browse artifact promote <id>`：提升产物为当前有效（promote 糖）。
-    ArtifactPromote { id: String, note: Option<String> },
     /// `browse artifact list [--current] [--env dev|prod]`：产物列表。
     ArtifactList {
         current: bool,
@@ -97,6 +88,21 @@ enum Mode {
     },
     /// `browse ledger keygen [--force]`：Ed25519 密钥对（REQ-063）。
     LedgerKeygen { force: bool },
+}
+
+/// 账本调用统一走阻塞线程（收口适配 2026-09-20）：ledger-client 是
+/// reqwest blocking 客户端，在 async 上下文里构造/销毁会 panic（嵌套
+/// runtime 的 drop 限制，实弹红）；spawn_blocking 让它整个生命周期留在
+/// 阻塞线程池。
+async fn ledger_call<T, F>(f: F) -> Result<T>
+where
+    T: Send + 'static,
+    F: FnOnce() -> std::result::Result<T, String> + Send + 'static,
+{
+    tokio::task::spawn_blocking(f)
+        .await
+        .map_err(|e| anyhow!("ledger 线程故障：{e}"))?
+        .map_err(|e| anyhow!("{e}"))
 }
 
 #[tokio::main]
@@ -220,18 +226,16 @@ async fn main() -> Result<()> {
             "artifact" if snippets.is_empty() && mode_is_eval(&mode) => {
                 match next("artifact")?.as_str() {
                     "publish" => {
-                        // kind 必填（REQ-063 十五枚举无缺省，与 hst 家族同
-                        // 规）；--dep 可重复（deps[] 一等公民，回溯链即证据
-                        // 链）；--outcome 配 experience、--git-sha 关联提交
+                        // kind 必填（REQ-063 十五枚举无缺省）；--dep 可重复
+                        //（deps[] 一等公民，回溯链即证据链）；参数面随标准
+                        // crate ledger-client 收口（总台修正令 2026-09-20）
                         let mut name = String::new();
                         let mut kind = String::new();
                         let mut digest = String::new();
                         let mut version = None;
                         let mut git_range = None;
-                        let mut summary = None;
+                        let mut note = None;
                         let mut deps: Vec<String> = Vec::new();
-                        let mut outcome = None;
-                        let mut git_sha = None;
                         loop {
                             match next("artifact publish 旗标") {
                                 Ok(f) if f == "--name" => name = next("--name")?,
@@ -241,10 +245,8 @@ async fn main() -> Result<()> {
                                 Ok(f) if f == "--git-range" => {
                                     git_range = Some(next("--git-range")?)
                                 }
-                                Ok(f) if f == "--summary" => summary = Some(next("--summary")?),
+                                Ok(f) if f == "--note" => note = Some(next("--note")?),
                                 Ok(f) if f == "--dep" => deps.push(next("--dep")?),
-                                Ok(f) if f == "--outcome" => outcome = Some(next("--outcome")?),
-                                Ok(f) if f == "--git-sha" => git_sha = Some(next("--git-sha")?),
                                 Ok(f) => bail_arg(&f),
                                 Err(_) => break,
                             }
@@ -261,10 +263,8 @@ async fn main() -> Result<()> {
                             digest,
                             version,
                             git_range,
-                            summary,
+                            note,
                             deps,
-                            outcome,
-                            git_sha,
                         };
                     }
                     "attest" => {
@@ -281,18 +281,6 @@ async fn main() -> Result<()> {
                         }
                         mode = Mode::ArtifactAttest { id, ev_type, note };
                     }
-                    "promote" => {
-                        let id = next("artifact promote <id>")?;
-                        let mut note = None;
-                        loop {
-                            match next("artifact promote 旗标") {
-                                Ok(f) if f == "--note" => note = Some(next("--note")?),
-                                Ok(f) => bail_arg(&f),
-                                Err(_) => break,
-                            }
-                        }
-                        mode = Mode::ArtifactPromote { id, note };
-                    }
                     "list" => {
                         let mut current = false;
                         let mut env_f = None;
@@ -308,7 +296,7 @@ async fn main() -> Result<()> {
                     }
                     other => {
                         eprintln!(
-                            "browse: artifact 子命令不认识 {other}（publish/attest/promote/list，退出 2）"
+                            "browse: artifact 子命令不认识 {other}（publish/attest/list；promote/demote 面已收口归 omc 工位，退出 2）"
                         );
                         std::process::exit(2);
                     }
@@ -390,7 +378,13 @@ async fn main() -> Result<()> {
                         // next 只在参数尽时报错，即旗标收尾
                         while let Ok(f) = next("issue list 旗标") {
                             match f.as_str() {
-                                "--before" => before = Some(next("--before")?),
+                                "--before" => {
+                                    let b = next("--before")?;
+                                    before = Some(b.parse().unwrap_or_else(|_| {
+                                        eprintln!("browse: --before 要数字 issue 号（退出 2）");
+                                        std::process::exit(2);
+                                    }))
+                                }
                                 "--limit" => {
                                     limit = next("--limit")?.parse().unwrap_or_else(|_| {
                                         eprintln!("browse: --limit 要数字（退出 2）");
@@ -403,23 +397,9 @@ async fn main() -> Result<()> {
                         mode = Mode::IssueList { limit, before };
                     }
                     "show" => mode = Mode::IssueShow(next("issue show <id>")?),
-                    "close" => {
-                        let n = next("issue close <号>")?;
-                        let mut digest = String::new();
-                        let mut note = None;
-                        loop {
-                            match next("issue close 旗标") {
-                                Ok(f) if f == "--digest" => digest = next("--digest")?,
-                                Ok(f) if f == "--note" => note = Some(next("--note")?),
-                                Ok(f) => bail_arg(&f),
-                                Err(_) => break,
-                            }
-                        }
-                        mode = Mode::IssueClose { n, digest, note };
-                    }
                     other => {
                         eprintln!(
-                            "browse: issue 子命令不认识 {other}（new/list/show/close，退出 2）"
+                            "browse: issue 子命令不认识 {other}（new/list/show；close 面已收口归 omc 工位，退出 2）"
                         );
                         std::process::exit(2);
                     }
@@ -650,7 +630,8 @@ async fn main() -> Result<()> {
             Ok(())
         }
         // issue 通道（REQ-063）：真源 ledger.ohmygh.com（旧 issues.ohmygh.com
-        // 过渡保役），POST 五头签名道，GET 免签
+        // 过渡保役），签名道与只增面在标准 crate ledger-client（总台修正令
+        // 2026-09-20 收口）；关闭/删除唯一道 = omc 工位经 herdr 委托
         Mode::IssueNew {
             title,
             body,
@@ -671,15 +652,26 @@ async fn main() -> Result<()> {
                 println!("{}", serde_json::to_string_pretty(&r)?);
                 return Ok(());
             }
-            let r = browse_cli::ledger::issue_open(&title, &kind, &acceptance, Some(&body))
-                .map_err(|e| anyhow!("{e}"))?;
-            println!("{}", serde_json::to_string_pretty(&r)?);
+            let n = ledger_call(move || {
+                browse_cli::ledger::client()?
+                    .issue_new(&title, &kind, &acceptance, Some(&body))
+                    .map_err(|e| e.to_string())
+            })
+            .await?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({ "ok": true, "issue": n }))?
+            );
             Ok(())
         }
         Mode::IssueList { limit, before } => {
             let eff = browse_cli::ledger::clamp_issue_limit(limit);
-            let r = browse_cli::ledger::issues_list(eff, before.as_deref())
-                .map_err(|e| anyhow!("{e}"))?;
+            let r = ledger_call(move || {
+                browse_cli::ledger::client()?
+                    .issue_list(eff, before)
+                    .map_err(|e| e.to_string())
+            })
+            .await?;
             let rows = r["issues"].as_array().cloned().unwrap_or_default();
             if r["has_more"]
                 .as_bool()
@@ -694,18 +686,13 @@ async fn main() -> Result<()> {
             let n: u64 = id
                 .parse()
                 .map_err(|_| anyhow!("issue 号须数字（得 {id}）"))?;
-            let r = browse_cli::ledger::issue_show(n).map_err(|e| anyhow!("{e}"))?;
+            let r = ledger_call(move || {
+                browse_cli::ledger::client()?
+                    .issue_show(n)
+                    .map_err(|e| e.to_string())
+            })
+            .await?;
             println!("{}", serde_json::to_string_pretty(&r)?);
-            Ok(())
-        }
-        Mode::IssueClose { n, digest, note } => {
-            let n: u64 = n.parse().map_err(|_| anyhow!("issue 号须数字（得 {n}）"))?;
-            let rs = browse_cli::ledger::issue_close(n, &digest, note.as_deref())
-                .map_err(|e| anyhow!("{e}"))?;
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&json!({ "ok": true, "events": rs }))?
-            );
             Ok(())
         }
         Mode::ArtifactPublish {
@@ -714,49 +701,57 @@ async fn main() -> Result<()> {
             digest,
             version,
             git_range,
-            summary,
+            note,
             deps,
-            outcome,
-            git_sha,
         } => {
-            let r = browse_cli::ledger::artifact_publish(
-                &name,
-                &kind,
-                &digest,
-                version.as_deref(),
-                git_range.as_deref(),
-                &deps,
-                summary.as_deref(),
-                outcome.as_deref(),
-                git_sha.as_deref(),
-            )
-            .map_err(|e| anyhow!("{e}"))?;
-            println!("{}", serde_json::to_string_pretty(&r)?);
+            browse_cli::ledger::validate_digest(&digest).map_err(|e| anyhow!("{e}"))?;
+            if !ledger_client::ARTIFACT_KINDS.contains(&kind.as_str()) {
+                bail!("kind 仅十五枚举（ledger-client 同源表），得 {kind}");
+            }
+            let id = ledger_call(move || {
+                browse_cli::ledger::client()?
+                    .artifact_publish(
+                        &name,
+                        &kind,
+                        &digest,
+                        version.as_deref(),
+                        git_range.as_deref(),
+                        &deps,
+                        note.as_deref(),
+                    )
+                    .map_err(|e| e.to_string())
+            })
+            .await?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({ "ok": true, "artifact_id": id }))?
+            );
             Ok(())
         }
         Mode::ArtifactAttest { id, ev_type, note } => {
-            let mut payload = json!({});
-            if let Some(n) = note.as_deref() {
-                payload["note"] = json!(n);
+            browse_cli::ledger::validate_artifact_id(&id).map_err(|e| anyhow!("{e}"))?;
+            if !ledger_client::ATTEST_TYPES.contains(&ev_type.as_str()) {
+                bail!(
+                    "type 仅 {}（promote/demote/supersede 归 omc 工位），得 {ev_type}",
+                    ledger_client::ATTEST_TYPES.join("|")
+                );
             }
-            let r = browse_cli::ledger::artifact_attest(&id, &ev_type, payload, None)
-                .map_err(|e| anyhow!("{e}"))?;
-            println!("{}", serde_json::to_string_pretty(&r)?);
-            Ok(())
-        }
-        Mode::ArtifactPromote { id, note } => {
-            let mut payload = json!({});
-            if let Some(n) = note.as_deref() {
-                payload["note"] = json!(n);
-            }
-            let r = browse_cli::ledger::artifact_attest(&id, "promote", payload, None)
-                .map_err(|e| anyhow!("{e}"))?;
+            let r = ledger_call(move || {
+                browse_cli::ledger::client()?
+                    .artifact_attest(&id, &ev_type, json!({}), note.as_deref())
+                    .map_err(|e| e.to_string())
+            })
+            .await?;
             println!("{}", serde_json::to_string_pretty(&r)?);
             Ok(())
         }
         Mode::ArtifactList { current, env_f } => {
-            let r = browse_cli::ledger::artifacts_list(current, env_f.as_deref())
-                .map_err(|e| anyhow!("{e}"))?;
+            let r = ledger_call(move || {
+                browse_cli::ledger::client()?
+                    .artifact_list(current, env_f.as_deref())
+                    .map_err(|e| e.to_string())
+            })
+            .await?;
             println!("{}", serde_json::to_string_pretty(&r)?);
             Ok(())
         }

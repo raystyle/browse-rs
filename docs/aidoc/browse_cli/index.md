@@ -12,6 +12,6 @@ CLI 进程本身无状态、即起即走。
 
 - [`client`](client.md): daemon 客户端：本地 HTTP 调用 + 首次使用自动拉起 detached daemon。
 - [`fetch`](fetch.md): 一次性只读抓取（#50）：HTTP 优先，三条件升级引擎，markdown 直出。
-- [`ledger`](ledger.md): 账本面（REQ-063 仓级公共账本客户端，Phase 3 CLI 原生集成）：
+- [`ledger`](ledger.md): 账本薄适配层（REQ-063；总台修正令 2026-09-20 收口）：签名道与只增面
 - [`render`](render.md): 求值结果的打印面：大值自动落盘（artifact/checkpoint 的降级形态，
 
