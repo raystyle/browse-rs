@@ -712,6 +712,14 @@ pub const COMMANDS: &[CmdSpec] = &[
         example: "await engineCancelWait(\"1:abc\")",
     },
     CmdSpec {
+        name: "screenshotDiff",
+        kind: CmdKind::Global,
+        signature: "screenshotDiff(opts?)",
+        args: &[arg!("threshold", "number", false)],
+        description: "引擎层截图差分（#27 批 4）：Browse.screenshotDiff 引擎内语义哈希 diff（像素级批 4b 候补），回 {changed, ratio} 只收结论零图传。与 screenshot({ifChanged}) 的边界：ifChanged 是字节相等（同引擎二进制确定性），screenshotDiff 是语义哈希比值。引擎须扩展域版，否则 -32601 报错指路字节口径替代。",
+        example: "return await screenshotDiff()",
+    },
+    CmdSpec {
         name: "cloneCookies",
         kind: CmdKind::Global,
         signature: "cloneCookies(domains)",

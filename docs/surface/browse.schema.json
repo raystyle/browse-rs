@@ -1955,6 +1955,22 @@
       "output": "runtime JSON（回值随页面与 CDP 而定）",
       "type": "object"
     },
+    "screenshotDiff": {
+      "description": "screenshotDiff(opts?) 引擎层截图差分（#27 批 4）：Browse.screenshotDiff 引擎内语义哈希 diff（像素级批 4b 候补），回 {changed, ratio} 只收结论零图传。与 screenshot({ifChanged}) 的边界：ifChanged 是字节相等（同引擎二进制确定性），screenshotDiff 是语义哈希比值。引擎须扩展域版，否则 -32601 报错指路字节口径替代。",
+      "example": "return await screenshotDiff()",
+      "input": {
+        "properties": {
+          "threshold": {
+            "description": "",
+            "type": "number"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
     "selectOption": {
       "description": "selectOption(ref, value) 下拉框选择（value 或可见 label；设值+派发 input/change；未命中报全部可选值）。",
       "example": "return await selectOption(\"e4\", \"Beta\")",

@@ -77,6 +77,7 @@
 | `unsubscribeChanges(subscriptionId)` | 取消变更订阅（#27 批 2）：Browse.unsubscribeChanges 静默取消；引擎侧已知响应偶失（功能生效，引擎日记在册），本调用可能无回执或报超时，按订阅已静默处理，勿依赖响应体重试。 |
 | `engineWaitForResponse(pattern)` | 引擎层响应等待（#27 批 3）：Browse.waitForResponse 引擎内 pattern 订阅，登记即回 {waitId} 不阻塞；命中推送 Browse.responseReady 事件。pattern 支持 url:/api/、status:200、method:POST、type:json 逗号 AND 组合；匹配语义是 URL 子串非 glob。与 JS 侧 waitForResponse 三点差分：登记即回不阻塞（JS 侧阻塞到命中）、URL 子串非 glob 通配、无内置超时（调用方在事件面自管 waitFor/peekEvents）。引擎须扩展域版（命令骨架已绿事件面在途），否则 -32601 报错指路 JS 侧替代。 |
 | `engineCancelWait(waitId)` | 取消引擎层响应等待（#27 批 3）：Browse.cancelWait 静默取消。 |
+| `screenshotDiff(opts?)` | 引擎层截图差分（#27 批 4）：Browse.screenshotDiff 引擎内语义哈希 diff（像素级批 4b 候补），回 {changed, ratio} 只收结论零图传。与 screenshot({ifChanged}) 的边界：ifChanged 是字节相等（同引擎二进制确定性），screenshotDiff 是语义哈希比值。引擎须扩展域版，否则 -32601 报错指路字节口径替代。 |
 | `cloneCookies(domains)` | 登录态按域热迁（#48）：从附着浏览器（probe_default 发现）只读取指定域 cookie 后缀匹配，Network.setCookies 灌入当前引擎；源零写回铁律；回 {cloned,matched,domains}。无附着源（probe_default 只探 9222 与默认 profile 的 DevToolsActivePort，其他端口的附着态取不到）报错指 exportStorageState 整包往返；域匹配不区分大小写、输入前导点剥掉；cloned 小于 matched 时回 failed 与 firstError。 |
 | `downloads(since?)` | 下载列表（#38）：Browser.downloadWillBegin 行情加同 guid 最新 downloadProgress（state/receivedBytes/totalBytes）；落盘目录是状态目录 downloads/，捕获随 tab 入口自动开（Browser 域事件不做活动 tab 过滤）。 |
 | `downloadPath(guid, timeoutS?)` | 等下载完成后回落盘路径（#38）：completed 给 named 路径（改名未落时给 guid 原始名候选），canceled 报错，超时带当前态 CTA；guid 来自 downloads()。 |
@@ -884,6 +885,17 @@ const w = await engineWaitForResponse("url:/api/")
 
 ```js
 await engineCancelWait("1:abc")
+```
+
+## `screenshotDiff(opts?)`
+
+引擎层截图差分（#27 批 4）：Browse.screenshotDiff 引擎内语义哈希 diff（像素级批 4b 候补），回 {changed, ratio} 只收结论零图传。与 screenshot({ifChanged}) 的边界：ifChanged 是字节相等（同引擎二进制确定性），screenshotDiff 是语义哈希比值。引擎须扩展域版，否则 -32601 报错指路字节口径替代。
+
+参数：
+- `threshold`（number）
+
+```js
+return await screenshotDiff()
 ```
 
 ## `cloneCookies(domains)`
