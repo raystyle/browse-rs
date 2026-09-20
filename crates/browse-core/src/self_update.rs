@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 pub const RELEASE_MIRROR: &str = "https://browse.ohmygh.com/browse";
 
 /// GitHub 仓（latest API 判新与回落下载）。
-pub const GITHUB_REPO: &str = "raystyle/browse-rs";
+pub const GITHUB_REPO: &str = "raystyle/browse_rs";
 
 /// 本平台资产三元组（与本仓发布流水一致：win 是 gnu 非 msvc）。
 /// aarch64/musl Linux 无发布资产，调用方以 [`asset_name`] 的错误 CTA 兜底。

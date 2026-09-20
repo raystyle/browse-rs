@@ -19,7 +19,7 @@ missing_panics_doc = "deny"
 version = "0.9.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/raystyle/browse-rs"
+repository = "https://github.com/raystyle/browse_rs"
 
 [workspace.dependencies]
 anyhow = "1"

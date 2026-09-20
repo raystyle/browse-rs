@@ -1,7 +1,7 @@
 # browse
 
-[![CI](https://github.com/raystyle/browse-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/raystyle/browse-rs/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/raystyle/browse-rs)](https://github.com/raystyle/browse-rs/releases)
+[![CI](https://github.com/raystyle/browse_rs/actions/workflows/ci.yml/badge.svg)](https://github.com/raystyle/browse_rs/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/raystyle/browse_rs)](https://github.com/raystyle/browse-rs/releases)
 [![License](https://img.shields.io/badge/license-MIT_OR_Apache--2.0-blue)](LICENSE-MIT)
 
 ## 项目介绍
@@ -31,7 +31,7 @@ clean-chrome（自编 Chromium），常驻 daemon 让会话、变量、活动 ta
 1. ark install（舰队安装管理；ark 管理位的升级走 ark 滚 catalog pin，
    `browse update` 识别 ark 布局会主动让位；catalog 入册随总台滚动，
    未入册前走下三通道）
-2. GitHub Releases 直下：<https://github.com/raystyle/browse-rs/releases>
+2. GitHub Releases 直下：<https://github.com/raystyle/browse_rs/releases>
    （每版六件：三平台包加同名 `.sha256` 边车，`sha256sum -c` 核验）
 3. 镜像直下：`https://browse.ohmygh.com/browse/<版本>/<资产>`（GitHub
    Releases 的播种副本），三平台包
