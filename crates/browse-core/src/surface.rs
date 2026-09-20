@@ -669,12 +669,22 @@ pub const COMMANDS: &[CmdSpec] = &[
     CmdSpec {
         name: "subscribeChanges",
         kind: CmdKind::Global,
-        signature: "subscribeChanges(opts?)",
+        signature: "subscribeChanges({selector, kinds?})",
         args: &[
-            arg!("selector", "string", false, "CSS 子树作用域"),
-            arg!("kinds", "string", false, "逗号串：childList,attributes,characterData"),
+            arg!(
+                "selector",
+                "string",
+                true,
+                "CSS 子树作用域（引擎冻结面必填）"
+            ),
+            arg!(
+                "kinds",
+                "string",
+                false,
+                "逗号串：childList,attributes,characterData"
+            ),
         ],
-        description: "引擎层变更订阅（#27 批 2）：Browse.subscribeChanges 订阅 DOM 子树变更（引擎内 MutationObserver 零页面痕迹），推送走 Browse.changesPushed 事件（peekEvents 可读）；回 {subscriptionId}；取消走 unsubscribeChanges(sub)。引擎须扩展域版（--enable-features=CleanChromeBrowseDomain），否则 -32601 报错指路。",
+        description: "引擎层变更订阅（#27 批 2）：Browse.subscribeChanges 订阅 DOM 子树变更（引擎内 MutationObserver 零页面痕迹）；selector 必填（缺则本函数当场报错带 CTA，不落引擎 -32602），kinds 缺省三类全收；回 {subscriptionId}；推送走 Browse.changesPushed 事件，事件形 {subscriptionId, changes: string[]}（每行一条紧凑变更描述，如 childList DIV#t +1 -0），在发起订阅的 page session 上投递：peekEvents 不过滤可全量读，waitFor 只认活动 tab（换 tab 后要读旧 session 的推送就用 peekEvents）。引擎须扩展域版（--enable-features=CleanChromeBrowseDomain），否则 -32601 报错指路；取消走 unsubscribeChanges(sub)。",
         example: "const s = await subscribeChanges({selector: \"#feed\"})",
     },
     CmdSpec {
@@ -682,7 +692,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "unsubscribeChanges(subscriptionId)",
         args: &[arg!("subscriptionId", "string", true)],
-        description: "取消变更订阅（#27 批 2）：Browse.unsubscribeChanges 静默取消。",
+        description: "取消变更订阅（#27 批 2）：Browse.unsubscribeChanges 静默取消；引擎侧已知响应偶失（功能生效，引擎日记在册），本调用可能无回执或报超时，按订阅已静默处理，勿依赖响应体重试。",
         example: "await unsubscribeChanges(\"1:abc\")",
     },
     CmdSpec {

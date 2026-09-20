@@ -2037,13 +2037,22 @@ impl JsHost {
                 }
             }
             // ---- 引擎层变更订阅（#27 批 2）：Browse.subscribeChanges 薄封装 ----
-            // 订阅：changesPushed 事件进 daemon 缓冲，peekEvents 可读
+            // 订阅：changesPushed 事件进 daemon 缓冲，peekEvents 可读。
+            // selector 是引擎冻结面的必填参（PDL `string selector`；handler
+            // 空值即 -32602 "selector required"），browse 侧先校验给 CTA，
+            // 不让原始 CDP 错误面世
             "subscribeChanges" => {
                 let opts = argv.first().cloned().unwrap_or(json!({}));
-                let mut params = json!({});
-                if let Some(sel) = opts.get("selector").and_then(Value::as_str) {
-                    params["selector"] = json!(sel);
-                }
+                let sel = opts
+                    .get("selector")
+                    .and_then(Value::as_str)
+                    .filter(|s| !s.is_empty())
+                    .ok_or_else(|| {
+                        anyhow!(
+                            "subscribeChanges 缺 selector（引擎必填：CSS 子树作用域）；下一步：subscribeChanges({{selector: \"#feed\"}})，可选 kinds 逗号串（childList,attributes,characterData）"
+                        )
+                    })?;
+                let mut params = json!({ "selector": sel });
                 if let Some(k) = opts.get("kinds").and_then(Value::as_str) {
                     params["kinds"] = json!(k);
                 }
