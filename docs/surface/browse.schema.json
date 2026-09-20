@@ -2308,6 +2308,26 @@
       "output": "runtime JSON（回值随页面与 CDP 而定）",
       "type": "object"
     },
+    "subscribeChanges": {
+      "description": "subscribeChanges(opts?) 引擎层变更订阅（#27 批 2）：Browse.subscribeChanges 订阅 DOM 子树变更（引擎内 MutationObserver 零页面痕迹），推送走 Browse.changesPushed 事件（peekEvents 可读）；回 {subscriptionId}；取消走 unsubscribeChanges(sub)。引擎须扩展域版（--enable-features=CleanChromeBrowseDomain），否则 -32601 报错指路。",
+      "example": "const s = await subscribeChanges({selector: \"#feed\"})",
+      "input": {
+        "properties": {
+          "kinds": {
+            "description": "缺省 逗号串：childList,attributes,characterData",
+            "type": "string"
+          },
+          "selector": {
+            "description": "缺省 CSS 子树作用域",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
     "switchTab": {
       "description": "switchTab(targetId) 切活动路由（不改 Chrome 可见前景，人机共存）。",
       "example": "await switchTab(tabs[0].targetId)",
@@ -2361,6 +2381,24 @@
         },
         "required": [
           "ref"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "unsubscribeChanges": {
+      "description": "unsubscribeChanges(subscriptionId) 取消变更订阅（#27 批 2）：Browse.unsubscribeChanges 静默取消。",
+      "example": "await unsubscribeChanges(\"1:abc\")",
+      "input": {
+        "properties": {
+          "subscriptionId": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subscriptionId"
         ],
         "type": "object"
       },

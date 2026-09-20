@@ -2036,6 +2036,54 @@ impl JsHost {
                     }
                 }
             }
+            // ---- 引擎层变更订阅（#27 批 2）：Browse.subscribeChanges 薄封装 ----
+            // 订阅：changesPushed 事件进 daemon 缓冲，peekEvents 可读
+            "subscribeChanges" => {
+                let opts = argv.first().cloned().unwrap_or(json!({}));
+                let mut params = json!({});
+                if let Some(sel) = opts.get("selector").and_then(Value::as_str) {
+                    params["selector"] = json!(sel);
+                }
+                if let Some(k) = opts.get("kinds").and_then(Value::as_str) {
+                    params["kinds"] = json!(k);
+                }
+                match self.session.call("Browse.subscribeChanges", params).await {
+                    Ok(r) => Ok(r),
+                    Err(e) => {
+                        let msg = format!("{e:#}");
+                        if msg.contains("-32601") {
+                            bail!(
+                                "引擎不支持 Browse.subscribeChanges（需 clean-chrome 扩展域版，起引擎加 --enable-features=CleanChromeBrowseDomain；#27 批 2 引擎侧已落地）；下一步：browse up --chrome <扩展域版路径>，或用 session.waitJs 轮询替代"
+                            )
+                        } else {
+                            Err(e)
+                        }
+                    }
+                }
+            }
+            "unsubscribeChanges" => {
+                let sub = str_arg(argv, 0, "unsubscribeChanges 的 subscriptionId")?;
+                match self
+                    .session
+                    .call(
+                        "Browse.unsubscribeChanges",
+                        json!({ "subscriptionId": sub }),
+                    )
+                    .await
+                {
+                    Ok(r) => Ok(r),
+                    Err(e) => {
+                        let msg = format!("{e:#}");
+                        if msg.contains("-32601") {
+                            bail!(
+                                "引擎不支持 Browse.unsubscribeChanges（同 subscribeChanges 口径）；下一步：browse up --chrome <扩展域版路径>"
+                            )
+                        } else {
+                            Err(e)
+                        }
+                    }
+                }
+            }
             // 登录态按域克隆（#48）：从附着浏览器只读热迁到当前引擎
             "cloneCookies" => {
                 let domains: Vec<String> = argv
@@ -3646,7 +3694,7 @@ const PREVIEW_HEAD_ITEMS: usize = 8;
 /// 全局函数 CTA 清单（#33 G6 单一真相）：「未知函数」提示由此派生，
 /// `global_cta_covers_catalog` 测试把它与 surface 目录的 Global 条目绑死；
 /// 增删全局必须同步这里（value-methods 是方法面族条目，不在此列）。
-const GLOBALS_CTA: &str = "listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/hostFunctions()/snapshot(opts?)/findRefs(q,opts?)/console(opts?)/jsErrors(since?)/requests(opts?)/requestDetail(idxOrId,opts?)/detect()/cookies(domain?)/cookieGet(name)/cookieSet(name,value,opts?)/cookieDelete(name,domain?)/cookiesClear()/localGet(k)/localSet(k,v)/localDelete(k)/localClear()/sessionGet(k)/sessionSet(k,v)/sessionDelete(k)/sessionClear()/mouseMove(x,y)/mouseDown(button?)/mouseUp(button?)/mouseWheel(dx,dy)/hoverAt(x,y)/dropFiles(ref,paths)/highlight(ref,opts?)/highlightClear()/annotate(refs)/downloads(since?)/downloadPath(guid,s?)/emulateMedia(opts?)/emulateMediaClear()/screenshot(path?, full?)/pdf(path?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/goto(url,opts?)/goBack(delta?)/goForward(delta?)/reload(opts?)/clickAt(x,y,opts?)/fillInput(sel,text,submit?)/clickRef(ref,opts?)/checkRef(ref)/uncheckRef(ref)/fillRef(ref,text,submit?)/selectOption(ref,value)/pressKey(key)/dialogStatus()/dialogAccept(text?)/dialogDismiss()/routeBlock(pattern)/routeMock(pattern,body,opts?)/routeClear()/waitLoad(s?)/waitIdle(s?)/waitForResponse(pattern,s?)/responseBody(requestId)/pageEval(js)/hoverRef(ref)/hoverAt(x,y)/dblclickRef(ref)/dragRef(src,dst)/keydown(key)/keyup(key)/typeRef(ref,text)/emulate(opts)/setInitScript(code)/exportStorageState()/importStorageState(state)/JSON.parse(string)/JSON.stringify(value,indent?)/semanticSnapshot(opts?)/grantPermissions(perms,origin?)/cloneCookies(domains)/recordStart(opts?)/recordChapter(title)/recordStop()/chromeInstall(opts?)/chromeList()/chromeUse(version)/chromeUpdate()/chromeRemove(version)/chromeDoctor()/print(x)";
+const GLOBALS_CTA: &str = "listPageTargets()/resolveWsUrl()/detectBrowsers()/cdpMethods(domain?)/hostFunctions()/snapshot(opts?)/findRefs(q,opts?)/console(opts?)/jsErrors(since?)/requests(opts?)/requestDetail(idxOrId,opts?)/detect()/cookies(domain?)/cookieGet(name)/cookieSet(name,value,opts?)/cookieDelete(name,domain?)/cookiesClear()/localGet(k)/localSet(k,v)/localDelete(k)/localClear()/sessionGet(k)/sessionSet(k,v)/sessionDelete(k)/sessionClear()/mouseMove(x,y)/mouseDown(button?)/mouseUp(button?)/mouseWheel(dx,dy)/hoverAt(x,y)/dropFiles(ref,paths)/highlight(ref,opts?)/highlightClear()/annotate(refs)/downloads(since?)/downloadPath(guid,s?)/emulateMedia(opts?)/emulateMediaClear()/screenshot(path?, full?)/pdf(path?)/newTab(url?)/switchTab(id)/currentTab()/closeTab(id?)/goto(url,opts?)/goBack(delta?)/goForward(delta?)/reload(opts?)/clickAt(x,y,opts?)/fillInput(sel,text,submit?)/clickRef(ref,opts?)/checkRef(ref)/uncheckRef(ref)/fillRef(ref,text,submit?)/selectOption(ref,value)/pressKey(key)/dialogStatus()/dialogAccept(text?)/dialogDismiss()/routeBlock(pattern)/routeMock(pattern,body,opts?)/routeClear()/waitLoad(s?)/waitIdle(s?)/waitForResponse(pattern,s?)/responseBody(requestId)/pageEval(js)/hoverRef(ref)/hoverAt(x,y)/dblclickRef(ref)/dragRef(src,dst)/keydown(key)/keyup(key)/typeRef(ref,text)/emulate(opts)/setInitScript(code)/exportStorageState()/importStorageState(state)/JSON.parse(string)/JSON.stringify(value,indent?)/semanticSnapshot(opts?)/subscribeChanges(opts?)/unsubscribeChanges(sub)/grantPermissions(perms,origin?)/cloneCookies(domains)/recordStart(opts?)/recordChapter(title)/recordStop()/chromeInstall(opts?)/chromeList()/chromeUse(version)/chromeUpdate()/chromeRemove(version)/chromeDoctor()/print(x)";
 
 /// 容器预览：头部 JSON 截断（留尾注位），超帽尾注总项数；小容器输出
 /// 与全量形一致。不与 [`trunc_preview`] 叠用（双省略号）。

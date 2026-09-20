@@ -667,6 +667,25 @@ pub const COMMANDS: &[CmdSpec] = &[
         example: r#"return await semanticSnapshot({format: "markdown"})"#,
     },
     CmdSpec {
+        name: "subscribeChanges",
+        kind: CmdKind::Global,
+        signature: "subscribeChanges(opts?)",
+        args: &[
+            arg!("selector", "string", false, "CSS 子树作用域"),
+            arg!("kinds", "string", false, "逗号串：childList,attributes,characterData"),
+        ],
+        description: "引擎层变更订阅（#27 批 2）：Browse.subscribeChanges 订阅 DOM 子树变更（引擎内 MutationObserver 零页面痕迹），推送走 Browse.changesPushed 事件（peekEvents 可读）；回 {subscriptionId}；取消走 unsubscribeChanges(sub)。引擎须扩展域版（--enable-features=CleanChromeBrowseDomain），否则 -32601 报错指路。",
+        example: "const s = await subscribeChanges({selector: \"#feed\"})",
+    },
+    CmdSpec {
+        name: "unsubscribeChanges",
+        kind: CmdKind::Global,
+        signature: "unsubscribeChanges(subscriptionId)",
+        args: &[arg!("subscriptionId", "string", true)],
+        description: "取消变更订阅（#27 批 2）：Browse.unsubscribeChanges 静默取消。",
+        example: "await unsubscribeChanges(\"1:abc\")",
+    },
+    CmdSpec {
         name: "cloneCookies",
         kind: CmdKind::Global,
         signature: "cloneCookies(domains)",

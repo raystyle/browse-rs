@@ -73,6 +73,8 @@
 | `annotate(refs)` | 批量画框加编号徽标（#24 残余）：对一批 ref 各画框并以 ref 本身为徽标文本（与 snapshot 编号天然对齐）；任一项失败先清场再报错（不留半批框）；配合 screenshot() 取证后 highlightClear() 收场。 |
 | `grantPermissions(perms, origin?)` | 开关级权限自动授予（#28）：Browser.grantPermissions 浏览器级授予权限，弹窗不再出；非法枚举（如 clipboard-read）CDP 当场报错透传；回 {granted, origin}。permissions API 查询即 granted。 |
 | `semanticSnapshot(opts?)` | 引擎层语义快照（#27 批 1）：Browse.semanticSnapshot 直出紧凑语义树或 markdown（引擎内 AX 遍历，替代 JS 侧 379 节点路径）；引擎须 clean-chrome 扩展域版（--enable-features=CleanChromeBrowseDomain），否则报错带回退口径（snapshot({pierce:true})）。 |
+| `subscribeChanges(opts?)` | 引擎层变更订阅（#27 批 2）：Browse.subscribeChanges 订阅 DOM 子树变更（引擎内 MutationObserver 零页面痕迹），推送走 Browse.changesPushed 事件（peekEvents 可读）；回 {subscriptionId}；取消走 unsubscribeChanges(sub)。引擎须扩展域版（--enable-features=CleanChromeBrowseDomain），否则 -32601 报错指路。 |
+| `unsubscribeChanges(subscriptionId)` | 取消变更订阅（#27 批 2）：Browse.unsubscribeChanges 静默取消。 |
 | `cloneCookies(domains)` | 登录态按域热迁（#48）：从附着浏览器（probe_default 发现）只读取指定域 cookie 后缀匹配，Network.setCookies 灌入当前引擎；源零写回铁律；回 {cloned,matched,domains}。无附着源（probe_default 只探 9222 与默认 profile 的 DevToolsActivePort，其他端口的附着态取不到）报错指 exportStorageState 整包往返；域匹配不区分大小写、输入前导点剥掉；cloned 小于 matched 时回 failed 与 firstError。 |
 | `downloads(since?)` | 下载列表（#38）：Browser.downloadWillBegin 行情加同 guid 最新 downloadProgress（state/receivedBytes/totalBytes）；落盘目录是状态目录 downloads/，捕获随 tab 入口自动开（Browser 域事件不做活动 tab 过滤）。 |
 | `downloadPath(guid, timeoutS?)` | 等下载完成后回落盘路径（#38）：completed 给 named 路径（改名未落时给 guid 原始名候选），canceled 报错，超时带当前态 CTA；guid 来自 downloads()。 |
