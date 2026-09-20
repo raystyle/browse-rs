@@ -16,5 +16,5 @@ trace: 批 1 引擎侧 clean-chrome 2da7694..d1d2517（十跑构建加双态验�
 
 - [x] 批 1 semanticSnapshot 引擎侧落地（clean-chrome 2da7694..d1d2517 十跑构建双态验收绿）加 browse 侧薄封装（Browse.semanticSnapshot 直调，不支持时报错带回退口径）
 - [x] 批 2 subscribeChanges 引擎侧落地（clean-chrome 5ce0ed9 microtask 崩破六格验收绿）加 browse 侧薄封装（subscribeChanges/unsubscribeChanges 两宿主函数，-32601 回退 CTA）
-- [ ] 批 3 waitForResponse 引擎侧
+- [x] 批 3 waitForResponse 引擎侧骨架绿（clean-chrome 094555b 加 cb532b5 事件源墙实录，通路①裁定下窗主战）加 browse 侧命令面封装（engineWaitForResponse/engineCancelWait，事件面 schema 冻结先行）
 - [ ] 批 4 screenshotDiff 引擎侧

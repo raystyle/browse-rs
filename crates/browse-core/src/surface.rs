@@ -696,6 +696,25 @@ pub const COMMANDS: &[CmdSpec] = &[
         example: "await unsubscribeChanges(\"1:abc\")",
     },
     CmdSpec {
+        name: "engineWaitForResponse",
+        kind: CmdKind::Global,
+        signature: "engineWaitForResponse(pattern, opts?)",
+        args: &[
+            arg!("pattern", "string", true),
+            arg!("timeoutMs", "number", false),
+        ],
+        description: "引擎层响应等待（#27 批 3）：Browse.waitForResponse 引擎内 pattern 订阅（与 JS 侧 waitForResponse 的差分：引擎内匹配零事件缓冲轮询），回 {waitId}；命中推送 Browse.responseReady 事件。引擎须扩展域版（命令骨架已绿事件面在途），否则 -32601 报错指路 JS 侧替代。",
+        example: "const w = await engineWaitForResponse(\"/api/*\")",
+    },
+    CmdSpec {
+        name: "engineCancelWait",
+        kind: CmdKind::Global,
+        signature: "engineCancelWait(waitId)",
+        args: &[arg!("waitId", "string", true)],
+        description: "取消引擎层响应等待（#27 批 3）：Browse.cancelWait 静默取消。",
+        example: "await engineCancelWait(\"1:abc\")",
+    },
+    CmdSpec {
         name: "cloneCookies",
         kind: CmdKind::Global,
         signature: "cloneCookies(domains)",

@@ -1119,6 +1119,46 @@
       "output": "runtime JSON（回值随页面与 CDP 而定）",
       "type": "object"
     },
+    "engineCancelWait": {
+      "description": "engineCancelWait(waitId) 取消引擎层响应等待（#27 批 3）：Browse.cancelWait 静默取消。",
+      "example": "await engineCancelWait(\"1:abc\")",
+      "input": {
+        "properties": {
+          "waitId": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "waitId"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "engineWaitForResponse": {
+      "description": "engineWaitForResponse(pattern, opts?) 引擎层响应等待（#27 批 3）：Browse.waitForResponse 引擎内 pattern 订阅（与 JS 侧 waitForResponse 的差分：引擎内匹配零事件缓冲轮询），回 {waitId}；命中推送 Browse.responseReady 事件。引擎须扩展域版（命令骨架已绿事件面在途），否则 -32601 报错指路 JS 侧替代。",
+      "example": "const w = await engineWaitForResponse(\"/api/*\")",
+      "input": {
+        "properties": {
+          "pattern": {
+            "description": "",
+            "type": "string"
+          },
+          "timeoutMs": {
+            "description": "",
+            "type": "number"
+          }
+        },
+        "required": [
+          "pattern"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
     "exportStorageState": {
       "description": "exportStorageState() 导出会话态（#25.3）：cookies 全量加当前页 origin 的 localStorage；多 origin 逐个切 tab 再导。",
       "example": "return await exportStorageState()",
