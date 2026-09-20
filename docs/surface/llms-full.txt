@@ -893,6 +893,7 @@ await engineCancelWait("1:abc")
 
 参数：
 - `threshold`（number）
+- `selector`（string，缺省 CSS 子树作用域（同 semanticSnapshot））
 
 ```js
 return await screenshotDiff()

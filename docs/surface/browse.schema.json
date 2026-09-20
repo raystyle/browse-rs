@@ -1960,6 +1960,10 @@
       "example": "return await screenshotDiff()",
       "input": {
         "properties": {
+          "selector": {
+            "description": "缺省 CSS 子树作用域（同 semanticSnapshot）",
+            "type": "string"
+          },
           "threshold": {
             "description": "",
             "type": "number"
