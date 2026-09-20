@@ -1,9 +1,9 @@
 ---
 id: REQ-012
 title: 引擎层 Browse.* 扩展域批（issue #27，与 clean-chrome REQ-015 联动）
-status: in_progress
+status: draft
 priority: should
-trace: null
+trace: 批 1 引擎侧 clean-chrome 2da7694..d1d2517（十跑构建加双态验收六格）；browse 侧 semanticSnapshot 薄封装加 -32601 路径实弹（本机 r2 引擎无 Browse 域，报错文案按设计）
 ---
 
 # REQ-012：引擎层 Browse.* 扩展域批（issue #27）
