@@ -654,6 +654,19 @@ pub const COMMANDS: &[CmdSpec] = &[
         example: r#"await grantPermissions(["geolocation", "notifications"])"#,
     },
     CmdSpec {
+        name: "semanticSnapshot",
+        kind: CmdKind::Global,
+        signature: "semanticSnapshot(opts?)",
+        args: &[
+            arg!("format", "string", false, "tree（默认）/markdown"),
+            arg!("depth", "number", false),
+            arg!("selector", "string", false, "CSS 作用域"),
+            arg!("box", "boolean", false, "带坐标"),
+        ],
+        description: "引擎层语义快照（#27 批 1）：Browse.semanticSnapshot 直出紧凑语义树或 markdown（引擎内 AX 遍历，替代 JS 侧 379 节点路径）；引擎须 clean-chrome 扩展域版（--enable-features=CleanChromeBrowseDomain），否则报错带回退口径（snapshot({pierce:true})）。",
+        example: r#"return await semanticSnapshot({format: "markdown"})"#,
+    },
+    CmdSpec {
         name: "cloneCookies",
         kind: CmdKind::Global,
         signature: "cloneCookies(domains)",

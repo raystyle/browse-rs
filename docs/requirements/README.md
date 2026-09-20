@@ -15,6 +15,7 @@
 | REQ-009 | implemented | should | 抓取与录制批（issue #50/#43） | #50 分类器单测加实弹；#43 v1 实弹（转代码二期记档） |
 | REQ-010 | implemented | should | 实例编排批（issue #48/#28） | #48 实弹收口；#28 browse 侧实弹（引擎开关降可选） |
 | REQ-011 | implemented | should | 看板与应用生态批（issue #54/#55） | #54 实弹加 XSS/CSP 修复；#55 样例应用实弹三验 |
+| REQ-012 | draft | should | 引擎层扩展域批（issue #27，clean-chrome 联动） | 批 1 引擎加 browse 侧全落 |
 
 ## Roadmap（issue 台账批次规划）
 

@@ -1942,6 +1942,34 @@
       "output": "runtime JSON（回值随页面与 CDP 而定）",
       "type": "object"
     },
+    "semanticSnapshot": {
+      "description": "semanticSnapshot(opts?) 引擎层语义快照（#27 批 1）：Browse.semanticSnapshot 直出紧凑语义树或 markdown（引擎内 AX 遍历，替代 JS 侧 379 节点路径）；引擎须 clean-chrome 扩展域版（--enable-features=CleanChromeBrowseDomain），否则报错带回退口径（snapshot({pierce:true})）。",
+      "example": "return await semanticSnapshot({format: \"markdown\"})",
+      "input": {
+        "properties": {
+          "box": {
+            "description": "缺省 带坐标",
+            "type": "boolean"
+          },
+          "depth": {
+            "description": "",
+            "type": "number"
+          },
+          "format": {
+            "description": "缺省 tree（默认）/markdown",
+            "type": "string"
+          },
+          "selector": {
+            "description": "缺省 CSS 作用域",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
     "session.call": {
       "description": "session.call(method, params?) 裸调任意 CDP 方法（守卫与 sessionId 路由同 session.<Domain>.<method>）。",
       "example": "await session.call(\"Page.navigate\", {url: \"https://example.com\"})",
