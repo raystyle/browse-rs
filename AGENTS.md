@@ -1,4 +1,4 @@
-# browse-rs
+# browse_rs
 
 Rust workspace（crates/cdp、browse-core、browse-cli）。公开契约以 `///` 与类型签名为准；toolchain 见 rust-toolchain.toml（1.98.0）。仓库根的 `chromium-*/` 是 clean-chrome 部署产物，已 .gitignore，勿动。
 
