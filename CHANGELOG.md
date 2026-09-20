@@ -2,6 +2,14 @@
 
 版本级里程碑；逐批过程见 docs/diary。semver 判据在册 docs/requirements/REQ-004。
 
+## 0.8.0 - 2026-09-20
+
+- **账本迁移（REQ-063，总台令 2026-09-20）**：issue/artifact 客户端面整体切真源 ledger.ohmygh.com（契约全文 ohmycloud REQ-063，实装对读范本 hst_rs v2.6.0）；写入 Ed25519 五头签名道（签名基 v1 六行换行连，公钥 JWK 常量内置 kid=sha256hex(JWK) 按舰队派生约定），GET 免签；私钥 env `BROWSE_LEDGER_PRIVATE_KEY`/密档 `~/.browse-rs/ledger/ed25519.key` 双通道，零入仓零 argv零打印
+- issue 流四命令：new（--acceptance 必填 + --dry-run 载荷与签名基预览零网络，#57 G6 承继）/list（limit 100 钳制 + before 游标 + has_more 权威 + 截断提示）/show/close（result 引 digest 先行 + status=done 收尾，确定性幂等键首段成次段败重跑不重复追加）
+- artifact 流四命令：publish（kind 十五枚举必填 + --dep 依赖链可重复 + --outcome + --git-sha）/attest（六型 + artifact_id 36 字 UUID 形校验截断本地报）/promote（糖）/list（current/env 过滤）
+- 旧 REQ-057 issues.ohmygh.com 客户端通道摘除（零调用实证；服务只读保役）；AGENTS.md 与 docs/requirements/README.md 台账口径随迁
+- 工程面：TEST_ENV_LOCK 进程级锁 + 测试 env 自封闭（评审 F1，强制 env 16 线程 800 轮压测 0 失败）；评审五轮 F1-F6 全修 G1-G9 采纳 CONFIRM 在卷；实弹回执 issue new 201 + artifact publish/attest_dev/attest_prod 双绿（artifact 66857bb2-d1ae-4977-97df-8ab41cc37399，seq 20/21/24）；此前批次（#61 收官批 30、意图路由表、REQ-012 引擎面四批）随本版卷入
+
 ## 0.7.0 - 2026-09-18
 
 - `browse update` 自更新面（REQ-005，家族统一标准件，对齐 build-release 公共契约第六节双通道）：GitHub latest 判新（semver 只升不降，本地领先报 localNewer 不动）；下载镜像 stable 滚动段优先、GitHub 回落，资产与边车恒同源，`.sha256` 锚校验硬拒不回落；自替换同目录暂存（防跨文件系统 rename）加 pid 备份加更新锁（陈旧收割）加 `--version` 自证五次重试加回滚复核；管理方布局（ark 落痕或用户面链接入口）让位走 ark；`BROWSE_RELEASE_MIRROR` 覆写加 `GH_TOKEN` 提限流
