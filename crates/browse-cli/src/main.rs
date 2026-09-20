@@ -652,10 +652,22 @@ async fn main() -> Result<()> {
                 println!("{}", serde_json::to_string_pretty(&r)?);
                 return Ok(());
             }
+            // 实发腿同规预检（收口批评审 F1）：与 --dry-run 同一道本地校验，
+            // 坏入参 exit 2 不打网络（服务端 400 也损耗 per-key 日配额）
+            if let Err(e) = browse_cli::ledger::validate_issue_open(&title, &kind) {
+                eprintln!("browse: {e}（用法错，退出 2）");
+                std::process::exit(2);
+            }
             let n = ledger_call(move || {
-                browse_cli::ledger::client()?
+                let n = browse_cli::ledger::client()?
                     .issue_new(&title, &kind, &acceptance, Some(&body))
-                    .map_err(|e| e.to_string())
+                    .map_err(|e| e.to_string())?;
+                // crate 静默默认守卫（评审 G4）：回执缺 issue 字段时 as_u64
+                // 落 0（如幂等命中回执无该键），零即报错防假成功
+                if n == 0 {
+                    return Err("ledger 回执缺 issue 号（0），拒假成功".into());
+                }
+                Ok(n)
             })
             .await?;
             println!(
@@ -704,12 +716,23 @@ async fn main() -> Result<()> {
             note,
             deps,
         } => {
-            browse_cli::ledger::validate_digest(&digest).map_err(|e| anyhow!("{e}"))?;
+            // 值域/形错统一用法错 exit 2（评审 G5，与退出码契约「2=用法错」对齐）
+            if let Err(e) = browse_cli::ledger::validate_digest(&digest) {
+                eprintln!("browse: {e}（用法错，退出 2）");
+                std::process::exit(2);
+            }
             if !ledger_client::ARTIFACT_KINDS.contains(&kind.as_str()) {
-                bail!("kind 仅十五枚举（ledger-client 同源表），得 {kind}");
+                eprintln!(
+                    "browse: kind 仅十五枚举（ledger-client 同源表），得 {kind}（用法错，退出 2）"
+                );
+                std::process::exit(2);
+            }
+            if let Err(e) = browse_cli::ledger::validate_artifact_publish(&name) {
+                eprintln!("browse: {e}（用法错，退出 2）");
+                std::process::exit(2);
             }
             let id = ledger_call(move || {
-                browse_cli::ledger::client()?
+                let id = browse_cli::ledger::client()?
                     .artifact_publish(
                         &name,
                         &kind,
@@ -719,7 +742,12 @@ async fn main() -> Result<()> {
                         &deps,
                         note.as_deref(),
                     )
-                    .map_err(|e| e.to_string())
+                    .map_err(|e| e.to_string())?;
+                // crate 静默默认守卫（评审 G4）：回执缺 artifact_id 时落空串
+                if id.is_empty() {
+                    return Err("ledger 回执缺 artifact_id（空），拒假成功".into());
+                }
+                Ok(id)
             })
             .await?;
             println!(
@@ -729,12 +757,16 @@ async fn main() -> Result<()> {
             Ok(())
         }
         Mode::ArtifactAttest { id, ev_type, note } => {
-            browse_cli::ledger::validate_artifact_id(&id).map_err(|e| anyhow!("{e}"))?;
+            if let Err(e) = browse_cli::ledger::validate_artifact_id(&id) {
+                eprintln!("browse: {e}（用法错，退出 2）");
+                std::process::exit(2);
+            }
             if !ledger_client::ATTEST_TYPES.contains(&ev_type.as_str()) {
-                bail!(
-                    "type 仅 {}（promote/demote/supersede 归 omc 工位），得 {ev_type}",
+                eprintln!(
+                    "browse: type 仅 {}（promote/demote/supersede 归 omc 工位），得 {ev_type}（用法错，退出 2）",
                     ledger_client::ATTEST_TYPES.join("|")
                 );
+                std::process::exit(2);
             }
             let r = ledger_call(move || {
                 browse_cli::ledger::client()?
@@ -765,7 +797,10 @@ async fn main() -> Result<()> {
                     "keyId": kid,
                     "pubkeyJwk": jwk,
                     "replacedKid": old,
-                    "hint": "总台在册此 kid 后方可写入；私钥在 ~/.browse-rs/ledger/ed25519.key（0600），不打印不进 argv"
+                    // 内置 JWK 的 kid 自证面（评审 G6）：与 keyId 对账——轮换后
+                    // 须重烧常量再在册，两值不同即提示未烧
+                    "builtinKid": browse_cli::ledger::key_id(),
+                    "hint": "总台在册此 kid 后方可写入；私钥在 ~/.browse-rs/ledger/ed25519.key（0600），不打印不进 argv；keyId 与 builtinKid 不同 = 新钥未烧进常量"
                 }))?
             );
             Ok(())

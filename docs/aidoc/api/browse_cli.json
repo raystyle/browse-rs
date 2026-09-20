@@ -1,6 +1,6 @@
 {
   "crate": "browse-cli",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "items": [
     {
       "path": "browse_cli::client",
@@ -85,7 +85,7 @@
     {
       "path": "browse_cli::ledger",
       "kind": "module",
-      "docs": " 账本薄适配层（REQ-063；总台修正令 2026-09-20 收口）：签名道与只增面\n 全在 ledger-client crate（github.com/raystyle/ledger-rs v0.1.1，全舰队\n 唯一实现；v0.1.0 有 URL 拼接舰队级缺陷已避），本层只留本仓身份面\n（公钥 JWK 常量与 kid 派生）、密档管理\n （base64url seed，env `BROWSE_LEDGER_PRIVATE_KEY` 或本地密档双通道）、\n 命令面本地校验、`--dry-run` 载荷预览与 #52 家族截断提示。CLI 只增不关\n 不删：issue close 与 artifact promote/demote/supersede 面已移除，关闭\n 与删除唯一道 = 开发工作台经 herdr 委托 omc 工位执行（`omc ledger issue\n status <repo> <n> <to>` 与 `omc ledger issue delete`）。真源 =\n ledger.ohmygh.com（替代 issues.ohmygh.com 客户端面；旧服务只读保役）。"
+      "docs": "账本薄适配层（REQ-063；总台修正令 2026-09-20 收口）：签名道与只增面\n全在 ledger-client crate（github.com/raystyle/ledger-rs v0.1.1，全舰队\n唯一实现；v0.1.0 有 URL 拼接舰队级缺陷已避），本层只留本仓身份面\n（公钥 JWK 常量与 kid 派生）、密档管理\n（base64url seed，env `BROWSE_LEDGER_PRIVATE_KEY` 或本地密档双通道）、\n命令面本地校验、`--dry-run` 载荷预览与 #52 家族截断提示。CLI 只增不关\n不删：issue close 与 artifact promote/demote/supersede 面已移除，关闭\n与删除唯一道 = 开发工作台经 herdr 委托 omc 工位执行（`omc ledger issue\nstatus <repo> <n> <to>` 与 `omc ledger issue delete`）。真源 =\nledger.ohmygh.com（替代 issues.ohmygh.com 客户端面；旧服务只读保役）。"
     },
     {
       "path": "browse_cli::ledger::ISSUE_KINDS",
@@ -158,9 +158,19 @@
       "docs": "artifact_id 形校验（总台建议 2026-09-20）：36 字 UUID 形\n`8-4-4-4-12` 小写 hex 连四杠；截断或转写错本地即报，免上游 404 往返。\n\n# Errors\n\n非 36 字 UUID 形（段长、非法字符、分隔位）。"
     },
     {
+      "path": "browse_cli::ledger::validate_artifact_publish",
+      "kind": "function",
+      "docs": "artifact 发布入参本地预检（收口批评审 F1）：name trim 后 1 至 200，\n服务端同规；坏入参本地拦免配额损耗。\n\n# Errors\n\nname trim 后空或超 200 字符。"
+    },
+    {
       "path": "browse_cli::ledger::validate_digest",
       "kind": "function",
       "docs": "digest 校验（服务端 DIGEST_RE 同源）：`sha256:<64hex 小写>` 形合规即 Ok。\n\n# Errors\n\n缺前缀、段长错或大写。"
+    },
+    {
+      "path": "browse_cli::ledger::validate_issue_open",
+      "kind": "function",
+      "docs": "issue 开单入参本地预检（实发腿与 dry-run 同规，收口批评审 F1）：坏\n入参本地拦（exit 2 语义），免打到服务端吃 400 且损耗 per-key 日配额。\n\n# Errors\n\ntitle trim 后空或超 200 字符；kind 出 [`ISSUE_KINDS`] 集。"
     },
     {
       "path": "browse_cli::render",

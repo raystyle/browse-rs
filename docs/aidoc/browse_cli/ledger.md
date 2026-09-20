@@ -1,15 +1,15 @@
 # browse-cli::ledger
 
- 账本薄适配层（REQ-063；总台修正令 2026-09-20 收口）：签名道与只增面
- 全在 ledger-client crate（github.com/raystyle/ledger-rs v0.1.1，全舰队
- 唯一实现；v0.1.0 有 URL 拼接舰队级缺陷已避），本层只留本仓身份面
+账本薄适配层（REQ-063；总台修正令 2026-09-20 收口）：签名道与只增面
+全在 ledger-client crate（github.com/raystyle/ledger-rs v0.1.1，全舰队
+唯一实现；v0.1.0 有 URL 拼接舰队级缺陷已避），本层只留本仓身份面
 （公钥 JWK 常量与 kid 派生）、密档管理
- （base64url seed，env `BROWSE_LEDGER_PRIVATE_KEY` 或本地密档双通道）、
- 命令面本地校验、`--dry-run` 载荷预览与 #52 家族截断提示。CLI 只增不关
- 不删：issue close 与 artifact promote/demote/supersede 面已移除，关闭
- 与删除唯一道 = 开发工作台经 herdr 委托 omc 工位执行（`omc ledger issue
- status <repo> <n> <to>` 与 `omc ledger issue delete`）。真源 =
- ledger.ohmygh.com（替代 issues.ohmygh.com 客户端面；旧服务只读保役）。
+（base64url seed，env `BROWSE_LEDGER_PRIVATE_KEY` 或本地密档双通道）、
+命令面本地校验、`--dry-run` 载荷预览与 #52 家族截断提示。CLI 只增不关
+不删：issue close 与 artifact promote/demote/supersede 面已移除，关闭
+与删除唯一道 = 开发工作台经 herdr 委托 omc 工位执行（`omc ledger issue
+status <repo> <n> <to>` 与 `omc ledger issue delete`）。真源 =
+ledger.ohmygh.com（替代 issues.ohmygh.com 客户端面；旧服务只读保役）。
 
 ## Functions
 
@@ -24,7 +24,9 @@
 - `pairing_ok` — 本地私钥与内置公钥 JWK 的配对自检（评审 G3）：密档/env 缺位回 None
 - `private_key_path` — 私钥密档路径（`~/.browse-rs/ledger/ed25519.key`，内容 = base64url 32 字节
 - `validate_artifact_id` — artifact_id 形校验（总台建议 2026-09-20）：36 字 UUID 形
+- `validate_artifact_publish` — artifact 发布入参本地预检（收口批评审 F1）：name trim 后 1 至 200，
 - `validate_digest` — digest 校验（服务端 DIGEST_RE 同源）：`sha256:<64hex 小写>` 形合规即 Ok。
+- `validate_issue_open` — issue 开单入参本地预检（实发腿与 dry-run 同规，收口批评审 F1）：坏
 
 ## Constants
 

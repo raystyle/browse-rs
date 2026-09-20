@@ -2,6 +2,16 @@
 
 版本级里程碑；逐批过程见 docs/diary。semver 判据在册 docs/requirements/REQ-004。
 
+## 0.9.0 - 2026-09-20
+
+- **账本收口（总台修正令 2026-09-20）**：自研 ledger 客户端网络签名道移除，全权委托标准 crate ledger-client v0.1.1（github.com/raystyle/ledger-rs，全舰队唯一实现；v0.1.0 有 URL 拼接舰队级缺陷已避，总台追注）
+- **CLI 只增不关不删（删面清单）**：`issue close` 与 `artifact promote` 子命令面移除（exit 2 指路）；attest 收三型 attest_dev/attest_prod/verification_failed；publish 参数面随标准 crate 收窄（--summary/--outcome/--git-sha 撤，--note 进）。关闭与删除唯一道 = omc 工位经 herdr 委托
+- **semver 判据结论（0.9.0 裁定）**：删面按 REQ-004「契约破裂取 major」字面可解读为 1.0.0，但本仓 0.x 序列以 minor 位为 breaking 位（semver 0.x 惯例，历史 0.5 至 0.8 全 minor 滚动）；major 位解读为 1.0 稳定承诺后生效（用户裁定 2026-09-20）
+- 薄适配层只留：身份面（PUBKEY_JWK 与 kid 派生，keygen 回执带 builtinKid 自证对账）、密档管理（base64url seed，在册密钥与 kid 不受收口影响）、本地校验（值域/形错统一 exit 2）、issue new --dry-run、#52 家族截断提示
+- 工程：reqwest blocking 在 async main 的嵌套 runtime drop 雷以 ledger_call（spawn_blocking）适配（实弹红转绿）；crate 静默默认守卫（issue_new 回 0 / artifact_publish 回空串即拒假成功）；dry-run 签名基七行对账断言；REQ-013 立项回填 + diary 2026-09-20 补账
+- 实弹：v0.1.1 真账本 GET issue list（47 条）与 artifact list 全通；移除面三拒 exit 2；实发腿同规预检（title/kind/name 本地拦零网络，收口批评审 F1）；ledger 测试 8 绿
+- 旗总台上游缺口：ledger-client BASE_URL 不可覆写（灰度与本地捕获测试面需要，建议 v0.1.2 开 base 注入）；attest payload 形漂移（本仓 v0.8.0 旧事件 payload.note 与 crate 新形 payload.checks+body 并存，消费方按 payload.note 取证据会漏读新事件，建议统一或迁移注记）
+
 ## 0.8.0 - 2026-09-20
 
 - **账本迁移（REQ-063，总台令 2026-09-20）**：issue/artifact 客户端面整体切真源 ledger.ohmygh.com（契约全文 ohmycloud REQ-063，实装对读范本 hst_rs v2.6.0）；写入 Ed25519 五头签名道（签名基 v1 六行换行连，公钥 JWK 常量内置 kid=sha256hex(JWK) 按舰队派生约定），GET 免签；私钥 env `BROWSE_LEDGER_PRIVATE_KEY`/密档 `~/.browse-rs/ledger/ed25519.key` 双通道，零入仓零 argv零打印

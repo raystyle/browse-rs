@@ -1,7 +1,7 @@
 //! 账本薄适配层（REQ-063；总台修正令 2026-09-20 收口）：签名道与只增面
 //! 全在 ledger-client crate（github.com/raystyle/ledger-rs v0.1.1，全舰队
 //! 唯一实现；v0.1.0 有 URL 拼接舰队级缺陷已避），本层只留本仓身份面
-//!（公钥 JWK 常量与 kid 派生）、密档管理
+//! （公钥 JWK 常量与 kid 派生）、密档管理
 //! （base64url seed，env `BROWSE_LEDGER_PRIVATE_KEY` 或本地密档双通道）、
 //! 命令面本地校验、`--dry-run` 载荷预览与 #52 家族截断提示。CLI 只增不关
 //! 不删：issue close 与 artifact promote/demote/supersede 面已移除，关闭
@@ -242,6 +242,43 @@ pub fn issue_list_truncation_hint(eff: u32) -> String {
     )
 }
 
+/// issue 开单入参本地预检（实发腿与 dry-run 同规，收口批评审 F1）：坏
+/// 入参本地拦（exit 2 语义），免打到服务端吃 400 且损耗 per-key 日配额。
+///
+/// # Errors
+///
+/// title trim 后空或超 200 字符；kind 出 [`ISSUE_KINDS`] 集。
+pub fn validate_issue_open(title: &str, kind: &str) -> Result<(), String> {
+    let title = title.trim();
+    if title.is_empty() || title.chars().count() > 200 {
+        return Err(format!(
+            "title 必填且至多 200 字符（trim 后），得 {}",
+            title.chars().count()
+        ));
+    }
+    if !ISSUE_KINDS.contains(&kind) {
+        return Err(format!("kind 仅 bug|improvement，得 {kind}"));
+    }
+    Ok(())
+}
+
+/// artifact 发布入参本地预检（收口批评审 F1）：name trim 后 1 至 200，
+/// 服务端同规；坏入参本地拦免配额损耗。
+///
+/// # Errors
+///
+/// name trim 后空或超 200 字符。
+pub fn validate_artifact_publish(name: &str) -> Result<(), String> {
+    let name = name.trim();
+    if name.is_empty() || name.chars().count() > 200 {
+        return Err(format!(
+            "name 必填且至多 200 字符（trim 后），得 {}",
+            name.chars().count()
+        ));
+    }
+    Ok(())
+}
+
 /// issue 开单的 dry-run（#57 G6 评审强制项，账本面保留）：本地同规校验加
 /// 将发送 body 与签名基形预览（ts/nonce/idem 占位），零网络零签名——账本
 /// 只增不可撤且 per-key 日配额，误发测试单不可回收，契约实弹先走这里。
@@ -255,16 +292,8 @@ pub fn issue_open_dry_run(
     acceptance: &str,
     note: Option<&str>,
 ) -> Result<Value, String> {
+    validate_issue_open(title, kind)?;
     let title = title.trim();
-    if title.is_empty() || title.chars().count() > 200 {
-        return Err(format!(
-            "title 必填且至多 200 字符（trim 后），得 {}",
-            title.chars().count()
-        ));
-    }
-    if !ISSUE_KINDS.contains(&kind) {
-        return Err(format!("kind 仅 bug|improvement，得 {kind}"));
-    }
     let mut body = json!({ "title": title, "kind": kind, "acceptance": acceptance });
     if let Some(n) = note {
         body["body"] = json!(n);
@@ -361,6 +390,12 @@ mod tests {
                 .as_str()
                 .unwrap()
                 .starts_with("v1\nPOST\n/repos/")
+        );
+        // 签名基七行对账（评审 G8）：crate 未导出构造，本层内联形以行数锁
+        // 漂移（v1/POST/路径/ts/nonce/idem/body-hash 各占一行，六换行）
+        assert_eq!(
+            v["signatureBase"].as_str().unwrap().matches('\n').count(),
+            6
         );
         assert!(issue_open_dry_run("", "bug", "a", None).is_err());
         assert!(issue_open_dry_run("t", "chore", "a", None).is_err());
