@@ -40,12 +40,16 @@ browse down
 
 ## 5. 附着已在跑的浏览器
 
-用户双击 clean-chrome（无参数即开 9222，免确认对话框）后：
+两个实体的分界：**用户 chrome** 是你自己开的浏览器（本生态常见形是双击 clean-chrome，无参数即开 9222，免确认对话框），**集成 chrome** 是 browse spawn 管理的引擎实例（版本部署归 `browse chrome` 命令族，固定 engine-profile 持久登录态）。引擎策略附着优先：探到用户 chrome 的调试口就在它里面干活（当前引擎 = 它），探不到才 spawn 集成 chrome；`BROWSE_NO_ATTACH=1` 钉死 spawn 态。方言函数不区分两者，都落在「当前引擎」的活动 tab。
+
+用户 chrome 开着调试口后：
 
 ```bash
 browse 'await listPageTargets()'          # 探测附着，不新开浏览器
 browse 'await session.use((await listPageTargets())[0].targetId)'
 ```
+
+跨体借登录态：`browse 'cloneCookies(["github.com"])'` 从用户 chrome 只读热迁到集成引擎（源零写回；探测面只认 9222 与默认 profile 调试口，其他端口的源走 exportStorageState/importStorageState 往返）。
 
 铁律：附着来源绝不关浏览器、绝不关非自建 tab（守卫在 `Session::call` 层强制）。
 
