@@ -1,10 +1,11 @@
-# skills 层索引
+# skills 层（指路碑）
 
-机制说明层：一文件一机制（怎么避坑），按子层生长（首个子层 interaction/ 交互机制；后续如 network/、a11y/ 按需立层）。分工口径：可复用的站点任务片段归状态目录 `snippets/<site>/<task>.js`（browse snippets list/show，#44）；机制说明归本目录。
+机制与站点知识已迁独立仓 `github.com/raystyle/browse_workspace`（统一维护，2026-09-21 用户令）：
 
-## interaction/（交互机制）
+- 部署：`browse workspace install`（clone 到 `~/.browse-rs/workspace`，BROWSE_WORKSPACE 覆盖）；更新 `browse workspace update`；本地改完可 commit/push 回推
+- 触发：goto 回执自动点名（domain_skills / page_skills，hint 给读全文命令）
+- 读取：`browse workspace site <段>` / `browse workspace page <slug>` / `browse workspace list`
 
-- navigation-race.md：导航后取内容的竞速与等待判官选择
-- file-download.md：文件上传与下载触发的通道与信号
-- mouse-input.md：鼠标/输入原语的语义坑（滚轮首发、后台 tab、role 挑选）
-- frames-shadow.md：iframe 与 shadow DOM 穿透（pierce 快照、跨 frame 坐标、OOPIF 边界）
+原 interaction 层四篇的去向：navigation-race、file-download、mouse-input 三篇迁 intent-skills/；frames-shadow 的穿透知识分流进 page-skills/ 的 shadow-dom、iframe、iframe-cross-origin 三篇（#60 OOPIF 知识全量保留）。
+
+本目录不再生长新内容（历史 diary 引用仍指向旧路径，属过程留痕不改写）。

@@ -9,7 +9,6 @@
 | [adr/](adr/) | 为什么选这个 | 不可逆决策记录，frontmatter 状态机 |
 | [requirements/](requirements/) | 要做什么、验收什么 | REQ 登记，实现回填 trace |
 | [guides/](guides/) | 任务怎么做 | 操作指南，按需生长 |
-| [skills/](skills/) | 机制怎么避坑 | interaction 层一文件一机制（导航竞速、文件上下、鼠标输入），按需生长 |
 | [diary/](diary/) | 当天发生了什么 | 一天一篇，过程留痕 |
 | [research/](research/) | 证据在哪 | SNNN 研究档案；暂空合法 |
 

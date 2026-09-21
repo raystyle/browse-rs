@@ -380,6 +380,57 @@ pub const COMMANDS: &[CmdSpec] = &[
         example: "browse snippets show x.test/search-title.js",
     },
     CmdSpec {
+        name: "workspace-status",
+        kind: CmdKind::Cli,
+        signature: "browse workspace status [--json]",
+        args: &[arg!("json", "boolean", false, "false")],
+        description: "workspace 单仓概览（#50/#51 配套）：安装态、git remote/branch/head、未提交变更数、技能计数；仓根 BROWSE_WORKSPACE 覆盖，缺省 ~/.browse-rs/workspace。",
+        example: "browse workspace status",
+    },
+    CmdSpec {
+        name: "workspace-install",
+        kind: CmdKind::Cli,
+        signature: "browse workspace install",
+        args: &[],
+        description: "git clone 种子仓（github.com/raystyle/browse_workspace）到仓根；三平台用户目录部署，跨实例共享不分 BROWSE_NAME。",
+        example: "browse workspace install",
+    },
+    CmdSpec {
+        name: "workspace-update",
+        kind: CmdKind::Cli,
+        signature: "browse workspace update",
+        args: &[],
+        description: "git pull --ff-only 更新 workspace 仓；本地未提交修改即拒（手工 commit/push 可回推同一远端）。",
+        example: "browse workspace update",
+    },
+    CmdSpec {
+        name: "workspace-list",
+        kind: CmdKind::Cli,
+        signature: "browse workspace list",
+        args: &[],
+        description: "列 workspace 在册资产：domain-skills/ 各站点段（文件清单，封顶同回执口径）与 page-skills/ 各 slug。",
+        example: "browse workspace list",
+    },
+    CmdSpec {
+        name: "workspace-site",
+        kind: CmdKind::Cli,
+        signature: "browse workspace site <段>[/<文件>]",
+        args: &[
+            arg!("段", "string", true),
+            arg!("文件", "string", false, "缺省打该段清单"),
+        ],
+        description: "读域名站点知识（#50，goto 回执 domain_skills 的下钻面）：只给段打该段文件清单（文件名加首行标题），给 <段>/<文件> 读全文。",
+        example: "browse workspace site github",
+    },
+    CmdSpec {
+        name: "workspace-page",
+        kind: CmdKind::Cli,
+        signature: "browse workspace page <slug>",
+        args: &[arg!("slug", "string", true)],
+        description: "读页面特征机制配方全文（#51，goto 回执 page_skills 的下钻面）：page-skills/<slug>.md。",
+        example: "browse workspace page captcha",
+    },
+    CmdSpec {
         name: "serve",
         kind: CmdKind::Cli,
         signature: "browse --serve [--bind host:port]",
@@ -1538,7 +1589,7 @@ pub fn render_manual() -> String {
 
     // 意图路由表（#46）：想做什么用什么，一行一带；细节下钻 interaction 层
     out.push_str(
-        "\n意图路由（想做什么用什么；机制细节下钻 docs/skills/interaction/，HTTP 契约 docs/guides/http-api.md）：\n  去页面并等可用 goto(url,opts)；等加载 waitLoad(s)；等导航事件 waitFor(frameNavigated,s)\n  找元素 findRefs(q)；拿结构 snapshot({depth}) 或 {ref} 子树；点击/填 clickRef/fillRef（ref 来自最近快照或 findRefs）\n  取回值/正文 pageEval(js) 或 session.Runtime.evaluate；多 tab listPageTargets/switchTab/currentTab\n  hover 菜单 hoverRef；右键双击 clickRef(ref,{button,clickCount})；滚轮 mouseWheel；拖拽 mouseDown-Move-Up 手拼\n  传文件 dropFiles；下文件 裸 Page.navigate 加 downloads()/downloadPath()；等特定响应 waitForResponse(pattern,s)\n  页面打不开/登不上 detect() 七判；console 错误 console({minLevel});JS 异常 jsErrors();请求对账 requests()/requestDetail()\n  仿真 emulate({viewport,UA}) / emulateMedia({colorScheme});授予权限 grantPermissions(perms);登录态热迁 cloneCookies(domains)\n  iframe/shadow 内容 snapshot({pierce:true});录制可读性 recordStart({cursor,showActions}) 加 recordChapter(title)\n  引擎层直出（需扩展域版引擎）：语义快照 semanticSnapshot / 变更推送 subscribeChanges / 响应等待 engineWaitForResponse / 截图差分 screenshotDiff\n  复用片段 browse snippets list/show；门外语言 POST /eval（HTTP 契约）；看板 GET /（只读）\n",
+        "\n意图路由（想做什么用什么；机制细节下钻 browse workspace（仓在 ~/.browse-rs/workspace），HTTP 契约 docs/guides/http-api.md）：\n  去页面并等可用 goto(url,opts)；等加载 waitLoad(s)；等导航事件 waitFor(frameNavigated,s)\n  找元素 findRefs(q)；拿结构 snapshot({depth}) 或 {ref} 子树；点击/填 clickRef/fillRef（ref 来自最近快照或 findRefs）\n  取回值/正文 pageEval(js) 或 session.Runtime.evaluate；多 tab listPageTargets/switchTab/currentTab\n  hover 菜单 hoverRef；右键双击 clickRef(ref,{button,clickCount})；滚轮 mouseWheel；拖拽 mouseDown-Move-Up 手拼\n  传文件 dropFiles；下文件 裸 Page.navigate 加 downloads()/downloadPath()；等特定响应 waitForResponse(pattern,s)\n  页面打不开/登不上 detect() 七判；console 错误 console({minLevel});JS 异常 jsErrors();请求对账 requests()/requestDetail()\n  仿真 emulate({viewport,UA}) / emulateMedia({colorScheme});授予权限 grantPermissions(perms);登录态热迁 cloneCookies(domains)\n  iframe/shadow 内容 snapshot({pierce:true});录制可读性 recordStart({cursor,showActions}) 加 recordChapter(title)\n  引擎层直出（需扩展域版引擎）：语义快照 semanticSnapshot / 变更推送 subscribeChanges / 响应等待 engineWaitForResponse / 截图差分 screenshotDiff\n  复用片段 browse snippets list/show；站点/机制知识 browse workspace list/site/page（goto 回执自动点名）；门外语言 POST /eval；看板 GET /（只读）\n",
     );
     out.push_str(
         "定位：给 agent（也给人）的浏览器驾驶 CLI；JS 方言片段驱动 clean-chrome，\
@@ -1703,7 +1754,7 @@ pub fn render_help() -> String {
         "\n片段方言：\n  await session.connect({port:9222})\n  const tabs = await listPageTargets()\n  await session.use(tabs[0].targetId)\n  await session.Page.navigate({url:\"https://example.com\"})\n  await session.waitFor(\"Page.frameNavigated\", undefined, 15)  // 秒；loadEventFired 有竞速窗，等加载用 goto()/waitLoad()\n  支持：字面量/对象/数组/成员/下标/await/const-let-var/return。\n  模板字符串（反引号）raw 语义：内容逐字保留（只有 \\\\` 与 \\\\${ 是转义，模板内 \\\\${ 降格为 ${），可多行，页面代码原样内嵌 expression。\n  普通字符串只转义 \\\\n/\\\\t/\\\\\\\\/引号，其余保留反斜杠（与 JS 不同）。\n  不支持：函数字面量、if/for；页面逻辑放 Runtime.evaluate 的 expression。\n  片段库（#44）：可复用片段存状态目录 snippets/（<site>/<task>.js 分层，首行 // 用途： 注释头），browse snippets list/show 查读，先查库再写新的；执行走 --js 管道或 POST /eval。\n",
     );
     out.push_str(
-        "\nEnvironment Variables:\n  BROWSE_PORT          daemon 端口（default: 9880）\n  BROWSE_NAME          命名实例：状态目录加派生端口 9900-9999 隔离，多实例并行\n  BROWSE_CHROME        chrome 路径（default: 走发现序：显式、托管 pin、祖先部署、常规路径）\n  BROWSE_PROFILE       spawn 引擎 user-data-dir（default: 固定 engine-profile，down 不删）\n  BROWSE_CDP_WS        钉死连接的 WS URL\n  BROWSE_NO_ATTACH=1   跳过附着探测，强制 spawn 隔离实例\n  BROWSE_EVAL_TIMEOUT  单次求值超时秒数（default: 300）\n  BROWSE_IDLE_TIMEOUT  引擎闲置回收毫秒，到期退引擎下次求值自动拉起（default: 3600000，0 关闭）\n  BROWSE_PROXY         引擎代理 --proxy-server（与 --proxy 旗标同值）\n  BROWSE_PROXY_BYPASS  代理旁路 --proxy-bypass-list\n  BROWSE_ENGINE_ARGS  引擎附加旗标（#48）：空格分隔 spawn 时 argv 直通（--engine-arg 同道）\n  BROWSE_SECRETS       dotenv 密钥文件（--secrets 同值；输出回显脱敏）\n",
+        "\nEnvironment Variables:\n  BROWSE_PORT          daemon 端口（default: 9880）\n  BROWSE_NAME          命名实例：状态目录加派生端口 9900-9999 隔离，多实例并行\n  BROWSE_CHROME        chrome 路径（default: 走发现序：显式、托管 pin、祖先部署、常规路径）\n  BROWSE_PROFILE       spawn 引擎 user-data-dir（default: 固定 engine-profile，down 不删）\n  BROWSE_CDP_WS        钉死连接的 WS URL\n  BROWSE_NO_ATTACH=1   跳过附着探测，强制 spawn 隔离实例\n  BROWSE_EVAL_TIMEOUT  单次求值超时秒数（default: 300）\n  BROWSE_IDLE_TIMEOUT  引擎闲置回收毫秒，到期退引擎下次求值自动拉起（default: 3600000，0 关闭）\n  BROWSE_PROXY         引擎代理 --proxy-server（与 --proxy 旗标同值）\n  BROWSE_PROXY_BYPASS  代理旁路 --proxy-bypass-list\n  BROWSE_ENGINE_ARGS  引擎附加旗标（#48）：空格分隔 spawn 时 argv 直通（--engine-arg 同道）\n  BROWSE_SECRETS       dotenv 密钥文件（--secrets 同值；输出回显脱敏）\n  BROWSE_WORKSPACE    技能仓根（default: ~/.browse-rs/workspace，跨实例共享不分 BROWSE_NAME）\n  BROWSE_DOMAIN_SKILLS=0  关 goto 回执域名技能点名（#50）\n  BROWSE_PAGE_SKILLS=0    关 goto 回执页面特征点名（#51）\n",
     );
     out.push_str("\n退出码：\n  0 成功 / 1 执行失败 / 2 用法错\n");
     out

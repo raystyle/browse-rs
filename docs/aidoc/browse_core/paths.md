@@ -16,6 +16,7 @@
 - `instance_name` — 返回实例名（`BROWSE_NAME` 的非空值）；未设即默认实例（`None`）。
 - `state_dir` — 返回本实例状态目录（`%USERPROFILE%\.browse-rs[\<name>]`）。
 - `state_dir_for` — 把实例名映射到状态目录的纯函数（同输入恒同输出，可单测）。
+- `workspace_dir` — 返回 workspace 仓根：`BROWSE_WORKSPACE` 显式优先，缺省
 
 ## Constants
 

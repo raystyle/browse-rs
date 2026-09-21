@@ -18,6 +18,10 @@
 //!   多实例的落点，ADR-0006）。
 //! - [`server`]：daemon 的 HTTP API（POST /eval、GET /health、POST /engine/up、
 //!   POST /quit），常驻会话与全局变量跨 CLI 调用保持。
+//! - [`surface`]：命令面目录（CLI/全局函数/session 方法三类的单一真相源，
+//!   docs/surface 投影由它派生）。
+//! - [`workspace`]：workspace 单仓管理（git clone/pull 与仓内文件读取，
+//!   #50/#51 配套）。
 //!
 //! # Examples
 //!
@@ -41,6 +45,7 @@ pub mod self_update;
 pub mod semantic;
 pub mod server;
 pub mod surface;
+pub mod workspace;
 
 pub use engine::{Engine, EngineSource, EngineSpec};
 pub use js_host::{JsHost, load_secrets, render_result};

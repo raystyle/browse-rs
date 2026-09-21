@@ -136,6 +136,10 @@ browse CLI 的核心库：方言宿主、引擎策略、daemon HTTP API。
   多实例的落点，ADR-0006）。
 - [`server`]：daemon 的 HTTP API（POST /eval、GET /health、POST /engine/up、
   POST /quit），常驻会话与全局变量跨 CLI 调用保持。
+- [`surface`]：命令面目录（CLI/全局函数/session 方法三类的单一真相源，
+  docs/surface 投影由它派生）。
+- [`workspace`]：workspace 单仓管理（git clone/pull 与仓内文件读取，
+  #50/#51 配套）。
 
 # Examples
 
@@ -161,6 +165,7 @@ assert_eq!(render(&stmts), "const tabs = await listPageTargets()");
 - [`semantic`](semantic.md): 语义层近期面：tab 族、交互三件、等待判官。
 - [`server`](server.md): daemon 的 HTTP API：常驻会话 + 方言求值 + 引擎生命周期。
 - [`surface`](surface.md): 命令面目录（incur-rs 原则的方言版适配）：CLI 子命令、方言全局函数、
+- [`workspace`](workspace.md): workspace 单仓管理（#50/#51 配套）：站点与机制知识仓
 
 
 <!-- browse_core/chrome_mgr.md -->
@@ -318,6 +323,7 @@ browser-harness-js 片段方言的语法分析器（纯函数）。
 - `instance_name` — 返回实例名（`BROWSE_NAME` 的非空值）；未设即默认实例（`None`）。
 - `state_dir` — 返回本实例状态目录（`%USERPROFILE%\.browse-rs[\<name>]`）。
 - `state_dir_for` — 把实例名映射到状态目录的纯函数（同输入恒同输出，可单测）。
+- `workspace_dir` — 返回 workspace 仓根：`BROWSE_WORKSPACE` 显式优先，缺省
 
 ## Constants
 
@@ -507,6 +513,32 @@ session 方法**只在这一处登记为数据**，JSON Schema 与 LLM 清单
 ## Constants
 
 - `COMMANDS` — 全量命令目录，CLI/方言/session 三面的单一真相源。
+
+
+<!-- browse_core/workspace.md -->
+# browse-core::workspace
+
+workspace 单仓管理（#50/#51 配套）：站点与机制知识仓
+`github.com/raystyle/browse_workspace` 的安装、更新与仓内读取。
+
+何时用：`browse workspace` 命令族的全部后端（status/install/update/
+list/site/page）。git 维护走 shell-out `git`（不引 git crate）：install
+是 clone、update 是 `pull --ff-only`，本地修改可手工 commit/push 回推
+同一远端。仓根定位见 [`crate::paths::workspace_dir`]。
+
+## Functions
+
+- `install` — `browse workspace install`：git clone 种子仓到 `root`。clone 不带
+- `list_json` — `browse workspace list` 的机器面：`{domains: [{segment, files}],
+- `read_page` — `browse workspace page <slug>`：读 `page-skills/<slug>.md` 全文。
+- `read_site` — `browse workspace site <段>[/<文件>]`：只给段时打该段清单（每行
+- `status_json` — `browse workspace status` 的机器面：`{installed, root, gitPresent,
+- `update` — `browse workspace update`：脏树先拒（本地修改未提交会挡 fast-forward），
+
+## Constants
+
+- `DOMAIN_FILES_CAP` — 域名层点名清单的封顶（#50 验收：回执文件列表封顶 10；list 同口径）。
+- `SEED_REMOTE` — 种子仓远端（install 的缺省源；本地修改 push 回推同一远端）。
 
 
 <!-- cdp/index.md -->

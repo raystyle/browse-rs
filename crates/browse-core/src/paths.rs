@@ -110,6 +110,32 @@ pub fn engine_profile_dir() -> PathBuf {
     state_dir().join("engine-profile")
 }
 
+/// 返回 workspace 仓根：`BROWSE_WORKSPACE` 显式优先，缺省
+/// `<home>/.browse-rs/workspace`（home 解析同 [`state_dir_for`]，三平台
+/// USERPROFILE/HOME 双道）。何时用：技能触发层（#50/#51）与
+/// `browse workspace` 命令族都从这定位站点知识仓。刻意**不分
+/// `BROWSE_NAME` 命名空间**：站点知识是跨实例共享资产，与 daemon
+/// 端口、引擎 profile 的按名隔离相反（ADR-0008）；边界注记：
+/// `BROWSE_NAME=workspace` 的实例状态目录与本目录同路径，状态文件名
+/// 不撞 domain-skills/page-skills，共存不冲突。
+///
+/// # Examples
+///
+/// ```
+/// if std::env::var_os("BROWSE_WORKSPACE").is_none() {
+///     assert!(browse_core::paths::workspace_dir().ends_with("workspace"));
+/// }
+/// ```
+pub fn workspace_dir() -> PathBuf {
+    if let Some(p) = std::env::var_os("BROWSE_WORKSPACE") {
+        let p = PathBuf::from(p);
+        if !p.as_os_str().is_empty() {
+            return p;
+        }
+    }
+    state_dir_for(&None).join("workspace")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

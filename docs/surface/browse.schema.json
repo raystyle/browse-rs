@@ -787,6 +787,95 @@
       "output": "runtime JSON（回值随页面与 CDP 而定）",
       "type": "object"
     },
+    "cli.workspace-install": {
+      "description": "browse workspace install git clone 种子仓（github.com/raystyle/browse_workspace）到仓根；三平台用户目录部署，跨实例共享不分 BROWSE_NAME。",
+      "example": "browse workspace install",
+      "input": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "cli.workspace-list": {
+      "description": "browse workspace list 列 workspace 在册资产：domain-skills/ 各站点段（文件清单，封顶同回执口径）与 page-skills/ 各 slug。",
+      "example": "browse workspace list",
+      "input": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "cli.workspace-page": {
+      "description": "browse workspace page <slug> 读页面特征机制配方全文（#51，goto 回执 page_skills 的下钻面）：page-skills/<slug>.md。",
+      "example": "browse workspace page captcha",
+      "input": {
+        "properties": {
+          "slug": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "cli.workspace-site": {
+      "description": "browse workspace site <段>[/<文件>] 读域名站点知识（#50，goto 回执 domain_skills 的下钻面）：只给段打该段文件清单（文件名加首行标题），给 <段>/<文件> 读全文。",
+      "example": "browse workspace site github",
+      "input": {
+        "properties": {
+          "文件": {
+            "description": "缺省 缺省打该段清单",
+            "type": "string"
+          },
+          "段": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "段"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "cli.workspace-status": {
+      "description": "browse workspace status [--json] workspace 单仓概览（#50/#51 配套）：安装态、git remote/branch/head、未提交变更数、技能计数；仓根 BROWSE_WORKSPACE 覆盖，缺省 ~/.browse-rs/workspace。",
+      "example": "browse workspace status",
+      "input": {
+        "properties": {
+          "json": {
+            "description": "缺省 false",
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "cli.workspace-update": {
+      "description": "browse workspace update git pull --ff-only 更新 workspace 仓；本地未提交修改即拒（手工 commit/push 可回推同一远端）。",
+      "example": "browse workspace update",
+      "input": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
     "clickAt": {
       "description": "clickAt(x, y, opts?) 视口坐标 trusted 点击（点当前可见物，不做遮挡检查）；opts（#35）button 换键、clickCount 双击。",
       "example": "await clickAt(120, 40)",

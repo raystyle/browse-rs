@@ -20,6 +20,10 @@ browse CLI 的核心库：方言宿主、引擎策略、daemon HTTP API。
   多实例的落点，ADR-0006）。
 - [`server`]：daemon 的 HTTP API（POST /eval、GET /health、POST /engine/up、
   POST /quit），常驻会话与全局变量跨 CLI 调用保持。
+- [`surface`]：命令面目录（CLI/全局函数/session 方法三类的单一真相源，
+  docs/surface 投影由它派生）。
+- [`workspace`]：workspace 单仓管理（git clone/pull 与仓内文件读取，
+  #50/#51 配套）。
 
 # Examples
 
@@ -45,4 +49,5 @@ assert_eq!(render(&stmts), "const tabs = await listPageTargets()");
 - [`semantic`](semantic.md): 语义层近期面：tab 族、交互三件、等待判官。
 - [`server`](server.md): daemon 的 HTTP API：常驻会话 + 方言求值 + 引擎生命周期。
 - [`surface`](surface.md): 命令面目录（incur-rs 原则的方言版适配）：CLI 子命令、方言全局函数、
+- [`workspace`](workspace.md): workspace 单仓管理（#50/#51 配套）：站点与机制知识仓
 

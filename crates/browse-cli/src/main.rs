@@ -62,6 +62,18 @@ enum Mode {
     SnippetsList(Option<String>),
     /// `browse snippets show <rel>`：看片段全文（#44）。
     SnippetsShow(String),
+    /// `browse workspace status [--json]`：workspace 仓与 git 状态概览（#50/#51 配套）。
+    WorkspaceStatus,
+    /// `browse workspace install`：git clone 种子仓到仓根。
+    WorkspaceInstall,
+    /// `browse workspace update`：git pull --ff-only（脏树拒绝）。
+    WorkspaceUpdate,
+    /// `browse workspace list`：列在册域名段与 page slug。
+    WorkspaceList,
+    /// `browse workspace site <段>[/<文件>]`：域技能清单或全文。
+    WorkspaceSite(String),
+    /// `browse workspace page <slug>`：页面技能全文。
+    WorkspacePage(String),
     /// `browse fetch <url> [--markdown] [--timeout <s>]`：一次性只读抓取（#50）。
     Fetch { url: String, timeout_s: u64 },
     /// `browse issue close` 面已移除（总台修正令 2026-09-20 收口：关闭与删除唯一道 = omc 工位经 herdr 委托）。
@@ -331,6 +343,29 @@ async fn main() -> Result<()> {
                     }
                     other => {
                         eprintln!("browse: snippets 子命令不认识 {other}（list/show，退出 2）");
+                        std::process::exit(2);
+                    }
+                }
+            }
+            "workspace" if snippets.is_empty() && mode_is_eval(&mode) => {
+                match next("workspace")?.as_str() {
+                    "status" => mode = Mode::WorkspaceStatus,
+                    "install" => mode = Mode::WorkspaceInstall,
+                    "update" => mode = Mode::WorkspaceUpdate,
+                    "list" => mode = Mode::WorkspaceList,
+                    "site" => {
+                        mode = Mode::WorkspaceSite(
+                            next("workspace site <段>[/<文件>]").unwrap_or_default(),
+                        )
+                    }
+                    "page" => {
+                        mode =
+                            Mode::WorkspacePage(next("workspace page <slug>").unwrap_or_default())
+                    }
+                    other => {
+                        eprintln!(
+                            "browse: workspace 子命令不认识 {other}（status/install/update/list/site/page，退出 2）"
+                        );
                         std::process::exit(2);
                     }
                 }
@@ -868,6 +903,97 @@ async fn main() -> Result<()> {
                 ),
             }
         }
+        // ---- workspace 单仓（#50/#51 配套）：git 与文件系统操作，
+        // 不经 daemon；blocking 全收 spawn_blocking（chrome_mgr 同构） ----
+        Mode::WorkspaceStatus => {
+            let root = browse_core::paths::workspace_dir();
+            let st =
+                tokio::task::spawn_blocking(move || browse_core::workspace::status_json(&root))
+                    .await
+                    .map_err(|e| anyhow!("workspace status 任务崩了：{e}"))??;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&st)?);
+            } else {
+                print_workspace_status(&st);
+            }
+            Ok(())
+        }
+        Mode::WorkspaceInstall => {
+            let root = browse_core::paths::workspace_dir();
+            let r = tokio::task::spawn_blocking(move || browse_core::workspace::install(&root))
+                .await
+                .map_err(|e| anyhow!("workspace install 任务崩了：{e}"))??;
+            println!("{}", serde_json::to_string_pretty(&r)?);
+            Ok(())
+        }
+        Mode::WorkspaceUpdate => {
+            let root = browse_core::paths::workspace_dir();
+            let r = tokio::task::spawn_blocking(move || browse_core::workspace::update(&root))
+                .await
+                .map_err(|e| anyhow!("workspace update 任务崩了：{e}"))??;
+            println!("{}", serde_json::to_string_pretty(&r)?);
+            Ok(())
+        }
+        Mode::WorkspaceList => {
+            let root = browse_core::paths::workspace_dir();
+            let l = tokio::task::spawn_blocking({
+                let root = root.clone();
+                move || browse_core::workspace::list_json(&root)
+            })
+            .await
+            .map_err(|e| anyhow!("workspace list 任务崩了：{e}"))?;
+            let domains = l["domains"].as_array().cloned().unwrap_or_default();
+            let pages = l["pages"].as_array().cloned().unwrap_or_default();
+            if domains.is_empty() && pages.is_empty() {
+                eprintln!(
+                    "workspace 仓未安装或为空（{}）；下一步：browse workspace install",
+                    root.display()
+                );
+                return Ok(());
+            }
+            println!("domain-skills:");
+            for d in &domains {
+                let seg = d["segment"].as_str().unwrap_or("?");
+                let files = d["files"].as_array().cloned().unwrap_or_default();
+                let names: Vec<&str> = files.iter().filter_map(|f| f.as_str()).collect();
+                let capped = if d["capped"] == serde_json::json!(true) {
+                    " …"
+                } else {
+                    ""
+                };
+                println!("  {seg}  {} 文件  {}{capped}", files.len(), names.join(" "));
+            }
+            println!("page-skills:");
+            for p in &pages {
+                println!("  {}", p.as_str().unwrap_or("?"));
+            }
+            Ok(())
+        }
+        Mode::WorkspaceSite(seg) => {
+            if seg.is_empty() {
+                bail!("workspace site 缺段；用法：browse workspace site <段>[/<文件>]（退出 2）");
+            }
+            let root = browse_core::paths::workspace_dir();
+            let text =
+                tokio::task::spawn_blocking(move || browse_core::workspace::read_site(&root, &seg))
+                    .await
+                    .map_err(|e| anyhow!("workspace site 任务崩了：{e}"))??;
+            println!("{text}");
+            Ok(())
+        }
+        Mode::WorkspacePage(slug) => {
+            if slug.is_empty() {
+                bail!("workspace page 缺 slug；用法：browse workspace page <slug>（退出 2）");
+            }
+            let root = browse_core::paths::workspace_dir();
+            let text = tokio::task::spawn_blocking(move || {
+                browse_core::workspace::read_page(&root, &slug)
+            })
+            .await
+            .map_err(|e| anyhow!("workspace page 任务崩了：{e}"))??;
+            println!("{text}");
+            Ok(())
+        }
         Mode::Eval => {
             // 裸调用 = 导航事件：无参不弹交互，TTY 裸跑出本仓帮助体 exit 0；
             // REPL 须 --repl 显式进；stdin 管道批处理形态不回归。
@@ -1211,6 +1337,36 @@ fn print_help() {
 
 /// 递归走访片段库（#44）：目录形 <site>/<task>.js 天然分层；每文件取首行
 /// 注释头当摘要。只读，不建目录不写文件。
+/// workspace status 的人读面（--json 走机器面直出）：安装态、git 概览
+/// 与技能计数一行收束，未安装给 install 下一步。
+fn print_workspace_status(st: &serde_json::Value) {
+    let root = st["root"].as_str().unwrap_or("?");
+    if st["installed"] != serde_json::json!(true) {
+        println!("workspace: 未安装（{root} 不存在）");
+        if st["gitPresent"] != serde_json::json!(true) {
+            println!("git: 未找到（下一步：装 git，或手工 git clone 种子仓到 {root}）");
+        }
+        println!("下一步：browse workspace install");
+        return;
+    }
+    let remote = st["remote"].as_str().unwrap_or("?");
+    let branch = st["branch"].as_str().unwrap_or("?");
+    let head = st["head"].as_str().unwrap_or("?");
+    let dirty = st["dirtyChanges"].as_u64().unwrap_or(0);
+    let dirty_s = if dirty > 0 {
+        format!("，{dirty} 处未提交变更")
+    } else {
+        String::new()
+    };
+    println!("workspace: {root}（origin {remote}，{branch}@{head}{dirty_s}）");
+    println!(
+        "domain-skills: {} 站 {} 文件；page-skills: {} slug",
+        st["domainSites"].as_u64().unwrap_or(0),
+        st["domainFiles"].as_u64().unwrap_or(0),
+        st["pageSlugs"].as_u64().unwrap_or(0),
+    );
+}
+
 fn visit_snippets(
     root: &std::path::Path,
     dir: &std::path::Path,
