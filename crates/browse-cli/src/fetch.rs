@@ -146,7 +146,12 @@ pub async fn fetch(url: &str, _markdown: bool, timeout_s: u64) -> Result<Value> 
                 .send()
                 .await
                 .map_err(|e| {
-                    anyhow!("引擎腿 daemon 不可达（{e}）；下一步：browse up 或修 BROWSE_PORT")
+                    // CTA 指日志（#49 评审随记下批项）：daemon 在跑却不可达
+                    // 多为重启窗口或端口不符，日志比「browse up」更对症
+                    anyhow!(
+                        "引擎腿 daemon 不可达（{e}）；下一步：看日志 {}（tail）或 browse status 对端口",
+                        crate::client::state_dir().join("daemon.log").display()
+                    )
                 })?;
             let v: Value = resp.json().await?;
             if v.get("ok") != Some(&json!(true)) {

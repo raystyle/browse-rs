@@ -149,8 +149,15 @@ async fn main() -> Result<()> {
     let mut gen_surface: Option<String> = None;
     while let Some(a) = args.next() {
         let mut next = |flag: &str| -> Result<String> {
-            args.next()
-                .ok_or_else(|| anyhow!("browse: {flag} 需要一个值（用法错，退出 2）"))
+            match args.next() {
+                Some(v) => Ok(v),
+                // 用法错直出 exit 2（评审 G-F：文案称 2 实退 1 的分叉收口；
+                // bail_arg 同款出口，不再经 anyhow 落 exit 1）
+                None => {
+                    eprintln!("browse: {flag} 需要一个值（用法错，退出 2）");
+                    std::process::exit(2)
+                }
+            }
         };
         match a.as_str() {
             "--eval" | "-e" => snippets.push(next("--eval")?),
@@ -161,11 +168,14 @@ async fn main() -> Result<()> {
             "--new-tab" => new_tab = true,
             "--ws" => ws = Some(next("--ws")?),
             "--port" => {
-                port = Some(
-                    next("--port")?
-                        .parse()
-                        .map_err(|_| anyhow!("browse: --port 要数字（退出 2）"))?,
-                )
+                port = match next("--port")?.parse() {
+                    Ok(p) => Some(p),
+                    // 用法错直出 exit 2（同 next 闭包口径，评审 G-F）
+                    Err(_) => {
+                        eprintln!("browse: --port 要数字（退出 2）");
+                        std::process::exit(2)
+                    }
+                }
             }
             "--chrome" => chrome = Some(next("--chrome")?),
             "--profile" => profile = Some(next("--profile")?),
@@ -973,7 +983,11 @@ async fn main() -> Result<()> {
         }
         Mode::WorkspaceSite(seg) => {
             if seg.is_empty() {
-                bail!("workspace site 缺段；用法：browse workspace site <段>[/<文件>]");
+                // 用法错直出 exit 2（评审 G-F：口径与既有 bail_arg 族一致）
+                eprintln!(
+                    "browse: workspace site 缺段；用法：browse workspace site <段>[/<文件>]（退出 2）"
+                );
+                std::process::exit(2);
             }
             let root = browse_core::paths::workspace_dir();
             let text =
@@ -985,7 +999,10 @@ async fn main() -> Result<()> {
         }
         Mode::WorkspacePage(slug) => {
             if slug.is_empty() {
-                bail!("workspace page 缺 slug；用法：browse workspace page <slug>");
+                eprintln!(
+                    "browse: workspace page 缺 slug；用法：browse workspace page <slug>（退出 2）"
+                );
+                std::process::exit(2);
             }
             let root = browse_core::paths::workspace_dir();
             let text = tokio::task::spawn_blocking(move || {

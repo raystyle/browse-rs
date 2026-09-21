@@ -2220,11 +2220,13 @@ const INPUT_DISPATCH_TIMEOUT: Duration = Duration::from_secs(8);
 
 async fn run_input_seq(s: &Session, seq: &[(&'static str, Value)]) -> Result<()> {
     for (method, params) in seq {
-        match tokio::time::timeout(INPUT_DISPATCH_TIMEOUT, s.call(method, params.clone())).await {
-            Ok(r) => {
-                r?;
-            }
-            Err(_) => return Err(anyhow!("cdp timeout (input {method})")),
+        // deadline 收进 call_with_deadline 内层（#52）：外层包 timeout 会把
+        // 内层清登记路径一起 drop，挂起页留 pending 僵尸
+        if let Err(e) = s
+            .call_with_deadline(method, params.clone(), INPUT_DISPATCH_TIMEOUT)
+            .await
+        {
+            return Err(anyhow!("Input 派发 {method} 失败（8 秒短超时档）：{e:#}"));
         }
     }
     Ok(())

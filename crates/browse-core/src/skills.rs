@@ -353,22 +353,22 @@ pub(crate) async fn augment_goto(s: &cdp::Session, receipt: &mut Value) {
         }
     }
     if page_skills_enabled() {
-        // 8 秒超时兜底防怪页挂死 goto；失败静默降级零键
-        let probe = tokio::time::timeout(
-            std::time::Duration::from_secs(8),
-            s.call(
+        // 8 秒 deadline 收进 call_with_deadline 内层（#52）：外层包
+        // timeout 会把内层清登记路径一起 drop，真挂死页留 pending 僵尸；
+        // 失败静默降级零键
+        let probe = s
+            .call_with_deadline(
                 "Runtime.evaluate",
                 json!({ "expression": PAGE_PROBE_JS, "returnByValue": true }),
-            ),
-        )
-        .await
-        .ok()
-        .and_then(|r| r.ok())
-        .and_then(|r| {
-            r.pointer("/result/value")
-                .and_then(Value::as_str)
-                .and_then(parse_probe)
-        });
+                std::time::Duration::from_secs(8),
+            )
+            .await
+            .ok()
+            .and_then(|r| {
+                r.pointer("/result/value")
+                    .and_then(Value::as_str)
+                    .and_then(parse_probe)
+            });
         if let Some(p) = probe
             && let Some(obj) = receipt.as_object_mut()
         {

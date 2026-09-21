@@ -2,6 +2,13 @@
 
 版本级里程碑；逐批过程见 docs/diary。semver 判据在册 docs/requirements/REQ-004。
 
+## 0.12.1 - 2026-09-21
+
+- **#52 timeout 包 session.call 丢 pending 登记**：cdp 新增 `call_with_deadline(method, params, deadline)` 窄接口（deadline 收进内层，超时清登记路径不再被外层 drop 丢掉）；技能探测腿（8 秒）与 Input 派发短超时（8 秒自愈档）两处同型点切窄接口。e2e 验收锁：cookie getter 死循环挂死页上 goto 在 8 秒档返回零 page 键、pending 表归零（`pending_len` 诊断面）、browser 级调用健在、newTab 切走楔死渲染器复活（页内 crash/navigate 都进不去楔死页属 CDP 结构性，busy-loop 测试解法在册）。server.rs 求值 300 秒外层超时 drop 复合求值的边角同型留档不扩批
+- **用法错 exit 2 直出收口（上批评审 G-F）**：next 闭包缺值、--port 非数字、workspace site/page 缺参四处从 anyhow exit 1 改 eprintln + exit(2)（bail_arg 族同口径，文案不再撒谎）
+- **fetch 引擎腿 CTA 换日志指路（#49 评审随记下批项）**：daemon 不可达时指 daemon.log 与 browse status，不再盲指 browse up
+- semver 判据结论（0.12.1 裁定）：修复批取 patch（REQ-004 判据行）
+
 ## 0.12.0 - 2026-09-21
 
 - **domain skill 触发层（#50，REQ-015）**：goto 回执按 URL 域名段（hostname 去 www 首段）点名 workspace 站点知识，命中附 `domain_skills`（封顶 10）与 `domain_skills_hint`（读全文命令）；未命中回执零新增键（BTreeMap 键序下逐字节一致，e2e 键集锁）；`BROWSE_DOMAIN_SKILLS=0` 关闭（opt-out 镜像前代 bh）；daemon 三变量显式透传属防御性（现状与继承等效，改配置重启 daemon 口径同 BROWSE_SECRETS）

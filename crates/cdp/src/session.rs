@@ -700,13 +700,50 @@ impl Session {
         self.send("Browser.close", json!({})).await
     }
 
+    /// 同 [`Session::call`]，但调用自带更短的 deadline（issue #52）。
+    /// 何时用：「怪页可能挂死」的窄面调用（技能探测、Input 短超时自愈）。
+    /// 边界：**不要在外面再包 `tokio::time::timeout`**：外层先到会把
+    /// 本调用整个 drop，内层的超时清登记路径（pending 应答表）跟着被
+    /// 丢，真挂死页的响应永不到则留下 pending 僵尸；deadline 收进本
+    /// 接口内层才清得干净。
+    ///
+    /// # Errors
+    ///
+    /// 同 [`Session::call`]（守卫、CDP 错误、超时）；超时错误串是
+    /// `cdp timeout: deadline has elapsed`。
+    pub async fn call_with_deadline(
+        &self,
+        method: &str,
+        params: Value,
+        deadline: Duration,
+    ) -> Result<Value> {
+        self.guard(method, &params).await?;
+        // 提交屏障同 call()：探测/派发也要看到提交后的世界
+        if method != "Page.navigate" && !is_browser_method(method) {
+            self.await_commit_barrier().await;
+        }
+        let sid = if is_browser_method(method) {
+            None
+        } else {
+            self.session_id.lock().await.clone()
+        };
+        self.send_with(method, params, sid, deadline).await
+    }
+
+    /// 仅供测试与诊断（#52 e2e 断言超时清登记）：pending 应答表当前长度。
+    #[doc(hidden)]
+    pub async fn pending_len(&self) -> usize {
+        self.pending.lock().await.len()
+    }
+
     async fn send(&self, method: &str, params: Value) -> Result<Value> {
         let sid = if is_browser_method(method) {
             None
         } else {
             self.session_id.lock().await.clone()
         };
-        self.send_with(method, params, sid).await
+        self.send_with(method, params, sid, Duration::from_secs(CALL_TIMEOUT_SECS))
+            .await
     }
 
     /// 显式路由目标的调用，`sessionId` 用给定值（不走活动路由）。
@@ -719,8 +756,13 @@ impl Session {
     /// 同 [`Session::call`]（守卫、CDP 错误、超时）。
     pub async fn call_on(&self, method: &str, params: Value, session_id: &str) -> Result<Value> {
         self.guard(method, &params).await?;
-        self.send_with(method, params, Some(session_id.to_string()))
-            .await
+        self.send_with(
+            method,
+            params,
+            Some(session_id.to_string()),
+            Duration::from_secs(CALL_TIMEOUT_SECS),
+        )
+        .await
     }
 
     async fn send_with(
@@ -728,6 +770,7 @@ impl Session {
         method: &str,
         params: Value,
         session_id: Option<String>,
+        deadline: Duration,
     ) -> Result<Value> {
         if !self.is_connected() {
             return Err(anyhow!("Not connected. Call session.connect(...) first."));
@@ -753,7 +796,7 @@ impl Session {
         drop(out_lock);
         sent?;
 
-        let resp = match timeout(Duration::from_secs(CALL_TIMEOUT_SECS), rx).await {
+        let resp = match timeout(deadline, rx).await {
             Ok(r) => r.context("cdp dropped")?,
             // 超时清登记（全量评审 F1）：不清则 map 长期积尸；清后迟到的
             // 响应对不上 id，由 route 的 pending-miss 静默丢
