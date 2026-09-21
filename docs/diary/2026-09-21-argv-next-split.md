@@ -23,3 +23,11 @@ browse-cli 首建 tests/arg_contract.rs（CARGO_BIN_EXE_browse 真二进制四�
 - #53 经 omc 集中道关毕（ledger done seq 172，#52 先例同道）：总台自证三笔祖先线性、CI 双绿、交付与委托单逐项吻合、账本回读 done；open 集回落 {1}（常驻冒烟单）
 - omc 工位附带发现转达用户：装机 omc 0.4.0 落后仓 0.5.2（ledger 管理面是 0.5.x 新增），AGENTS 版本句同停 0.4.0，滚装与对齐待用户裁定
 
+## 发版 v0.12.2（同日续）
+
+- 0.12.1 破损面不发（#53 回归在身，stable 直跳 0.12.0 到 0.12.2）；轻量 tag v0.12.2 钉 562fc57 推远端（首跑误用附注 tag 被锚链闸拦，2026-09-16 在册已知项候后续批加 ^{} 解引用面，改轻量重推即过）
+- release.ps1 全链 exit 0：测试闸、linux 本职加 win-gnu 交叉加 lan-mac 实机三构建、六件加 sha256 边车、跨宿主三断言与解包冒烟（win interop 冒烟的 cmd UNC 警告为噪音非红）、gh release 直发 --latest
+- seed 流水 run 35591004637 success 31s（browse/0.12.2/ 加 stable/ 双段播种）
+- 自升链实弹：browse update 匿名面触 GitHub 403 限流（自带 GH_TOKEN CTA 属预期面），带 GH_TOKEN 复跑回 {from: 0.12.2, status: upToDate}
+- browse_workspace 知识批与 browse 版本解耦（workspace README 明文），intent 17 篇与 domain 三站不触发 browse 发版；本发版纯为 0.12.1/0.12.2 修复面积欠
+
