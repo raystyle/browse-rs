@@ -1,6 +1,6 @@
 {
   "crate": "browse-cli",
-  "version": "0.12.1",
+  "version": "0.12.2",
   "items": [
     {
       "path": "browse_cli::client",

@@ -2,6 +2,11 @@
 
 版本级里程碑；逐批过程见 docs/diary。semver 判据在册 docs/requirements/REQ-004。
 
+## 0.12.2 - 2026-09-21
+
+- **#53 子命令旗标收集循环假报用法错（0.12.1 G-F 收口回归）**：`next` 取值口改直出 exit 2 后，七处按「参数尽返 Err 收尾」旧契约写的旗标循环（fetch / artifact publish·attest·list / ledger keygen / issue new / issue list）的 Err 分支成死代码，任意调用在旗标耗尽时假报「旗标 需要一个值」exit 2；`snippets list` 可选位同碎，`snippets show` / `workspace site`/`page` 的 Mode 层缺参处理器被解析层先拦成死代码。修法：CLI 实参游标双口分面，`Args::next` 必值口缺值直出 exit 2（G-F 口径不变），`Args::next_opt` 收集口参数尽返 None 即收尾；bail_arg 措辞中性化（非 issue 子命令的坏旗标不再误报「issue 参数不认识」）。browse-cli 首建 argv 契约测试 `tests/arg_contract.rs`（`CARGO_BIN_EXE_browse` 真二进制四测，零网络；argv 面此前零锁是回归漏网主因）
+- semver 判据结论（0.12.2 裁定）：修复批取 patch（REQ-004 判据行）
+
 ## 0.12.1 - 2026-09-21
 
 - **#52 timeout 包 session.call 丢 pending 登记**：cdp 新增 `call_with_deadline(method, params, deadline)` 窄接口（deadline 收进内层，超时清登记路径不再被外层 drop 丢掉）；技能探测腿（8 秒）与 Input 派发短超时（8 秒自愈档）两处同型点切窄接口。e2e 验收锁：cookie getter 死循环挂死页上 goto 在 8 秒档返回零 page 键、pending 表归零（`pending_len` 诊断面）、browser 级调用健在、newTab 切走楔死渲染器复活（页内 crash/navigate 都进不去楔死页属 CDP 结构性，busy-loop 测试解法在册）。server.rs 求值 300 秒外层超时 drop 复合求值的边角同型留档不扩批

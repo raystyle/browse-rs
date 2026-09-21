@@ -145,30 +145,19 @@ async fn main() -> Result<()> {
     let mut cookies_csv: Option<String> = None;
     let mut secrets: Option<String> = None;
 
-    let mut args = std::env::args().skip(1);
+    let mut args = Args(std::env::args().skip(1));
     let mut gen_surface: Option<String> = None;
-    while let Some(a) = args.next() {
-        let mut next = |flag: &str| -> Result<String> {
-            match args.next() {
-                Some(v) => Ok(v),
-                // 用法错直出 exit 2（评审 G-F：文案称 2 实退 1 的分叉收口；
-                // bail_arg 同款出口，不再经 anyhow 落 exit 1）
-                None => {
-                    eprintln!("browse: {flag} 需要一个值（用法错，退出 2）");
-                    std::process::exit(2)
-                }
-            }
-        };
+    while let Some(a) = args.next_opt() {
         match a.as_str() {
-            "--eval" | "-e" => snippets.push(next("--eval")?),
-            "--gen-surface" => gen_surface = Some(next("--gen-surface")?),
+            "--eval" | "-e" => snippets.push(args.next("--eval")),
+            "--gen-surface" => gen_surface = Some(args.next("--gen-surface")),
             "--serve" => serve = true,
-            "--bind" => bind = Some(next("--bind")?),
-            "--connect" => connect = Some(next("--connect")?),
+            "--bind" => bind = Some(args.next("--bind")),
+            "--connect" => connect = Some(args.next("--connect")),
             "--new-tab" => new_tab = true,
-            "--ws" => ws = Some(next("--ws")?),
+            "--ws" => ws = Some(args.next("--ws")),
             "--port" => {
-                port = match next("--port")?.parse() {
+                port = match args.next("--port").parse() {
                     Ok(p) => Some(p),
                     // 用法错直出 exit 2（同 next 闭包口径，评审 G-F）
                     Err(_) => {
@@ -177,19 +166,19 @@ async fn main() -> Result<()> {
                     }
                 }
             }
-            "--chrome" => chrome = Some(next("--chrome")?),
-            "--profile" => profile = Some(next("--profile")?),
+            "--chrome" => chrome = Some(args.next("--chrome")),
+            "--profile" => profile = Some(args.next("--profile")),
             "--headless" => headless = true,
             "--pipe" => pipe = true,
-            "--proxy" => proxy = Some(next("--proxy")?),
-            "--proxy-bypass" => proxy_bypass = Some(next("--proxy-bypass")?),
+            "--proxy" => proxy = Some(args.next("--proxy")),
+            "--proxy-bypass" => proxy_bypass = Some(args.next("--proxy-bypass")),
             // #48：引擎附加旗标直通 spawn（可叠加），值以 -- 开头也原样收
-            "--engine-arg" => engine_args.push(next("--engine-arg")?),
+            "--engine-arg" => engine_args.push(args.next("--engine-arg")),
             "--isolated" => isolated = true,
-            "--idle-timeout" => idle_timeout = Some(next("--idle-timeout")?),
+            "--idle-timeout" => idle_timeout = Some(args.next("--idle-timeout")),
             // #48：无头起引擎时从附着浏览器按域克隆 cookie（逗号分隔多域）
-            "--cookies" => cookies_csv = Some(next("--cookies")?),
-            "--secrets" => secrets = Some(next("--secrets")?),
+            "--cookies" => cookies_csv = Some(args.next("--cookies")),
+            "--secrets" => secrets = Some(args.next("--secrets")),
             "--js" => js = true,
             // base64 通道只留长参：`-b` 短参是 issue new 的 --body 既有
             // 契约（REQ-057），不夺权
@@ -211,15 +200,15 @@ async fn main() -> Result<()> {
             "status" if snippets.is_empty() && mode_is_eval(&mode) => mode = Mode::Status,
             "update" if snippets.is_empty() && mode_is_eval(&mode) => mode = Mode::Update,
             "chrome" if snippets.is_empty() && mode_is_eval(&mode) => {
-                match next("chrome")?.as_str() {
+                match args.next("chrome").as_str() {
                     "list" => mode = Mode::ChromeList,
                     "doctor" => mode = Mode::ChromeDoctor,
-                    "use" => mode = Mode::ChromeUse(next("chrome use")?),
-                    "remove" => mode = Mode::ChromeRemove(next("chrome remove <版本>")?),
+                    "use" => mode = Mode::ChromeUse(args.next("chrome use")),
+                    "remove" => mode = Mode::ChromeRemove(args.next("chrome remove <版本>")),
                     "update" => mode = Mode::ChromeUpdate,
                     "install" => {
-                        let version = next("chrome install <版本>")?;
-                        let from_dir = args.next().filter(|s| !s.starts_with('-'));
+                        let version = args.next("chrome install <版本>");
+                        let from_dir = args.next_opt().filter(|s| !s.starts_with('-'));
                         mode = Mode::ChromeInstall { version, from_dir };
                     }
                     other => {
@@ -231,14 +220,14 @@ async fn main() -> Result<()> {
                 }
             }
             "fetch" if snippets.is_empty() && mode_is_eval(&mode) => {
-                let url = next("fetch <url>")?;
+                let url = args.next("fetch <url>");
                 let mut _markdown = false; // v1 同 text（#50），旗标受理向后兼容
                 let mut timeout_s = 15u64;
-                while let Ok(f) = next("fetch 旗标") {
+                while let Some(f) = args.next_opt() {
                     match f.as_str() {
                         "--markdown" | "-m" => _markdown = true,
                         "--timeout" => {
-                            timeout_s = next("--timeout")?.parse().unwrap_or_else(|_| {
+                            timeout_s = args.next("--timeout").parse().unwrap_or_else(|_| {
                                 eprintln!("browse: --timeout 要数字（退出 2）");
                                 std::process::exit(2);
                             })
@@ -249,7 +238,7 @@ async fn main() -> Result<()> {
                 mode = Mode::Fetch { url, timeout_s };
             }
             "artifact" if snippets.is_empty() && mode_is_eval(&mode) => {
-                match next("artifact")?.as_str() {
+                match args.next("artifact").as_str() {
                     "publish" => {
                         // kind 必填（REQ-063 十五枚举无缺省）；--dep 可重复
                         //（deps[] 一等公民，回溯链即证据链）；参数面随标准
@@ -262,18 +251,20 @@ async fn main() -> Result<()> {
                         let mut note = None;
                         let mut deps: Vec<String> = Vec::new();
                         loop {
-                            match next("artifact publish 旗标") {
-                                Ok(f) if f == "--name" => name = next("--name")?,
-                                Ok(f) if f == "--kind" => kind = next("--kind")?,
-                                Ok(f) if f == "--digest" => digest = next("--digest")?,
-                                Ok(f) if f == "--version" => version = Some(next("--version")?),
-                                Ok(f) if f == "--git-range" => {
-                                    git_range = Some(next("--git-range")?)
+                            match args.next_opt() {
+                                Some(f) if f == "--name" => name = args.next("--name"),
+                                Some(f) if f == "--kind" => kind = args.next("--kind"),
+                                Some(f) if f == "--digest" => digest = args.next("--digest"),
+                                Some(f) if f == "--version" => {
+                                    version = Some(args.next("--version"))
                                 }
-                                Ok(f) if f == "--note" => note = Some(next("--note")?),
-                                Ok(f) if f == "--dep" => deps.push(next("--dep")?),
-                                Ok(f) => bail_arg(&f),
-                                Err(_) => break,
+                                Some(f) if f == "--git-range" => {
+                                    git_range = Some(args.next("--git-range"))
+                                }
+                                Some(f) if f == "--note" => note = Some(args.next("--note")),
+                                Some(f) if f == "--dep" => deps.push(args.next("--dep")),
+                                Some(f) => bail_arg(&f),
+                                None => break,
                             }
                         }
                         if kind.is_empty() {
@@ -293,15 +284,15 @@ async fn main() -> Result<()> {
                         };
                     }
                     "attest" => {
-                        let id = next("artifact attest <id>")?;
+                        let id = args.next("artifact attest <id>");
                         let mut ev_type = String::from("attest_dev");
                         let mut note = None;
                         loop {
-                            match next("artifact attest 旗标") {
-                                Ok(f) if f == "--type" => ev_type = next("--type")?,
-                                Ok(f) if f == "--note" => note = Some(next("--note")?),
-                                Ok(f) => bail_arg(&f),
-                                Err(_) => break,
+                            match args.next_opt() {
+                                Some(f) if f == "--type" => ev_type = args.next("--type"),
+                                Some(f) if f == "--note" => note = Some(args.next("--note")),
+                                Some(f) => bail_arg(&f),
+                                None => break,
                             }
                         }
                         mode = Mode::ArtifactAttest { id, ev_type, note };
@@ -310,11 +301,11 @@ async fn main() -> Result<()> {
                         let mut current = false;
                         let mut env_f = None;
                         loop {
-                            match next("artifact list 旗标") {
-                                Ok(f) if f == "--current" => current = true,
-                                Ok(f) if f == "--env" => env_f = Some(next("--env")?),
-                                Ok(f) => bail_arg(&f),
-                                Err(_) => break,
+                            match args.next_opt() {
+                                Some(f) if f == "--current" => current = true,
+                                Some(f) if f == "--env" => env_f = Some(args.next("--env")),
+                                Some(f) => bail_arg(&f),
+                                None => break,
                             }
                         }
                         mode = Mode::ArtifactList { current, env_f };
@@ -328,10 +319,10 @@ async fn main() -> Result<()> {
                 }
             }
             "ledger" if snippets.is_empty() && mode_is_eval(&mode) => {
-                match next("ledger")?.as_str() {
+                match args.next("ledger").as_str() {
                     "keygen" => {
                         let mut force = false;
-                        while let Ok(f) = next("ledger keygen 旗标") {
+                        while let Some(f) = args.next_opt() {
                             match f.as_str() {
                                 "--force" => force = true,
                                 other2 => bail_arg(other2),
@@ -346,11 +337,9 @@ async fn main() -> Result<()> {
                 }
             }
             "snippets" if snippets.is_empty() && mode_is_eval(&mode) => {
-                match next("snippets")?.as_str() {
-                    "list" => mode = Mode::SnippetsList(next("snippets list [site]").ok()),
-                    "show" => {
-                        mode = Mode::SnippetsShow(next("snippets show <rel>").unwrap_or_default())
-                    }
+                match args.next("snippets").as_str() {
+                    "list" => mode = Mode::SnippetsList(args.next_opt()),
+                    "show" => mode = Mode::SnippetsShow(args.next_opt().unwrap_or_default()),
                     other => {
                         eprintln!("browse: snippets 子命令不认识 {other}（list/show，退出 2）");
                         std::process::exit(2);
@@ -358,20 +347,13 @@ async fn main() -> Result<()> {
                 }
             }
             "workspace" if snippets.is_empty() && mode_is_eval(&mode) => {
-                match next("workspace")?.as_str() {
+                match args.next("workspace").as_str() {
                     "status" => mode = Mode::WorkspaceStatus,
                     "install" => mode = Mode::WorkspaceInstall,
                     "update" => mode = Mode::WorkspaceUpdate,
                     "list" => mode = Mode::WorkspaceList,
-                    "site" => {
-                        mode = Mode::WorkspaceSite(
-                            next("workspace site <段>[/<文件>]").unwrap_or_default(),
-                        )
-                    }
-                    "page" => {
-                        mode =
-                            Mode::WorkspacePage(next("workspace page <slug>").unwrap_or_default())
-                    }
+                    "site" => mode = Mode::WorkspaceSite(args.next_opt().unwrap_or_default()),
+                    "page" => mode = Mode::WorkspacePage(args.next_opt().unwrap_or_default()),
                     other => {
                         eprintln!(
                             "browse: workspace 子命令不认识 {other}（status/install/update/list/site/page，退出 2）"
@@ -381,9 +363,9 @@ async fn main() -> Result<()> {
                 }
             }
             "issue" if snippets.is_empty() && mode_is_eval(&mode) => {
-                match next("issue")?.as_str() {
+                match args.next("issue").as_str() {
                     "new" => {
-                        let title = next("issue new <标题>")?;
+                        let title = args.next("issue new <标题>");
                         // --kind（bug|improvement 缺省 bug）加 --acceptance（必
                         // 填，关单 result 的完成判据锚，REQ-063 契约与 hst 家
                         // 族同规）加可选 --body；--dry-run 本地校验加载荷预览
@@ -393,15 +375,17 @@ async fn main() -> Result<()> {
                         let mut acceptance = String::new();
                         let mut dry = false;
                         loop {
-                            match next("issue new 旗标") {
-                                Ok(f) if f == "--body" || f == "-b" => {
-                                    body = next("--body")?;
+                            match args.next_opt() {
+                                Some(f) if f == "--body" || f == "-b" => {
+                                    body = args.next("--body");
                                 }
-                                Ok(f) if f == "--kind" => kind = next("--kind")?,
-                                Ok(f) if f == "--acceptance" => acceptance = next("--acceptance")?,
-                                Ok(f) if f == "--dry-run" => dry = true,
-                                Ok(f) => bail_arg(&f),
-                                Err(_) => break,
+                                Some(f) if f == "--kind" => kind = args.next("--kind"),
+                                Some(f) if f == "--acceptance" => {
+                                    acceptance = args.next("--acceptance")
+                                }
+                                Some(f) if f == "--dry-run" => dry = true,
+                                Some(f) => bail_arg(&f),
+                                None => break,
                             }
                         }
                         if acceptance.is_empty() {
@@ -423,18 +407,19 @@ async fn main() -> Result<()> {
                         // 20 后旧条目静默隐形（#52）
                         let mut limit = 100u32;
                         let mut before = None;
-                        // next 只在参数尽时报错，即旗标收尾
-                        while let Ok(f) = next("issue list 旗标") {
+                        // next_opt 参数尽返 None 即旗标收尾（必值口在
+                        // Args::next，分面见 #53）
+                        while let Some(f) = args.next_opt() {
                             match f.as_str() {
                                 "--before" => {
-                                    let b = next("--before")?;
+                                    let b = args.next("--before");
                                     before = Some(b.parse().unwrap_or_else(|_| {
                                         eprintln!("browse: --before 要数字 issue 号（退出 2）");
                                         std::process::exit(2);
                                     }))
                                 }
                                 "--limit" => {
-                                    limit = next("--limit")?.parse().unwrap_or_else(|_| {
+                                    limit = args.next("--limit").parse().unwrap_or_else(|_| {
                                         eprintln!("browse: --limit 要数字（退出 2）");
                                         std::process::exit(2);
                                     })
@@ -444,7 +429,7 @@ async fn main() -> Result<()> {
                         }
                         mode = Mode::IssueList { limit, before };
                     }
-                    "show" => mode = Mode::IssueShow(next("issue show <id>")?),
+                    "show" => mode = Mode::IssueShow(args.next("issue show <id>")),
                     other => {
                         eprintln!(
                             "browse: issue 子命令不认识 {other}（new/list/show；close 面已收口归 omc 工位，退出 2）"
@@ -1057,10 +1042,34 @@ async fn main() -> Result<()> {
     }
 }
 
-/// 用法错统一出口（退出 2）。
+/// 用法错统一出口（退出 2）。各子命令旗标循环共用，措辞不点名子命令。
 fn bail_arg(a: &str) -> ! {
-    eprintln!("browse: issue 参数不认识 {a}（用法错，退出 2）");
+    eprintln!("browse: 参数不认识 {a}（用法错，退出 2）");
     std::process::exit(2);
+}
+
+/// CLI 实参游标，必值与旗标收集两口分面。单口混用会互踩：必值守卫直出
+/// exit 2（G-F 口径）后，靠「参数尽返 Err」收尾的旗标收集循环就永远等
+/// 不到终点（0.12.1 子命令族假用法错回归的根因），故拆双口。
+struct Args(std::iter::Skip<std::env::Args>);
+
+impl Args {
+    /// 取必值实参：参数尽即用法错直出 exit 2（G-F 口径，bail_arg 同族）。
+    fn next(&mut self, flag: &str) -> String {
+        match self.0.next() {
+            Some(v) => v,
+            None => {
+                eprintln!("browse: {flag} 需要一个值（用法错，退出 2）");
+                std::process::exit(2);
+            }
+        }
+    }
+
+    /// 收下一实参：参数尽返 None 即收尾。子命令旗标循环与可选位（如
+    /// `snippets list [site]`）专用，不报错。
+    fn next_opt(&mut self) -> Option<String> {
+        self.0.next()
+    }
 }
 
 fn mode_is_eval(m: &Mode) -> bool {

@@ -1,5 +1,5 @@
 <!-- browse_cli/index.md -->
-# browse-cli 0.12.1
+# browse-cli 0.12.2
 
 browse CLI 的可测半边：daemon 客户端（HTTP 调用 + 自动拉起）。
 
@@ -115,7 +115,7 @@ ledger.ohmygh.com（替代 issues.ohmygh.com 客户端面；旧服务只读保�
 
 
 <!-- browse_core/index.md -->
-# browse-core 0.12.1
+# browse-core 0.12.2
 
 browse CLI 的核心库：方言宿主、引擎策略、daemon HTTP API。
 
@@ -571,7 +571,7 @@ list/site/page）。git 维护走 shell-out `git`（不引 git crate）：instal
 
 
 <!-- cdp/index.md -->
-# cdp 0.12.1
+# cdp 0.12.2
 
 Chrome DevTools Protocol（CDP）连接层：一条常驻 browser-level WebSocket 会话。
 
