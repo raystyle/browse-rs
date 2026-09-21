@@ -19,6 +19,10 @@ surface_contract 三面更新：help_covers_catalog 计数口径改条目行（�
 
 帮助面文档批取 patch（REQ-004 判据行）；#55 先 --dry-run 预览再实发（issue 55 回执 ok）。评审、发版与五端拉平随后补。
 
-## 评审与发版（待补账）
+## 评审与发版（同日续）
 
-评审闸门、推送与 CI、v0.13.1 发版、五端 update、#55 关单，随后补。
+- 评审三轮（browse-codex-review）：一轮 (a) CONFIRM 加 (b)(d) F（清洗粘连伤：原描述 opts（#35）button 的括号删后粘成 optsbutton/optscursor 三处，随 llms/schema 三投影出厂；你点名的 waitForResponse 竞速与 snapshot pierce 边界两处语义评审方核过零伤）加 (c) G（守卫假绿：只扫帮助面短述，源目录第二子句编号不设防）；二轮修复后 (b)(d) CONFIRM 加 (c) 两 G（render_manual 第五面漏扫、裸 #NN 子串判据易误伤）；三轮锚定判据收口放行
+- 推送 1996787..129e54b 三笔，CI 双绿（ci 35626533861 三岗 2m15s、docs 35626533575 2m51s）
+- 发版 v0.13.1：release.ps1 全链 exit 0；seed run 35626990019 success 47s；stable/latest 滚 0.13.1
+- 五端拉平（全镜像原生链零 token）：wsl 与 lan-win browse update、lan-mac ark 委托、lan-ubuntu/lan-linux browse update，五端实弹 0.13.1，新帮助面随包上机
+- #55 关毕（ledger done seq 177，omc 管理面；委托道发时工位空闲，回执走管理面等效）
