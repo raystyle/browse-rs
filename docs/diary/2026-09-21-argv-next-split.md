@@ -16,6 +16,10 @@ browse-cli 首建 tests/arg_contract.rs（CARGO_BIN_EXE_browse 真二进制四�
 
 修复批取 patch（REQ-004 判据行）；#53 先 --dry-run 预览零入账再实发（issue 53 回执 ok）；版本头随迁 aidoc/surface 投影（纯版本行 diff）。
 
-## 评审闸门与关单（待补账）
+## 评审闸门与关单（同日续）
 
-一轮快核（browse-codex-review 重组窗格，deepseek-v4-flash）：(a) F1 必修：snippets show 裸调漂移回 G-F 前 exit 1（从无 Mode 层守卫，初版文案误称「处理器复活」），补 SnippetsShow 空 rel 守卫（workspace site 同款）加 arg_contract 裸调断言，CHANGELOG 与本档措辞同步勘误；(b) CONFIRM（迁移完整：54 处 baseline 逐一比对，args.next 43 加 next_opt 12，无第二解析面）；(c) CONFIRM 带 G1（win-gnu 交叉岗 check 裸跑不编译集成测试，补 --all-targets）与 G-lite（TempState Drop 收渣）；(d) CONFIRM（bail_arg 新串无锁风险，surface 零命中）。二轮快核与终审、推送、#53 关单后补。
+- 评审格 browse-codex-review 本批重组（上批格已不在位，工位 tab 右分 40% 重建，codex YOLO，仓内 cwd 信任屏未弹）。三轮闭环：一轮 (a) F1 必修（snippets show 裸调漂移回 G-F 前 exit 1，从无 Mode 层守卫，初版文案误称「处理器复活」；补 SnippetsShow 空 rel 守卫同 workspace site 款 + arg_contract 裸调断言 + CHANGELOG/diary 勘误）加 (b)(d) CONFIRM（54 处 baseline 逐一比对等价、bail_arg 无锁风险）加 (c) G1/G-lite 随批（win-gnu 交叉岗 check 补 --all-targets、TempState Drop 收渣）；二轮 (c) F：--all-targets 照出 cdp 两测试漏 cfg(unix) 门控的存量潜伏（std::os::unix 裸用，四个同类兄弟都有门控），fe4802c 随修；三轮终核 CONFIRM 放行（评审方独立复跑：强制重建交叉面零警告、unix 覆盖未砍、cdp 两测仍跑）。self_update 两 helper 同款补门控消 windows 面死代码警告（顺手）
+- 推送 7c31860..d553029 三笔，CI 双绿（ci 35587684349 三岗 2m14s 含新 --all-targets win-gnu 岗、docs 35587684302 2m50s）；本机装机面换代 0.12.2（issue list 实弹复验）
+- #53 经 omc 集中道关毕（ledger done seq 172，#52 先例同道）：总台自证三笔祖先线性、CI 双绿、交付与委托单逐项吻合、账本回读 done；open 集回落 {1}（常驻冒烟单）
+- omc 工位附带发现转达用户：装机 omc 0.4.0 落后仓 0.5.2（ledger 管理面是 0.5.x 新增），AGENTS 版本句同停 0.4.0，滚装与对齐待用户裁定
+
