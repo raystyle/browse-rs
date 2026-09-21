@@ -13,6 +13,7 @@ daemon 客户端：本地 HTTP 调用 + 首次使用自动拉起 detached daemon
 - `eval` — 把方言片段 POST 到 daemon 的 /eval 求值。
 - `health` — GET /health 取 daemon 状态面；daemon 不在时报可照抄的拉起提示。
 - `quit` — POST /quit 退 daemon，daemon 侧顺带只终结自起引擎（附着来源不动）。
+- `skills_passthrough_env` — 技能层透传环境（#50/#51）：拉起新 daemon 时把 CLI 进程里的 workspace
 - `state_dir` — 返回 daemon 日志与运行面目录（`%USERPROFILE%\.browse-rs[\<name>]`，多实例各一份）。
 
 ## Types

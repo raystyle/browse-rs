@@ -88,6 +88,10 @@ pub async fn close_tab(s: &Session, target_id: Option<&str>) -> Result<Value> {
 /// `timeout_ms` 是导航加载合计预算；`idle_ms` 为 Some 时再等网络静默。
 /// url/title 取自目标元数据（Target.getTargets 面），瞬时提交窗内可能
 /// 滞后；权威读取用 `location.href` / `document.title`（评审 G7）。
+/// 回执可附技能触发层键（#50/#51）：命中 workspace 站点知识时
+/// `domain_skills`/`domain_skills_hint`，命中页面特征时
+/// `page_skills`/`page_skills_hint` 与 `framework:{name,version}`；未命中
+/// 或关闭（BROWSE_DOMAIN_SKILLS=0 / BROWSE_PAGE_SKILLS=0）一键不加。
 ///
 /// # Errors
 ///
@@ -104,11 +108,15 @@ pub async fn goto(s: &Session, url: &str, timeout_ms: u64, idle_ms: Option<u64>)
         wait_idle(s, ms).await?;
     }
     let tab = current_tab(s).await?;
-    Ok(json!({
+    let mut r = json!({
         "url": tab.get("url"),
         "title": tab.get("title"),
+        // elapsedMs 在技能层前固化：点名与探测耗时不算进导航时长
         "elapsedMs": t0.elapsed().as_millis() as u64,
-    }))
+    });
+    // #50/#51 技能触发层：未命中/关闭/探测失败一概不插键
+    crate::skills::augment_goto(s, &mut r).await;
+    Ok(r)
 }
 
 /// 历史回退（#39）：`Page.getNavigationHistory` 取 currentIndex，回退 delta

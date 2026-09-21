@@ -10,6 +10,7 @@ list/site/page）。git 维护走 shell-out `git`（不引 git crate）：instal
 
 ## Functions
 
+- `domain_segment_files` — 列 `<root>/domain-skills/<段>/` 的技能文件名（排序，封顶
 - `install` — `browse workspace install`：git clone 种子仓到 `root`。clone 不带
 - `list_json` — `browse workspace list` 的机器面：`{domains: [{segment, files}],
 - `read_page` — `browse workspace page <slug>`：读 `page-skills/<slug>.md` 全文。

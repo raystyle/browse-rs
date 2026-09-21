@@ -63,6 +63,11 @@
       "docs": "POST /quit 退 daemon，daemon 侧顺带只终结自起引擎（附着来源不动）。\n\n# Errors\n\ndaemon 不在（幂等场景调用方先判活）或 HTTP 失败。"
     },
     {
+      "path": "browse_cli::client::skills_passthrough_env",
+      "kind": "function",
+      "docs": "技能层透传环境（#50/#51）：拉起新 daemon 时把 CLI 进程里的 workspace\n根与两个触发开关带过去（`BROWSE_SECRETS` 同款语义：只影响新拉起的\ndaemon，已在跑的以启动时口径为准，改这些配置要重启 daemon）。\n\n# Examples\n\n```\n// 未设三变量时透传清单为空（不注无谓 env）\nif std::env::var_os(\"BROWSE_WORKSPACE\").is_none() {\n    assert!(browse_cli::client::skills_passthrough_env().is_empty());\n}\n```"
+    },
+    {
       "path": "browse_cli::client::state_dir",
       "kind": "function",
       "docs": "返回 daemon 日志与运行面目录（`%USERPROFILE%\\.browse-rs[\\<name>]`，多实例各一份）。"

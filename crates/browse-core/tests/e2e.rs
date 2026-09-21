@@ -376,6 +376,74 @@ l`.length === 3].join(\"|\")", returnByValue:true})).result.value"#;
         Some(&json!("goto-b")),
         "reload 后 title 应保持: {rl}"
     );
+
+    // ---- #50 技能触发层（domain）：命中点名 + 未命中零新增键 + 可关 ----
+    // 临时 workspace 注入：e2e 进程内逐调用读 env（skills.rs 不缓存），
+    // SEQ 串行窗内窄改、测毕还原
+    let ws = std::env::temp_dir().join(format!("browse-ws-e2e-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&ws);
+    let seg_dir = ws.join("domain-skills").join("skill");
+    std::fs::create_dir_all(&seg_dir).unwrap();
+    std::fs::write(
+        seg_dir.join("notes.md"),
+        "# skill 站要点\n- 登录走 cookie\n",
+    )
+    .unwrap();
+    // SAFETY: SEQ 互斥下本块独占改 env，其余 e2e 测试不读这三个变量
+    unsafe { std::env::set_var("BROWSE_WORKSPACE", &ws) };
+    host.eval_snippet(
+        r#"await routeMock("http://skill.test/*", "<title>skill</title><h1>s</h1>", {contentType: "text/html"})"#,
+    )
+    .await
+    .expect("routeMock 技能页");
+    let sk = host
+        .eval_snippet(r#"return await goto("http://skill.test/f", {timeout: 10})"#)
+        .await
+        .expect("goto 技能页");
+    assert_eq!(
+        sk.get("domain_skills"),
+        Some(&json!(["notes.md"])),
+        "域名命中应点名: {sk}"
+    );
+    assert!(
+        sk.get("domain_skills_hint")
+            .and_then(Value::as_str)
+            .is_some_and(|h| h.contains("browse workspace site skill")),
+        "hint 应给读全文命令: {sk}"
+    );
+    // 未命中（data: URL 无域名段）：键集恰为现状三键（逐字节一致的等价断言）
+    let plain = host
+        .eval_snippet(r#"return await goto("data:text/html,<title>plain</title><p>p</p>")"#)
+        .await
+        .expect("goto 素页");
+    let mut keys: Vec<&str> = plain
+        .as_object()
+        .expect("对象回执")
+        .keys()
+        .map(|k| k.as_str())
+        .collect();
+    keys.sort_unstable();
+    assert_eq!(
+        keys,
+        vec!["elapsedMs", "title", "url"],
+        "未命中零新增键: {plain}"
+    );
+    // 分层关闭：BROWSE_DOMAIN_SKILLS=0 时命中页也不附键
+    // SAFETY: 同上，窄窗后还原
+    unsafe { std::env::set_var("BROWSE_DOMAIN_SKILLS", "0") };
+    let off = host
+        .eval_snippet(r#"return await goto("http://skill.test/f", {timeout: 10})"#)
+        .await
+        .expect("goto 关层面");
+    assert!(off.get("domain_skills").is_none(), "关闭后不点名: {off}");
+    // 清拦截规则再还原环境（不把 skill.test 规则漏给后续块）
+    host.eval_snippet("await routeClear()")
+        .await
+        .expect("routeClear 技能块");
+    // SAFETY: 还原环境并清临时仓
+    unsafe { std::env::remove_var("BROWSE_DOMAIN_SKILLS") };
+    unsafe { std::env::remove_var("BROWSE_WORKSPACE") };
+    let _ = std::fs::remove_dir_all(&ws);
     // 秒口径（#51）：直写秒与旧毫秒习惯值等价，混用守卫带 timeoutWarning
     let wl_s = host
         .eval_snippet("return await waitLoad(2)")
@@ -1797,8 +1865,10 @@ return await responseBody(evs[0].params.requestId)"#,
     )
     .await
     .expect("导航 dedup");
+    // 窗口取最旧 N 条：技能层块（#50）等前序导航会推高事件水位，50
+    // 装不下时 dedup 落窗外假失败；断言意图是「恰一份」非「前 50 内」
     let dup = host
-        .eval_snippet(r#"return await session.peekEvents("Network.responseReceived", 50)"#)
+        .eval_snippet(r#"return await session.peekEvents("Network.responseReceived", 200)"#)
         .await
         .expect("peek dedup");
     let dedup_events: Vec<&Value> = dup

@@ -545,6 +545,8 @@ async fn main() -> Result<()> {
                 }
                 envs.push(("BROWSE_SECRETS", f));
             }
+            // #50/#51 技能层透传（改配置重启 daemon 口径同 BROWSE_SECRETS）
+            envs.extend(client::skills_passthrough_env());
             client::ensure_daemon_with_env(&envs).await?;
             let health = client::engine_up(client::UpParams {
                 headless,
@@ -1077,9 +1079,11 @@ async fn run_eval(
             eprintln!("{e:#}");
             std::process::exit(1);
         }
-        client::ensure_daemon_with_env(&[("BROWSE_SECRETS", f)]).await?;
+        let mut envs: Vec<(&str, String)> = vec![("BROWSE_SECRETS", f)];
+        envs.extend(client::skills_passthrough_env());
+        client::ensure_daemon_with_env(&envs).await?;
     } else {
-        client::ensure_daemon().await?;
+        client::ensure_daemon_with_env(&client::skills_passthrough_env()).await?;
     }
     // 显式连接意图先落引擎（up 面接受同样的旗标），再求值；proxy 三旗标
     // 同守卫透传（评审 F2：静默吞比报错更坑）

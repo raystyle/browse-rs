@@ -151,6 +151,34 @@ pub async fn ensure_daemon_with_env(envs: &[(&str, String)]) -> Result<()> {
     ))
 }
 
+/// 技能层透传环境（#50/#51）：拉起新 daemon 时把 CLI 进程里的 workspace
+/// 根与两个触发开关带过去（`BROWSE_SECRETS` 同款语义：只影响新拉起的
+/// daemon，已在跑的以启动时口径为准，改这些配置要重启 daemon）。
+///
+/// # Examples
+///
+/// ```
+/// // 未设三变量时透传清单为空（不注无谓 env）
+/// if std::env::var_os("BROWSE_WORKSPACE").is_none() {
+///     assert!(browse_cli::client::skills_passthrough_env().is_empty());
+/// }
+/// ```
+pub fn skills_passthrough_env() -> Vec<(&'static str, String)> {
+    let mut v = Vec::new();
+    for k in [
+        "BROWSE_WORKSPACE",
+        "BROWSE_DOMAIN_SKILLS",
+        "BROWSE_PAGE_SKILLS",
+    ] {
+        if let Some(val) = std::env::var_os(k).map(|s| s.to_string_lossy().into_owned())
+            && !val.is_empty()
+        {
+            v.push((k, val));
+        }
+    }
+    v
+}
+
 /// 把方言片段 POST 到 daemon 的 /eval 求值。
 ///
 /// 返回最后一条语句的值；daemon 侧错误进 `Err`（错误串已是给人/agent 的下一步指令形态）。

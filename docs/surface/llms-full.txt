@@ -97,7 +97,7 @@
 | `switchTab(targetId)` | 切活动路由（不改 Chrome 可见前景，人机共存）。 |
 | `currentTab()` | 当前活动 tab 简表（无活动返回 null）。 |
 | `closeTab(targetId?)` | 关 tab；守卫只放行自建 tab（chrome 初始页与用户 tab 拒绝）。 |
-| `goto(url, opts?)` | 一步导航（#19）：navigate 加 waitLoad 一体收尾，可选 waitIdle: true（或秒数）再等网络静默，回 {url,title,elapsedMs}；已加载页立即返回。替代 navigate 加 waitFor(loadEventFired) 组合（后者事件已发再注册即假超时，竞速窗），本函数走 readyState 轮询无此窗。timeout 秒口径（#51；不小于 1000 按毫秒误写换算并告警，封顶 600 秒）。下载型导航回 net::ERR_ABORTED 属正常（导航让位下载）：要下文件用裸 Page.navigate 加 downloads()/downloadPath()。 |
+| `goto(url, opts?)` | 一步导航（#19）：navigate 加 waitLoad 一体收尾，可选 waitIdle: true（或秒数）再等网络静默，回 {url,title,elapsedMs}；已加载页立即返回。替代 navigate 加 waitFor(loadEventFired) 组合（后者事件已发再注册即假超时，竞速窗），本函数走 readyState 轮询无此窗。timeout 秒口径（#51；不小于 1000 按毫秒误写换算并告警，封顶 600 秒）。下载型导航回 net::ERR_ABORTED 属正常（导航让位下载）：要下文件用裸 Page.navigate 加 downloads()/downloadPath()。技能触发层（#50/#51）：命中 workspace 站点知识或页面特征时回执附 domain_skills/page_skills 清单与 hint、framework:{name,version}，未命中零新增键，BROWSE_DOMAIN_SKILLS=0 / BROWSE_PAGE_SKILLS=0 分层关闭。 |
 | `goBack(delta?)` | 历史回退 delta 步（#39，越界钳到最早），等加载收尾，回 {steps,url,title}。 |
 | `goForward(delta?)` | 历史前进 delta 步（#39，越界钳到最新），等加载收尾，回 {steps,url,title}。 |
 | `reload(opts?)` | 刷新当前页（#39）：opts.ignoreCache 走强制刷新；等加载收尾，回 {ignoredCache,url,title,elapsedMs}。 |
@@ -1127,7 +1127,7 @@ await closeTab((await currentTab()).targetId)
 
 ## `goto(url, opts?)`
 
-一步导航（#19）：navigate 加 waitLoad 一体收尾，可选 waitIdle: true（或秒数）再等网络静默，回 {url,title,elapsedMs}；已加载页立即返回。替代 navigate 加 waitFor(loadEventFired) 组合（后者事件已发再注册即假超时，竞速窗），本函数走 readyState 轮询无此窗。timeout 秒口径（#51；不小于 1000 按毫秒误写换算并告警，封顶 600 秒）。下载型导航回 net::ERR_ABORTED 属正常（导航让位下载）：要下文件用裸 Page.navigate 加 downloads()/downloadPath()。
+一步导航（#19）：navigate 加 waitLoad 一体收尾，可选 waitIdle: true（或秒数）再等网络静默，回 {url,title,elapsedMs}；已加载页立即返回。替代 navigate 加 waitFor(loadEventFired) 组合（后者事件已发再注册即假超时，竞速窗），本函数走 readyState 轮询无此窗。timeout 秒口径（#51；不小于 1000 按毫秒误写换算并告警，封顶 600 秒）。下载型导航回 net::ERR_ABORTED 属正常（导航让位下载）：要下文件用裸 Page.navigate 加 downloads()/downloadPath()。技能触发层（#50/#51）：命中 workspace 站点知识或页面特征时回执附 domain_skills/page_skills 清单与 hint、framework:{name,version}，未命中零新增键，BROWSE_DOMAIN_SKILLS=0 / BROWSE_PAGE_SKILLS=0 分层关闭。
 
 参数：
 - `url`（string），必填

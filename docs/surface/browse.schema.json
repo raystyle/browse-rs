@@ -1483,7 +1483,7 @@
       "type": "object"
     },
     "goto": {
-      "description": "goto(url, opts?) 一步导航（#19）：navigate 加 waitLoad 一体收尾，可选 waitIdle: true（或秒数）再等网络静默，回 {url,title,elapsedMs}；已加载页立即返回。替代 navigate 加 waitFor(loadEventFired) 组合（后者事件已发再注册即假超时，竞速窗），本函数走 readyState 轮询无此窗。timeout 秒口径（#51；不小于 1000 按毫秒误写换算并告警，封顶 600 秒）。下载型导航回 net::ERR_ABORTED 属正常（导航让位下载）：要下文件用裸 Page.navigate 加 downloads()/downloadPath()。",
+      "description": "goto(url, opts?) 一步导航（#19）：navigate 加 waitLoad 一体收尾，可选 waitIdle: true（或秒数）再等网络静默，回 {url,title,elapsedMs}；已加载页立即返回。替代 navigate 加 waitFor(loadEventFired) 组合（后者事件已发再注册即假超时，竞速窗），本函数走 readyState 轮询无此窗。timeout 秒口径（#51；不小于 1000 按毫秒误写换算并告警，封顶 600 秒）。下载型导航回 net::ERR_ABORTED 属正常（导航让位下载）：要下文件用裸 Page.navigate 加 downloads()/downloadPath()。技能触发层（#50/#51）：命中 workspace 站点知识或页面特征时回执附 domain_skills/page_skills 清单与 hint、framework:{name,version}，未命中零新增键，BROWSE_DOMAIN_SKILLS=0 / BROWSE_PAGE_SKILLS=0 分层关闭。",
       "example": "return await goto(\"https://example.com\", {waitIdle: true})",
       "input": {
         "properties": {

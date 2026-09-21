@@ -18,6 +18,8 @@ browse CLI 的核心库：方言宿主、引擎策略、daemon HTTP API。
   （`recordStart` / `recordStop`）。
 - [`paths`]：实例命名空间（`BROWSE_NAME` -> 状态目录与 daemon 端口，
   多实例的落点，ADR-0006）。
+- [`skills`]：goto 回执的技能触发层（#50 域名点名 / #51 页面特征点名，
+  未命中零新增键）。
 - [`server`]：daemon 的 HTTP API（POST /eval、GET /health、POST /engine/up、
   POST /quit），常驻会话与全局变量跨 CLI 调用保持。
 - [`surface`]：命令面目录（CLI/全局函数/session 方法三类的单一真相源，
@@ -48,6 +50,7 @@ assert_eq!(render(&stmts), "const tabs = await listPageTargets()");
 - [`self_update`](self_update.md): browse 自更新（用户令 2026-09-18；对齐 build-release 公共契约第六节
 - [`semantic`](semantic.md): 语义层近期面：tab 族、交互三件、等待判官。
 - [`server`](server.md): daemon 的 HTTP API：常驻会话 + 方言求值 + 引擎生命周期。
+- [`skills`](skills.md): 技能触发层（#50/#51）：goto 导航回执的条件附加面。知识全文存
 - [`surface`](surface.md): 命令面目录（incur-rs 原则的方言版适配）：CLI 子命令、方言全局函数、
 - [`workspace`](workspace.md): workspace 单仓管理（#50/#51 配套）：站点与机制知识仓
 

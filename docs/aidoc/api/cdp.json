@@ -128,6 +128,11 @@
       "docs": "判断方法是否属于 browser 端点域（这类方法不附 `sessionId`）。\n\n# Examples\n\n```\nassert!(cdp::session::is_browser_method(\"Target.getTargets\"));\nassert!(!cdp::session::is_browser_method(\"Page.navigate\"));\n```"
     },
     {
+      "path": "cdp::session::url_host",
+      "kind": "function",
+      "docs": "裸 URL 的 host 提取（`http(s)://` 后到首个 `/?:#`，小写），不引 url\ncrate。何时用：域策略匹配与技能触发层的域名分段。边界：非\n`http(s)://` 前缀的形（data:/about:/ftp:）返回的是首个分隔段（即\nscheme 名，如 `\"data\"`），不是空串，要 http(s) 门禁的调用方自判。\n\n# Examples\n\n```\nassert_eq!(cdp::session::url_host(\"https://X.com/a?b\"), \"x.com\");\nassert_eq!(cdp::session::url_host(\"http://mail.google.com:8080/x\"), \"mail.google.com\");\nassert_eq!(cdp::session::url_host(\"data:text/html,x\"), \"data\");\n```"
+    },
+    {
       "path": "cdp::spawn",
       "kind": "module",
       "docs": "找到 Chrome 可执行文件并拉起一个带调试口的专属实例。\n\n只服务于「引擎自起」路径：独立 user-data 目录、调试端口自动分配\n（`--remote-debugging-port=0`，真实端口写进 profile 的\n`DevToolsActivePort`）、`browse down` 时才终结，绝不碰用户默认 profile。"

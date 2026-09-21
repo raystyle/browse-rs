@@ -158,7 +158,7 @@ pub fn list_json(root: &Path) -> serde_json::Value {
             .collect();
         segs.sort();
         for seg in segs {
-            let files = list_segment_files(root, &seg);
+            let files = domain_segment_files(root, &seg);
             domains.push(json!({
                 "segment": seg,
                 "files": files,
@@ -251,14 +251,16 @@ pub fn read_page(root: &Path, slug: &str) -> Result<String> {
 }
 
 /// 列 `<root>/domain-skills/<段>/` 的技能文件名（排序，封顶
-/// [`DOMAIN_FILES_CAP`]，只收 .md/.txt）。目录缺失返回空。
-fn list_segment_files(root: &Path, segment: &str) -> Vec<String> {
+/// [`DOMAIN_FILES_CAP`]，只收 .md/.txt）。目录缺失返回空。何时用：
+/// 技能触发层（[`crate::skills`]）的点名清单与 `browse workspace list`
+/// 共用此口径。
+pub fn domain_segment_files(root: &Path, segment: &str) -> Vec<String> {
     let mut files = all_segment_files(&root.join("domain-skills").join(segment));
     files.truncate(DOMAIN_FILES_CAP);
     files
 }
 
-/// 同 [`list_segment_files`] 但不封顶（site 清单的下钻面用）。
+/// 同 [`domain_segment_files`] 但不封顶（site 清单的下钻面用）。
 fn all_segment_files(dir: &Path) -> Vec<String> {
     let Ok(rd) = std::fs::read_dir(dir) else {
         return Vec::new();

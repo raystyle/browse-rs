@@ -16,6 +16,8 @@
 //!   （`recordStart` / `recordStop`）。
 //! - [`paths`]：实例命名空间（`BROWSE_NAME` -> 状态目录与 daemon 端口，
 //!   多实例的落点，ADR-0006）。
+//! - [`skills`]：goto 回执的技能触发层（#50 域名点名 / #51 页面特征点名，
+//!   未命中零新增键）。
 //! - [`server`]：daemon 的 HTTP API（POST /eval、GET /health、POST /engine/up、
 //!   POST /quit），常驻会话与全局变量跨 CLI 调用保持。
 //! - [`surface`]：命令面目录（CLI/全局函数/session 方法三类的单一真相源，
@@ -44,6 +46,7 @@ pub mod record;
 pub mod self_update;
 pub mod semantic;
 pub mod server;
+pub mod skills;
 pub mod surface;
 pub mod workspace;
 

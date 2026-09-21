@@ -33,6 +33,7 @@ daemon 客户端：本地 HTTP 调用 + 首次使用自动拉起 detached daemon
 - `eval` — 把方言片段 POST 到 daemon 的 /eval 求值。
 - `health` — GET /health 取 daemon 状态面；daemon 不在时报可照抄的拉起提示。
 - `quit` — POST /quit 退 daemon，daemon 侧顺带只终结自起引擎（附着来源不动）。
+- `skills_passthrough_env` — 技能层透传环境（#50/#51）：拉起新 daemon 时把 CLI 进程里的 workspace
 - `state_dir` — 返回 daemon 日志与运行面目录（`%USERPROFILE%\.browse-rs[\<name>]`，多实例各一份）。
 
 ## Types
@@ -134,6 +135,8 @@ browse CLI 的核心库：方言宿主、引擎策略、daemon HTTP API。
   （`recordStart` / `recordStop`）。
 - [`paths`]：实例命名空间（`BROWSE_NAME` -> 状态目录与 daemon 端口，
   多实例的落点，ADR-0006）。
+- [`skills`]：goto 回执的技能触发层（#50 域名点名 / #51 页面特征点名，
+  未命中零新增键）。
 - [`server`]：daemon 的 HTTP API（POST /eval、GET /health、POST /engine/up、
   POST /quit），常驻会话与全局变量跨 CLI 调用保持。
 - [`surface`]：命令面目录（CLI/全局函数/session 方法三类的单一真相源，
@@ -164,6 +167,7 @@ assert_eq!(render(&stmts), "const tabs = await listPageTargets()");
 - [`self_update`](self_update.md): browse 自更新（用户令 2026-09-18；对齐 build-release 公共契约第六节
 - [`semantic`](semantic.md): 语义层近期面：tab 族、交互三件、等待判官。
 - [`server`](server.md): daemon 的 HTTP API：常驻会话 + 方言求值 + 引擎生命周期。
+- [`skills`](skills.md): 技能触发层（#50/#51）：goto 导航回执的条件附加面。知识全文存
 - [`surface`](surface.md): 命令面目录（incur-rs 原则的方言版适配）：CLI 子命令、方言全局函数、
 - [`workspace`](workspace.md): workspace 单仓管理（#50/#51 配套）：站点与机制知识仓
 
@@ -480,6 +484,22 @@ POST /quit 三端点保留），新增 `/engine/up` 与求值前的懒引擎策�
 - `EvalRequest` — 描述 POST /eval 的请求体。
 
 
+<!-- browse_core/skills.md -->
+# browse-core::skills
+
+技能触发层（#50/#51）：goto 导航回执的条件附加面。知识全文存
+workspace 单仓（[`crate::workspace`]，github.com/raystyle/browse_workspace），
+本模块只做「点名」：命中附加清单与 hint（读全文命令），未命中或
+关闭时一键不加，回执与现状逐字节一致。
+
+## Functions
+
+- `domain_hint` — 域名层 hint 字段值（#50）：读全文命令字串。
+- `domain_segment` — URL 到域名段（#50，纯函数）：先做 http(s) 门禁（[`cdp::session::url_host`]
+- `domain_skills_enabled` — #50 域名层是否开启：`BROWSE_DOMAIN_SKILLS` 未设或非 0/false 即开。
+- `list_domain_skills` — 列 `<ws>/domain-skills/<段>/` 的技能文件名（#50，纯函数）：只收
+
+
 <!-- browse_core/surface.md -->
 # browse-core::surface
 
@@ -528,6 +548,7 @@ list/site/page）。git 维护走 shell-out `git`（不引 git crate）：instal
 
 ## Functions
 
+- `domain_segment_files` — 列 `<root>/domain-skills/<段>/` 的技能文件名（排序，封顶
 - `install` — `browse workspace install`：git clone 种子仓到 `root`。clone 不带
 - `list_json` — `browse workspace list` 的机器面：`{domains: [{segment, files}],
 - `read_page` — `browse workspace page <slug>`：读 `page-skills/<slug>.md` 全文。
@@ -667,6 +688,7 @@ Windows 直接用 `CreatePipe`，POSIX 用 `pipe(2)`。
 ## Functions
 
 - `is_browser_method` — 判断方法是否属于 browser 端点域（这类方法不附 `sessionId`）。
+- `url_host` — 裸 URL 的 host 提取（`http(s)://` 后到首个 `/?:#`，小写），不引 url
 
 ## Types
 

@@ -1229,8 +1229,19 @@ fn domain_rules() -> (Vec<&'static str>, Vec<&'static str>) {
         .clone()
 }
 
-/// 裸 URL 的 host 提取（`http(s)://` 后到首个 `/?:#`），不引 url crate。
-fn url_host(url: &str) -> String {
+/// 裸 URL 的 host 提取（`http(s)://` 后到首个 `/?:#`，小写），不引 url
+/// crate。何时用：域策略匹配与技能触发层的域名分段。边界：非
+/// `http(s)://` 前缀的形（data:/about:/ftp:）返回的是首个分隔段（即
+/// scheme 名，如 `"data"`），不是空串，要 http(s) 门禁的调用方自判。
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(cdp::session::url_host("https://X.com/a?b"), "x.com");
+/// assert_eq!(cdp::session::url_host("http://mail.google.com:8080/x"), "mail.google.com");
+/// assert_eq!(cdp::session::url_host("data:text/html,x"), "data");
+/// ```
+pub fn url_host(url: &str) -> String {
     let rest = url
         .strip_prefix("https://")
         .or_else(|| url.strip_prefix("http://"))

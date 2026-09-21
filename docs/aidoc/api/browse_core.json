@@ -470,7 +470,7 @@
     {
       "path": "browse_core::semantic::goto",
       "kind": "function",
-      "docs": "一步导航（#19）：`Page.navigate` 加 waitLoad 一体收尾，可选再等网络静默，\n返回提交后世界的 url/title/elapsedMs。用于「去这个页且等它可用」，替代\n手写 navigate 加 waitLoad 两步；也替代 navigate 加 waitFor(loadEventFired)\n组合——后者事件已发再注册即假超时（#19 竞速），本函数走 readyState 轮询\n无此窗。\n\n`timeout_ms` 是导航加载合计预算；`idle_ms` 为 Some 时再等网络静默。\nurl/title 取自目标元数据（Target.getTargets 面），瞬时提交窗内可能\n滞后；权威读取用 `location.href` / `document.title`（评审 G7）。\n\n# Errors\n\nnavigate 回执带 errorText；预算内 readyState 未到 complete；idle 档\n未静默。"
+      "docs": "一步导航（#19）：`Page.navigate` 加 waitLoad 一体收尾，可选再等网络静默，\n返回提交后世界的 url/title/elapsedMs。用于「去这个页且等它可用」，替代\n手写 navigate 加 waitLoad 两步；也替代 navigate 加 waitFor(loadEventFired)\n组合——后者事件已发再注册即假超时（#19 竞速），本函数走 readyState 轮询\n无此窗。\n\n`timeout_ms` 是导航加载合计预算；`idle_ms` 为 Some 时再等网络静默。\nurl/title 取自目标元数据（Target.getTargets 面），瞬时提交窗内可能\n滞后；权威读取用 `location.href` / `document.title`（评审 G7）。\n回执可附技能触发层键（#50/#51）：命中 workspace 站点知识时\n`domain_skills`/`domain_skills_hint`，命中页面特征时\n`page_skills`/`page_skills_hint` 与 `framework:{name,version}`；未命中\n或关闭（BROWSE_DOMAIN_SKILLS=0 / BROWSE_PAGE_SKILLS=0）一键不加。\n\n# Errors\n\nnavigate 回执带 errorText；预算内 readyState 未到 complete；idle 档\n未静默。"
     },
     {
       "path": "browse_core::semantic::grant_permissions",
@@ -633,6 +633,31 @@
       "docs": "起 HTTP daemon，监听 `bind`，直到 POST /quit。\n\n# Errors\n\n端口绑定失败或 axum serve 出错。"
     },
     {
+      "path": "browse_core::skills",
+      "kind": "module",
+      "docs": "技能触发层（#50/#51）：goto 导航回执的条件附加面。知识全文存\nworkspace 单仓（[`crate::workspace`]，github.com/raystyle/browse_workspace），\n本模块只做「点名」：命中附加清单与 hint（读全文命令），未命中或\n关闭时一键不加，回执与现状逐字节一致。"
+    },
+    {
+      "path": "browse_core::skills::domain_hint",
+      "kind": "function",
+      "docs": "域名层 hint 字段值（#50）：读全文命令字串。"
+    },
+    {
+      "path": "browse_core::skills::domain_segment",
+      "kind": "function",
+      "docs": "URL 到域名段（#50，纯函数）：先做 http(s) 门禁（[`cdp::session::url_host`]\n对 data:/about: 这类形返回的是 scheme 段，不能当 host 用），再取 host、\n剥 `www.` 前缀、取首个 `.` 前段。非 http(s) 或空 host 返回 `None`。\n多词域名不做特判（bbc.co.uk 的段是 bbc，够用口径）。\n\n# Examples\n\n```\nassert_eq!(browse_core::skills::domain_segment(\"https://x.com/a\"), Some(\"x\".into()));\nassert_eq!(\n    browse_core::skills::domain_segment(\"http://www.github.com/\"),\n    Some(\"github\".into())\n);\nassert_eq!(browse_core::skills::domain_segment(\"data:text/html,x\"), None);\n```"
+    },
+    {
+      "path": "browse_core::skills::domain_skills_enabled",
+      "kind": "function",
+      "docs": "#50 域名层是否开启：`BROWSE_DOMAIN_SKILLS` 未设或非 0/false 即开。\n逐调用读 env 不缓存（paths.rs 先例；也保 e2e 可注入临时仓）。"
+    },
+    {
+      "path": "browse_core::skills::list_domain_skills",
+      "kind": "function",
+      "docs": "列 `<ws>/domain-skills/<段>/` 的技能文件名（#50，纯函数）：只收\n.md/.txt，排序保回执确定（read_dir 顺序不保证），封顶\n[`crate::workspace::DOMAIN_FILES_CAP`]；目录缺失返回空 vec。\n\n# Examples\n\n```\n// 缺目录返回空（不报错：未装仓是常态）\nlet v = browse_core::skills::list_domain_skills(\n    std::path::Path::new(\"/nonexistent-browse-ws\"), \"x\");\nassert!(v.is_empty());\n```"
+    },
+    {
       "path": "browse_core::surface",
       "kind": "module",
       "docs": "命令面目录（incur-rs 原则的方言版适配）：CLI 子命令、方言全局函数、\nsession 方法**只在这一处登记为数据**，JSON Schema 与 LLM 清单\n（`llms.txt` / `llms-full.txt`）全部由 [`render_llms`] 系列派生函数\n从本目录生成（`browse --gen-surface docs/surface` 重生成），agent 侧\n发现通道是 `browse --llms`（与本投影同源直出），`tests/surface_contract.rs`\n锁漂移。\n\n与 incur（derive 宏命令图）的差异：我们的接口面是方言片段而非结构化\n参数，故目录手写为 `const`；incur 的技能（skill）物种不取，agent 说明书\n由 `browse --llms` 直出承担。"
@@ -706,6 +731,11 @@
       "path": "browse_core::workspace::SEED_REMOTE",
       "kind": "constant",
       "docs": "种子仓远端（install 的缺省源；本地修改 push 回推同一远端）。"
+    },
+    {
+      "path": "browse_core::workspace::domain_segment_files",
+      "kind": "function",
+      "docs": "列 `<root>/domain-skills/<段>/` 的技能文件名（排序，封顶\n[`DOMAIN_FILES_CAP`]，只收 .md/.txt）。目录缺失返回空。何时用：\n技能触发层（[`crate::skills`]）的点名清单与 `browse workspace list`\n共用此口径。"
     },
     {
       "path": "browse_core::workspace::install",
