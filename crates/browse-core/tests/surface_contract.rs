@@ -112,8 +112,8 @@ async fn every_catalog_entry_dispatches() {
 }
 
 /// 帮助面漂移守卫（cli-docs 第四节）：`render_help` 必须行首精确覆盖目录
-/// 全部 CLI 条目（防前缀超串假绿），Commands 节行数等于目录命令条数，头行
-/// 版本从载体注入。
+/// 全部 CLI 条目（防前缀超串假绿），Commands 节条目行数等于目录命令条数
+/// （组标题行不计），头行版本从载体注入。
 #[test]
 fn help_covers_catalog() {
     let help = surface::render_help();
@@ -126,14 +126,14 @@ fn help_covers_catalog() {
         .skip_while(|l| !l.starts_with("Commands:"))
         .skip(1)
         .take_while(|l| !l.starts_with("Options:"))
-        .filter(|l| !l.trim().is_empty())
+        .filter(|l| l.starts_with("  browse"))
         .count();
-    assert_eq!(cmd_lines, cli_cmds, "Commands 节行数应等于目录命令条数");
+    assert_eq!(cmd_lines, cli_cmds, "Commands 节条目行数应等于目录命令条数");
     for c in surface::COMMANDS.iter().filter(|c| c.kind == CmdKind::Cli) {
         let needle = if c.signature.starts_with("browse --") {
             c.signature.split(' ').nth(1).expect("旗标 token")
         } else {
-            c.signature.split(" [").next().expect("命令名")
+            surface::help_display_name(c)
         };
         let hit = help.lines().map(str::trim_start).any(|l| {
             l == needle
@@ -146,6 +146,39 @@ fn help_covers_catalog() {
         help.contains(&format!("browse@{}", env!("CARGO_PKG_VERSION"))),
         "帮助面头行版本未注入"
     );
+}
+
+/// 分组覆盖守卫：目录每个 CLI 形态条目都归入 HELP_GROUPS 恰一组（新命令
+/// 入目录必须归组，否则此处红）；分组表反向不引目录外名（渲染期 panic
+/// 之外的双保险）。
+#[test]
+fn help_groups_cover_catalog() {
+    let names: Vec<&str> = surface::COMMANDS
+        .iter()
+        .filter(|c| c.kind == CmdKind::Cli && !c.signature.starts_with("browse --"))
+        .map(surface::help_display_name)
+        .collect();
+    let mut grouped: Vec<&str> = surface::HELP_GROUPS
+        .iter()
+        .flat_map(|(_, ns)| ns.iter().copied())
+        .collect();
+    for n in &names {
+        let c = grouped.iter().filter(|g| *g == n).count();
+        assert_eq!(c, 1, "目录条目 {n} 归组数应为 1（0=漏归组，>1=重复归组）");
+    }
+    grouped.sort_unstable();
+    grouped.dedup();
+    assert_eq!(grouped.len(), names.len(), "分组表存在目录外名或重复名");
+}
+
+/// 帮助面零内部编号守卫：台账编号（#NN、REQ、ADR、评审、裁定日期）的
+/// 溯源属 CHANGELOG 与 diary，不进二进制帮助面。
+#[test]
+fn help_face_free_of_internal_ids() {
+    let help = surface::render_help();
+    for pat in ["（#", "REQ-0", "ADR-0", "评审 ", "用户令 ", "修正令 "] {
+        assert!(!help.contains(pat), "帮助面出现内部编号痕迹：{pat}");
+    }
 }
 
 /// 反查守卫：main.rs 解析面认识的全部长旗标必须出现在帮助面（维护件与

@@ -2,6 +2,11 @@
 
 版本级里程碑；逐批过程见 docs/diary。semver 判据在册 docs/requirements/REQ-004。
 
+## 0.13.1 - 2026-09-22
+
+- **#55 帮助面专业化重排**：Commands 按语义五组分类（求值与抓取、引擎管理、片段与知识仓、账本与产物、自更新），组内名对齐、描述改首子句短述（从 description 机械派生，单一真源零手维护）；Options 短述化并自动回填默认值；帮助面、llms 手册与 schema 三面清零内部台账编号（#NN/REQ/ADR/评审/裁定日期，溯源归 CHANGELOG 与 diary）；片段方言节紧凑化；环境变量块对齐修正。守卫三件随卷：命令树全归组锁（HELP_GROUPS 恰一覆盖）、帮助面零内部编号锁、既有全覆盖锁随分组结构更新
+- semver 判据结论（0.13.1 裁定）：帮助面文档批取 patch（REQ-004 判据行）
+
 ## 0.13.0 - 2026-09-21
 
 - **#54 判新镜像面（update 全程默认零 GitHub 依赖）**：播种流水新增 `stable/latest` 判新标记步（单行纯版本号，rclone rcat 恒在 sync 后重写防 `--delete-excluded` 洗掉，回读红灯锚定）；`latest_browse_version` 改镜像 `latest` 优先（404、超时、垃圾文本静默回落 GitHub Releases API），下载腿本就镜像优先，`browse update` 全程默认走自家镜像（browse.ohmygh.com），GitHub 仅剩镜像故障兜底（此时 GH_TOKEN 才有用）。触发面：判新腿原恒走 GitHub API，匿名 60/h 机队共用易撞（403 即整个 update 退场）

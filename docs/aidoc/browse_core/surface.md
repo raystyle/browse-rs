@@ -14,7 +14,8 @@ session 方法**只在这一处登记为数据**，JSON Schema 与 LLM 清单
 ## Functions
 
 - `catalog_json` — 返回目录的运行时 JSON，即 hostFunctions 探针的返回体。
-- `render_help` — 渲染 `--help` 与裸调用共用的帮助面（cli-docs 标准节序）：头行 name@版本
+- `help_display_name` — 目录条目在帮助面与分组表里的显示名：签名截到首个可选段与首个内联
+- `render_help` — 渲染 `--help` 与裸调用共用的帮助面（cli-docs 标准节序）：头行
 - `render_llms` — 渲染紧凑 LLM 清单 `llms.txt`（索引层，一行一命令）。
 - `render_llms_full` — 渲染完整 LLM 清单 `llms-full.txt`：索引加逐命令参数与示例。
 - `render_manual` — 渲染 `--llms` agent 手册（REQ-060 一面，族标准名）：名加版本加一句定位加子命令表
@@ -30,4 +31,5 @@ session 方法**只在这一处登记为数据**，JSON Schema 与 LLM 清单
 ## Constants
 
 - `COMMANDS` — 全量命令目录，CLI/方言/session 三面的单一真相源。
+- `HELP_GROUPS` — 帮助面 Commands 分组表：组标题到目录显示名（[`help_display_name`]
 

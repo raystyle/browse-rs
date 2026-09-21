@@ -114,7 +114,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("js", "string", true),
             arg!("stdin", "any", false, "空实参时整段管道读"),
         ],
-        description: "全量 JS 受限旁路（#22，ADR-0002 修订）：不经方言解析器直发 Runtime.evaluate（returnByValue 加 awaitPromise），return 值序列化回传；模板字符串/正则/函数声明直接写，消多层引号转义。分工：方言管 CDP 编排，--js 管页面逻辑。空实参加管道 = 整段 stdin 一次求值（配 --b64 先解码）。不可序列化值（DOM 节点、Date、Map、RegExp 等，含容器内元素）在 returnByValue 下序列化成 {}，CLI 按空容器口径零输出；要值就在 JS 里自己 JSON.stringify 或取原语（.textContent/.outerHTML）。与 --repl 不同行。",
+        description: "全量 JS 受限旁路：不经方言解析器直发 Runtime.evaluate（returnByValue 加 awaitPromise），return 值序列化回传；模板字符串/正则/函数声明直接写，消多层引号转义。分工：方言管 CDP 编排，--js 管页面逻辑。空实参加管道 = 整段 stdin 一次求值（配 --b64 先解码）。不可序列化值（DOM 节点、Date、Map、RegExp 等，含容器内元素）在 returnByValue 下序列化成 {}，CLI 按空容器口径零输出；要值就在 JS 里自己 JSON.stringify 或取原语（.textContent/.outerHTML）。与 --repl 不同行。",
         example: r#"browse --js 'return (() => { const f = s => s.length; return f("ab"); })()'"#,
     },
     CmdSpec {
@@ -122,7 +122,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Cli,
         signature: "browse --b64 '<base64>'",
         args: &[arg!("base64", "string", true, "或空参走管道整段解码")],
-        description: "base64 通道（#22）：片段实参（或 --js 的 JS 实参）按 base64 解码后再派发；空实参加管道 = 整段 stdin base64 解码（--js 管道版即 cat x.js.b64 | browse --js --b64）。PowerShell 引号与编码面一并绕开；bash 生成 base64 -w0 <文件>，PowerShell 用 [Convert]::ToBase64String。无短参（-b 是 issue new --body 的既有契约）。",
+        description: "base64 通道：片段实参（或 --js 的 JS 实参）按 base64 解码后再派发；空实参加管道 = 整段 stdin base64 解码（--js 管道版即 cat x.js.b64 | browse --js --b64）。PowerShell 引号与编码面一并绕开；bash 生成 base64 -w0 <文件>，PowerShell 用 [Convert]::ToBase64String。无短参（-b 是 issue new --body 的既有契约）。",
         example: r#"browse --js --b64 $(printf '%s' '1+1' | base64)"#,
     },
     CmdSpec {
@@ -157,11 +157,11 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("port", "number", false),
             arg!("proxy", "string", false, "无"),
             arg!("proxy-bypass", "string", false, "无"),
-            arg!("engine-arg", "string", false, "无（#48）"),
+            arg!("engine-arg", "string", false, "无"),
             arg!("isolated", "boolean", false, "false"),
             arg!("idle-timeout", "number", false, "3600000"),
         ],
-        description: "显式起引擎（附着优先，缺则 spawn clean-chrome 隔离实例；--profile 自定义 user-data-dir，默认固定 profile 持久保存站点会话；--proxy/--proxy-bypass 直通 chrome 代理旗标；--engine-arg 引擎附加旗标（#48，可叠加，spawn 时 argv 原样直通，BROWSE_ENGINE_ARGS 同道；与 browse 自身 spawn 旗标撞车时后值胜，慎叠）；--isolated 隔离态 profile 引擎退出即删（给了 --profile 时 isolated 优先）；--idle-timeout 闲置回收毫秒只对新拉起的 daemon 生效）；--cookies 域 csv（#48）起引擎后从附着浏览器只读热迁指定域登录态（源零写回，无附着源即报错指 storageState 整包往返）。",
+        description: "显式起引擎（附着优先，缺则 spawn clean-chrome 隔离实例；--profile 自定义 user-data-dir，默认固定 profile 持久保存站点会话；--proxy/--proxy-bypass 直通 chrome 代理旗标；--engine-arg 引擎附加旗标（可叠加，spawn 时 argv 原样直通，BROWSE_ENGINE_ARGS 同道；与 browse 自身 spawn 旗标撞车时后值胜，慎叠）；--isolated 隔离态 profile 引擎退出即删（给了 --profile 时 isolated 优先）；--idle-timeout 闲置回收毫秒只对新拉起的 daemon 生效）；--cookies 域 csv 起引擎后从附着浏览器只读热迁指定域登录态（源零写回，无附着源即报错指 storageState 整包往返）。",
         example: "browse up --headless --profile ~/profiles/proj-a",
     },
     CmdSpec {
@@ -223,7 +223,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("version", "string", true),
             arg!("fromDir", "string", false, "缺省走 R2 镜像下载"),
         ],
-        description: "安装 Chromium 版本并 pin：缺省从镜像下载（版本段路由加 .sha256 锚校验原子落位），给部署目录则本地导入；Windows 落位自动补 AppContainer ACE（#32，纯形带沙箱可起），回执 appContainerAce。",
+        description: "安装 Chromium 版本并 pin：缺省从镜像下载（版本段路由加 .sha256 锚校验原子落位），给部署目录则本地导入；Windows 落位自动补 AppContainer ACE（纯形带沙箱可起），回执 appContainerAce。",
         example: "browse chrome install 152.0.7977.84",
     },
     CmdSpec {
@@ -263,7 +263,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Cli,
         signature: "browse chrome doctor",
         args: &[],
-        description: "托管 Chromium 部署体检（在位/文件基线/pin；AppContainer ACE 仅 Windows 有值，缺则 hints 给 icacls 修法，#32）。",
+        description: "托管 Chromium 部署体检（在位/文件基线/pin；AppContainer ACE 仅 Windows 有值，缺则 hints 给 icacls 修法）。",
         example: "browse chrome doctor",
     },
     CmdSpec {
@@ -280,7 +280,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             ),
             arg!("timeout", "number", false, "15"),
         ],
-        description: "一次性只读抓取（#50）：HTTP 直取零浏览器成本；三条件升级引擎（正文空、墙词、少于 20 词）走 goto 加页内抽取（懒拉起）；回 {via, title, text, upgradedFrom}。对照 waitForResponse：这是无会话一次性抓取。",
+        description: "一次性只读抓取：HTTP 直取零浏览器成本；三条件升级引擎（正文空、墙词、少于 20 词）走 goto 加页内抽取（懒拉起）；回 {via, title, text, upgradedFrom}。对照 waitForResponse：这是无会话一次性抓取。",
         example: "browse fetch https://example.com",
     },
     CmdSpec {
@@ -294,7 +294,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("body", "string", false, "管道 stdin"),
             arg!("dry-run", "boolean", false, "false"),
         ],
-        description: "账本 issue 流开单（REQ-063，真源 ledger.ohmygh.com，签名道在标准 crate ledger-client）：acceptance 必填（完成判据锚）；回执 {ok,issue}；--dry-run 本地校验加载荷与签名基预览零网络（账本只增不可撤，契约实弹先走它）；关单走 omc 工位（browse 侧只增不关不删，总台修正令 2026-09-20）。",
+        description: "账本 issue 流开单（真源 ledger.ohmygh.com，签名道在标准 crate ledger-client）：acceptance 必填（完成判据锚）；回执 {ok,issue}；--dry-run 本地校验加载荷与签名基预览零网络（账本只增不可撤，契约实弹先走它）；关单走 omc 工位（browse 侧只增不关不删）。",
         example: "browse issue new \"修复 X\" --kind bug --acceptance \"测试过\" --dry-run",
     },
     CmdSpec {
@@ -329,7 +329,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("note", "string", false),
             arg!("dep", "string", false, "可重复：依赖出处，回溯链即证据链"),
         ],
-        description: "产物共享库发布（REQ-063，参数面随标准 crate ledger-client 收口）：kind 十五枚举必填（binary/experience/lesson/research/prototype/…），digest=正文或记录哈希（sha256:<64hex>），回 {ok,artifact_id}。",
+        description: "产物共享库发布（参数面随标准 crate ledger-client 收口）：kind 十五枚举必填（binary/experience/lesson/research/prototype/…），digest=正文或记录哈希（sha256:<64hex>），回 {ok,artifact_id}。",
         example: "browse artifact publish --name browse-0.8 --kind prototype --digest sha256:... --version 0.8.0 --dep github.com/raystyle/hst_rs",
     },
     CmdSpec {
@@ -341,7 +341,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("type", "string", false, "attest_dev"),
             arg!("note", "string", false),
         ],
-        description: "产物验证事件（三型：attest_dev/attest_prod/verification_failed；promote/demote/supersede 归 omc 工位，总台修正令 2026-09-20 收口）；id 须 36 字 UUID 形（browse artifact list 取真值）。",
+        description: "产物验证事件（三型：attest_dev/attest_prod/verification_failed；promote/demote/supersede 归 omc 工位 收口）；id 须 36 字 UUID 形（browse artifact list 取真值）。",
         example: "browse artifact attest 66857bb2-d1ae-4977-97df-8ab41cc37399 --type attest_prod",
     },
     CmdSpec {
@@ -360,7 +360,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Cli,
         signature: "browse ledger keygen [--force]",
         args: &[arg!("force", "boolean", false, "false")],
-        description: "Ed25519 密钥对生成（REQ-063）：私钥落 ~/.browse-rs/ledger/ed25519.key（0600 不打印），公钥 JWK 与 kid 打印供总台在册。",
+        description: "Ed25519 密钥对生成：私钥落 ~/.browse-rs/ledger/ed25519.key（0600 不打印），公钥 JWK 与 kid 打印供总台在册。",
         example: "browse ledger keygen",
     },
     CmdSpec {
@@ -368,7 +368,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Cli,
         signature: "browse snippets list [site]",
         args: &[arg!("site", "string", false, "目录/路径子串过滤")],
-        description: "列片段库（#44，#45 组合生态）：状态目录 snippets/ 下递归走访（<site>/<task>.js 天然分层），每文件取首行 // 注释头当摘要。先查库再写新片段的纪律入口。",
+        description: "列片段库（组合生态）：状态目录 snippets/ 下递归走访（<site>/<task>.js 天然分层），每文件取首行 // 注释头当摘要。先查库再写新片段的纪律入口。",
         example: "browse snippets list",
     },
     CmdSpec {
@@ -376,7 +376,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Cli,
         signature: "browse snippets show <rel>",
         args: &[arg!("rel", "string", true)],
-        description: "看片段全文（#44）；配合 --js 管道或 POST /eval 即「缺 helper 自己存」闭环。",
+        description: "看片段全文；配合 --js 管道或 POST /eval 即「缺 helper 自己存」闭环。",
         example: "browse snippets show x.test/search-title.js",
     },
     CmdSpec {
@@ -384,7 +384,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Cli,
         signature: "browse workspace status [--json]",
         args: &[arg!("json", "boolean", false, "false")],
-        description: "workspace 单仓概览（#50/#51 配套）：安装态、git remote/branch/head、未提交变更数、技能计数；仓根 BROWSE_WORKSPACE 覆盖，缺省 ~/.browse-rs/workspace。",
+        description: "workspace 单仓概览（配套）：安装态、git remote/branch/head、未提交变更数、技能计数；仓根 BROWSE_WORKSPACE 覆盖，缺省 ~/.browse-rs/workspace。",
         example: "browse workspace status",
     },
     CmdSpec {
@@ -419,7 +419,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("段", "string", true),
             arg!("文件", "string", false, "缺省打该段清单"),
         ],
-        description: "读域名站点知识（#50，goto 回执 domain_skills 的下钻面）：只给段打该段文件清单（文件名加首行标题），给 <段>/<文件> 读全文。",
+        description: "读域名站点知识（goto 回执 domain_skills 的下钻面）：只给段打该段文件清单（文件名加首行标题），给 <段>/<文件> 读全文。",
         example: "browse workspace site github",
     },
     CmdSpec {
@@ -427,7 +427,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Cli,
         signature: "browse workspace page <slug>",
         args: &[arg!("slug", "string", true)],
-        description: "读页面特征机制配方全文（#51，goto 回执 page_skills 的下钻面）：page-skills/<slug>.md。",
+        description: "读页面特征机制配方全文（goto 回执 page_skills 的下钻面）：page-skills/<slug>.md。",
         example: "browse workspace page captcha",
     },
     CmdSpec {
@@ -435,7 +435,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Cli,
         signature: "browse --serve [--bind host:port]",
         args: &[arg!("bind", "string", false, "127.0.0.1:9880")],
-        description: "daemon 即只读看板（#54）：GET /（HTML 单页零外部资源，实例概览加活动 tab）与 GET /dashboard/sse（2 秒帧事件流，断线原生重连）；看板无任何写路由。前台跑 daemon（--bind 选监听地址）。daemon 即公开 HTTP 契约（#45）：POST /eval 求值（body {code,new_tab,js}，错误形判 ok 字段）、GET /health 探活；方言做线协议门外语言不限，完整契约与 curl 三例见 docs/guides/http-api.md。",
+        description: "daemon 即只读看板：GET /（HTML 单页零外部资源，实例概览加活动 tab）与 GET /dashboard/sse（2 秒帧事件流，断线原生重连）；看板无任何写路由。前台跑 daemon（--bind 选监听地址）。daemon 即公开 HTTP 契约：POST /eval 求值（body {code,new_tab,js}，错误形判 ok 字段）、GET /health 探活；方言做线协议门外语言不限，完整契约与 curl 三例见 docs/guides/http-api.md。",
         example: "browse --serve --bind 127.0.0.1:9880",
     },
     // ---- 全局函数 ----
@@ -527,7 +527,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("ref", "string", false, "单元素子树（部分展开）"),
             arg!("depth", "number", false, "限深层数（可见树根为第 1 层）"),
         ],
-        description: "AX 树快照：nodes 带 role/name/value/childIds/短 ref（e1、e2…），引用表的唯一来源；url/title 走 CDP 查询面，页面主世界零写入（无注入痕）。opts（#36 捕获与检索分离）：ref 取该元素子树（snapshot(e34) 部分展开），depth 限深（大页先浅扫再部分展开省 token）；ref 只盖过滤后的可见集；pierce（#47/#60）：同源 iframe 与 shadow DOM 内容走 DOM.getDocument pierce，跨域 iframe（OOPIF）走子 session AX 树合并（发现加显式 attach；节点带 oopif 标与 ownerSession），都进同一 ref 表可直接 clickRef/fillRef（跨 frame 与跨 OOPIF 坐标已提升；嵌套 OOPIF 只提升一层）；pierce 清单与 AX 投影有结构节点重复（html/body 双份，ref 各自唯一同 backendNodeId），pierce 节点的 name 取 aria-label 或 id（非可见文本），pierce 与 ref 子树组合受限（pierce 节点无 childIds）。",
+        description: "AX 树快照：nodes 带 role/name/value/childIds/短 ref（e1、e2…），引用表的唯一来源；url/title 走 CDP 查询面，页面主世界零写入（无注入痕）。opts（捕获与检索分离）：ref 取该元素子树（snapshot(e34) 部分展开），depth 限深（大页先浅扫再部分展开省 token）；ref 只盖过滤后的可见集；pierce：同源 iframe 与 shadow DOM 内容走 DOM.getDocument pierce，跨域 iframe（OOPIF）走子 session AX 树合并（发现加显式 attach；节点带 oopif 标与 ownerSession），都进同一 ref 表可直接 clickRef/fillRef（跨 frame 与跨 OOPIF 坐标已提升；嵌套 OOPIF 只提升一层）；pierce 清单与 AX 投影有结构节点重复（html/body 双份，ref 各自唯一同 backendNodeId），pierce 节点的 name 取 aria-label 或 id（非可见文本），pierce 与 ref 子树组合受限（pierce 节点无 childIds）。",
         example: "const s = await snapshot({depth: 2})",
     },
     CmdSpec {
@@ -539,7 +539,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("insensitive", "boolean", false, "false"),
             arg!("context", "number", false, "2（祖先链层数）"),
         ],
-        description: "服务端检索 AX 树（#36）：daemon 侧按 name/value 子串匹配（insensitive 开大小写不敏感，不引正则依赖），只回命中节点加 context 层祖先链（grep -C 式），节点带新 ref 可直接 clickRef/fillRef——比全量 snapshot 省一个量级 token；有命中才整表替换引用表（同 snapshot 语义），零命中保留旧表并标 kept_refs:true。检索范围是顶层 AX 树：iframe/shadow 内节点不在其中（#47 实弹），要穿透先 snapshot({pierce: true}) 再按 role/name 取 ref。",
+        description: "服务端检索 AX 树：daemon 侧按 name/value 子串匹配（insensitive 开大小写不敏感，不引正则依赖），只回命中节点加 context 层祖先链（grep -C 式），节点带新 ref 可直接 clickRef/fillRef——比全量 snapshot 省一个量级 token；有命中才整表替换引用表（同 snapshot 语义），零命中保留旧表并标 kept_refs:true。检索范围是顶层 AX 树：iframe/shadow 内节点不在其中（实弹），要穿透先 snapshot({pierce: true}) 再按 role/name 取 ref。",
         example: "const f = await findRefs(\"Sign in\", {context: 1})",
     },
     CmdSpec {
@@ -555,7 +555,7 @@ pub const COMMANDS: &[CmdSpec] = &[
                 "verbose（error<warning<log/info<debug<verbose）"
             ),
         ],
-        description: "控制台消息分级检索（#37，只认活动 tab，他 tab 信号不泄漏）：Runtime.consoleAPICalled 缓冲过滤 minLevel 及以上（档序 error 加 assert 同档 < warning < log/info < debug < verbose，未知名落 verbose）；Runtime 域随 tab 入口自动开（开域前的旧消息收不到），缓冲环形 1000 条超量挤老。回 {count, messages:[{seq,level,text}]}。",
+        description: "控制台消息分级检索（只认活动 tab，他 tab 信号不泄漏）：Runtime.consoleAPICalled 缓冲过滤 minLevel 及以上（档序 error 加 assert 同档 < warning < log/info < debug < verbose，未知名落 verbose）；Runtime 域随 tab 入口自动开（开域前的旧消息收不到），缓冲环形 1000 条超量挤老。回 {count, messages:[{seq,level,text}]}。",
         example: "return await console({minLevel: \"error\"})",
     },
     CmdSpec {
@@ -563,7 +563,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "jsErrors(since?)",
         args: &[arg!("since", "number", false, "0（seq 游标）")],
-        description: "未捕获 JS 异常列表（#37，只认活动 tab）：Runtime.exceptionThrown 过滤（该事件本就是未捕获面），回 {count, errors:[{seq,text,url,line}]}；开域前与被挤出环形缓冲的旧异常取不到。",
+        description: "未捕获 JS 异常列表（只认活动 tab）：Runtime.exceptionThrown 过滤（该事件本就是未捕获面），回 {count, errors:[{seq,text,url,line}]}；开域前与被挤出环形缓冲的旧异常取不到。",
         example: "return await jsErrors()",
     },
     CmdSpec {
@@ -574,7 +574,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("since", "number", false, "0（seq 游标）"),
             arg!("filter", "string", false, "url 子串过滤"),
         ],
-        description: "网络响应摘要列表（#37，只认活动 tab）：Network.responseReceived 映射 {index,requestId,url,status,type,bytes}（index 是过滤后列表序，requestDetail 传同参即对齐）；Network 域随 tab 入口自动开，缓冲环形 1000 条。要单条详情走 requestDetail，要响应体走 responseBody(requestId)。",
+        description: "网络响应摘要列表（只认活动 tab）：Network.responseReceived 映射 {index,requestId,url,status,type,bytes}（index 是过滤后列表序，requestDetail 传同参即对齐）；Network 域随 tab 入口自动开，缓冲环形 1000 条。要单条详情走 requestDetail，要响应体走 responseBody(requestId)。",
         example: "return await requests({filter: \"/api/\"})",
     },
     CmdSpec {
@@ -585,7 +585,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("indexOrRequestId", "any", true),
             arg!("since", "number", false, "0（与 requests 同窗）"),
         ],
-        description: "单条网络响应详情（#37，只认活动 tab）：index 配同 filter 与 requests() 列表严格对齐（评审 F2 修法），或直接给 requestId 取最新；回 url/status/type/mimeType/headers/bytes，body 另走 responseBody(requestId)。",
+        description: "单条网络响应详情（只认活动 tab）：index 配同 filter 与 requests() 列表严格对齐，或直接给 requestId 取最新；回 url/status/type/mimeType/headers/bytes，body 另走 responseBody(requestId)。",
         example: "return await requestDetail(0)",
     },
     CmdSpec {
@@ -593,7 +593,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "detect()",
         args: &[],
-        description: "页面态结构化判读（#49）：{verdict, evidence[], suggestion}。判序 challenged（挑战关键词加 403/503 或短正文）> rate-limited（429）> blocked（403）> stalled（加载失败且未完成）> login-wall（complete 且有密码框，保守独立信号）> blank（complete 但正文与节点双低）> loading > ok；网络信号只认活动 tab（后台 tab 状态码不劫持判读）；信号源是页内探针（一次 evaluate）加事件缓冲网络计数。与 #37 互补：那是流的可观测性，本函数是页面态判官。",
+        description: "页面态结构化判读：{verdict, evidence[], suggestion}。判序 challenged（挑战关键词加 403/503 或短正文）> rate-limited（429）> blocked（403）> stalled（加载失败且未完成）> login-wall（complete 且有密码框，保守独立信号）> blank（complete 但正文与节点双低）> loading > ok；网络信号只认活动 tab（后台 tab 状态码不劫持判读）；信号源是页内探针（一次 evaluate）加事件缓冲网络计数。与 requests() 族互补：那是流的可观测性，本函数是页面态判官。",
         example: "return await detect()",
     },
     CmdSpec {
@@ -601,7 +601,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "cookies(domain?)",
         args: &[arg!("domain", "string", false)],
-        description: "列 cookie（#42）：Network.getCookies 原生字段简表。无参＝当前页 URL 作用域（非全 jar，实弹口径）；给 domain 则按该域 http/https 显式过滤；要跨域清单就逐域调。",
+        description: "列 cookie：Network.getCookies 原生字段简表。无参＝当前页 URL 作用域（非全 jar，实弹口径）；给 domain 则按该域 http/https 显式过滤；要跨域清单就逐域调。",
         example: "return await cookies(\"example.com\")",
     },
     CmdSpec {
@@ -609,7 +609,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "cookieGet(name)",
         args: &[arg!("name", "string", true)],
-        description: "查单条 cookie（#42）：按 name 精确匹配（同名跨域取第一条，需要确定域用 cookies(domain) 再筛），null 即不存在。",
+        description: "查单条 cookie：按 name 精确匹配（同名跨域取第一条，需要确定域用 cookies(domain) 再筛），null 即不存在。",
         example: "return await cookieGet(\"session\")",
     },
     CmdSpec {
@@ -624,7 +624,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("expires", "number", false, "Unix 秒"),
             arg!("sameSite", "string", false),
         ],
-        description: "写单条 cookie（#42）：Network.setCookie，缺 domain 走当前页 URL；回 success 布尔。",
+        description: "写单条 cookie：Network.setCookie，缺 domain 走当前页 URL；回 success 布尔。",
         example: "await cookieSet(\"k\", \"v\", {domain: \"example.com\"})",
     },
     CmdSpec {
@@ -635,7 +635,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("name", "string", true),
             arg!("domain", "string", false, "缺省当前页域"),
         ],
-        description: "删 cookie（#42）：Network.deleteCookies（CDP 无单数形）按 name 加域删全部匹配（同域同名多 path 一起清，破坏性动作）；domain 缺省当前页域。",
+        description: "删 cookie：Network.deleteCookies（CDP 无单数形）按 name 加域删全部匹配（同域同名多 path 一起清，破坏性动作）；domain 缺省当前页域。",
         example: "await cookieDelete(\"k\", \"example.com\")",
     },
     CmdSpec {
@@ -643,7 +643,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "cookiesClear()",
         args: &[],
-        description: "清空浏览器全部 cookie（#42，Network.clearBrowserCookies，作用面整浏览器不只当前域，对照 playwright cookie-clear）。",
+        description: "清空浏览器全部 cookie（Network.clearBrowserCookies，作用面整浏览器不只当前域，对照 playwright cookie-clear）。",
         example: "await cookiesClear()",
     },
     CmdSpec {
@@ -651,7 +651,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "localGet(key)",
         args: &[arg!("key", "string", true)],
-        description: "读 localStorage 单键（#42）：null 即不存在；键值经 JSON 序列化内嵌防注入。",
+        description: "读 localStorage 单键：null 即不存在；键值经 JSON 序列化内嵌防注入。",
         example: "return await localGet(\"theme\")",
     },
     CmdSpec {
@@ -659,7 +659,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "localSet(key, value)",
         args: &[arg!("key", "string", true), arg!("value", "string", true)],
-        description: "写 localStorage 单键（#42）：回写后回读值（写入即验）。",
+        description: "写 localStorage 单键：回写后回读值（写入即验）。",
         example: "await localSet(\"theme\", \"dark\")",
     },
     CmdSpec {
@@ -667,7 +667,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "localDelete(key)",
         args: &[arg!("key", "string", true)],
-        description: "删 localStorage 单键（#42）。",
+        description: "删 localStorage 单键。",
         example: "await localDelete(\"theme\")",
     },
     CmdSpec {
@@ -675,7 +675,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "localClear()",
         args: &[],
-        description: "清空当前域 localStorage（#42，不动 sessionStorage）。",
+        description: "清空当前域 localStorage（不动 sessionStorage）。",
         example: "await localClear()",
     },
     CmdSpec {
@@ -683,7 +683,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "sessionGet(key)",
         args: &[arg!("key", "string", true)],
-        description: "读 sessionStorage 单键（#42）。",
+        description: "读 sessionStorage 单键。",
         example: "return await sessionGet(\"tmp\")",
     },
     CmdSpec {
@@ -691,7 +691,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "sessionSet(key, value)",
         args: &[arg!("key", "string", true), arg!("value", "string", true)],
-        description: "写 sessionStorage 单键（#42）：回写后回读值。",
+        description: "写 sessionStorage 单键：回写后回读值。",
         example: "await sessionSet(\"tmp\", \"1\")",
     },
     CmdSpec {
@@ -699,7 +699,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "sessionDelete(key)",
         args: &[arg!("key", "string", true)],
-        description: "删 sessionStorage 单键（#42）。",
+        description: "删 sessionStorage 单键。",
         example: "await sessionDelete(\"tmp\")",
     },
     CmdSpec {
@@ -707,7 +707,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "sessionClear()",
         args: &[],
-        description: "清空当前域 sessionStorage（#42，不动 localStorage）。",
+        description: "清空当前域 sessionStorage（不动 localStorage）。",
         example: "await sessionClear()",
     },
     CmdSpec {
@@ -718,7 +718,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("ref", "string", true),
             arg!("label", "string", false, "徽标文本（annotate 形态）"),
         ],
-        description: "持久高亮覆盖层（#41）：2px 橙框不挡点击（pointer-events none），页面坐标绝对定位滚动跟随；label 给定叠编号徽标；幂等（同元素刷新框位）；清场走 highlightClear()。人看 agent 在操作哪个元素。",
+        description: "持久高亮覆盖层：2px 橙框不挡点击（pointer-events none），页面坐标绝对定位滚动跟随；label 给定叠编号徽标；幂等（同元素刷新框位）；清场走 highlightClear()。人看 agent 在操作哪个元素。",
         example: "await highlight(\"e3\", {label: \"e3\"})",
     },
     CmdSpec {
@@ -726,7 +726,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "highlightClear()",
         args: &[],
-        description: "移除全部高亮框与徽标（#41，按 data-browse-hl 属性）。",
+        description: "移除全部高亮框与徽标（按 data-browse-hl 属性）。",
         example: "await highlightClear()",
     },
     CmdSpec {
@@ -734,7 +734,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "annotate(refs)",
         args: &[arg!("refs", "array", true, "ref 字符串数组")],
-        description: "批量画框加编号徽标（#24 残余）：对一批 ref 各画框并以 ref 本身为徽标文本（与 snapshot 编号天然对齐）；任一项失败先清场再报错（不留半批框）；配合 screenshot() 取证后 highlightClear() 收场。",
+        description: "批量画框加编号徽标（残余）：对一批 ref 各画框并以 ref 本身为徽标文本（与 snapshot 编号天然对齐）；任一项失败先清场再报错（不留半批框）；配合 screenshot() 取证后 highlightClear() 收场。",
         example: "await annotate([\"e1\", \"e3\"])",
     },
     CmdSpec {
@@ -750,7 +750,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             ),
             arg!("origin", "string", false, "缺省当前页 origin"),
         ],
-        description: "开关级权限自动授予（#28）：Browser.grantPermissions 浏览器级授予权限，弹窗不再出；非法枚举（如 clipboard-read）CDP 当场报错透传；回 {granted, origin}。permissions API 查询即 granted。",
+        description: "开关级权限自动授予：Browser.grantPermissions 浏览器级授予权限，弹窗不再出；非法枚举（如 clipboard-read）CDP 当场报错透传；回 {granted, origin}。permissions API 查询即 granted。",
         example: r#"await grantPermissions(["geolocation", "notifications"])"#,
     },
     CmdSpec {
@@ -763,7 +763,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("selector", "string", false, "CSS 作用域"),
             arg!("box", "boolean", false, "带坐标"),
         ],
-        description: "引擎层语义快照（#27 批 1）：Browse.semanticSnapshot 直出紧凑语义树或 markdown（引擎内 AX 遍历，替代 JS 侧 379 节点路径）；引擎须 clean-chrome 扩展域版（--enable-features=CleanChromeBrowseDomain），否则报错带回退口径（snapshot({pierce:true})）。",
+        description: "引擎层语义快照：Browse.semanticSnapshot 直出紧凑语义树或 markdown（引擎内 AX 遍历，替代 JS 侧 379 节点路径）；引擎须 clean-chrome 扩展域版（--enable-features=CleanChromeBrowseDomain），否则报错带回退口径（snapshot({pierce:true})）。",
         example: r#"return await semanticSnapshot({format: "markdown"})"#,
     },
     CmdSpec {
@@ -784,7 +784,7 @@ pub const COMMANDS: &[CmdSpec] = &[
                 "逗号串：childList,attributes,characterData"
             ),
         ],
-        description: "引擎层变更订阅（#27 批 2）：Browse.subscribeChanges 订阅 DOM 子树变更（引擎内 MutationObserver 零页面痕迹）；selector 必填（缺则本函数当场报错带 CTA，不落引擎 -32602），kinds 缺省三类全收；回 {subscriptionId}；推送走 Browse.changesPushed 事件，事件形 {subscriptionId, changes: string[]}（每行一条紧凑变更描述，如 childList DIV#t +1 -0），在发起订阅的 page session 上投递：peekEvents 不过滤可全量读，waitFor 只认活动 tab（换 tab 后要读旧 session 的推送就用 peekEvents）。引擎须扩展域版（--enable-features=CleanChromeBrowseDomain），否则 -32601 报错指路；取消走 unsubscribeChanges(sub)。",
+        description: "引擎层变更订阅：Browse.subscribeChanges 订阅 DOM 子树变更（引擎内 MutationObserver 零页面痕迹）；selector 必填（缺则本函数当场报错带 CTA，不落引擎 -32602），kinds 缺省三类全收；回 {subscriptionId}；推送走 Browse.changesPushed 事件，事件形 {subscriptionId, changes: string[]}（每行一条紧凑变更描述，如 childList DIV#t +1 -0），在发起订阅的 page session 上投递：peekEvents 不过滤可全量读，waitFor 只认活动 tab（换 tab 后要读旧 session 的推送就用 peekEvents）。引擎须扩展域版（--enable-features=CleanChromeBrowseDomain），否则 -32601 报错指路；取消走 unsubscribeChanges(sub)。",
         example: "const s = await subscribeChanges({selector: \"#feed\"})",
     },
     CmdSpec {
@@ -792,7 +792,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "unsubscribeChanges(subscriptionId)",
         args: &[arg!("subscriptionId", "string", true)],
-        description: "取消变更订阅（#27 批 2）：Browse.unsubscribeChanges 静默取消；引擎侧已知响应偶失（功能生效，引擎日记在册），本调用可能无回执或报超时，按订阅已静默处理，勿依赖响应体重试。",
+        description: "取消变更订阅：Browse.unsubscribeChanges 静默取消；引擎侧已知响应偶失（功能生效，引擎日记在册），本调用可能无回执或报超时，按订阅已静默处理，勿依赖响应体重试。",
         example: "await unsubscribeChanges(\"1:abc\")",
     },
     CmdSpec {
@@ -800,7 +800,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "engineWaitForResponse(pattern)",
         args: &[arg!("pattern", "string", true)],
-        description: "引擎层响应等待（#27 批 3）：Browse.waitForResponse 引擎内 pattern 订阅，登记即回 {waitId} 不阻塞；命中推送 Browse.responseReady 事件。pattern 支持 url:/api/、status:200、method:POST、type:json 逗号 AND 组合；匹配语义是 URL 子串非 glob。与 JS 侧 waitForResponse 三点差分：登记即回不阻塞（JS 侧阻塞到命中）、URL 子串非 glob 通配、无内置超时（调用方在事件面自管 waitFor/peekEvents）。引擎须扩展域版（命令骨架已绿事件面在途），否则 -32601 报错指路 JS 侧替代。",
+        description: "引擎层响应等待：Browse.waitForResponse 引擎内 pattern 订阅，登记即回 {waitId} 不阻塞；命中推送 Browse.responseReady 事件。pattern 支持 url:/api/、status:200、method:POST、type:json 逗号 AND 组合；匹配语义是 URL 子串非 glob。与 JS 侧 waitForResponse 三点差分：登记即回不阻塞（JS 侧阻塞到命中）、URL 子串非 glob 通配、无内置超时（调用方在事件面自管 waitFor/peekEvents）。引擎须扩展域版（命令骨架已绿事件面在途），否则 -32601 报错指路 JS 侧替代。",
         example: "const w = await engineWaitForResponse(\"url:/api/\")",
     },
     CmdSpec {
@@ -808,7 +808,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "engineCancelWait(waitId)",
         args: &[arg!("waitId", "string", true)],
-        description: "取消引擎层响应等待（#27 批 3）：Browse.cancelWait 静默取消。",
+        description: "取消引擎层响应等待：Browse.cancelWait 静默取消。",
         example: "await engineCancelWait(\"1:abc\")",
     },
     CmdSpec {
@@ -824,7 +824,7 @@ pub const COMMANDS: &[CmdSpec] = &[
                 "CSS 子树作用域（同 semanticSnapshot）"
             ),
         ],
-        description: "引擎层截图差分（#27 批 4）：Browse.screenshotDiff 引擎内语义哈希 diff（像素级批 4b 候补），回 {changed, ratio} 只收结论零图传。与 screenshot({ifChanged}) 的边界：ifChanged 是字节相等（同引擎二进制确定性），screenshotDiff 是语义哈希比值。引擎须扩展域版，否则 -32601 报错指路字节口径替代。",
+        description: "引擎层截图差分：Browse.screenshotDiff 引擎内语义哈希 diff（像素级批 4b 候补），回 {changed, ratio} 只收结论零图传。与 screenshot({ifChanged}) 的边界：ifChanged 是字节相等（同引擎二进制确定性），screenshotDiff 是语义哈希比值。引擎须扩展域版，否则 -32601 报错指路字节口径替代。",
         example: "return await screenshotDiff()",
     },
     CmdSpec {
@@ -832,7 +832,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "cloneCookies(domains)",
         args: &[arg!("domains", "array", true, "域名字符串数组")],
-        description: "登录态按域热迁（#48）：从附着浏览器（probe_default 发现）只读取指定域 cookie 后缀匹配，Network.setCookies 灌入当前引擎；源零写回铁律；回 {cloned,matched,domains}。无附着源（probe_default 只探 9222 与默认 profile 的 DevToolsActivePort，其他端口的附着态取不到）报错指 exportStorageState 整包往返；域匹配不区分大小写、输入前导点剥掉；cloned 小于 matched 时回 failed 与 firstError。",
+        description: "登录态按域热迁：从附着浏览器（probe_default 发现）只读取指定域 cookie 后缀匹配，Network.setCookies 灌入当前引擎；源零写回铁律；回 {cloned,matched,domains}。无附着源（probe_default 只探 9222 与默认 profile 的 DevToolsActivePort，其他端口的附着态取不到）报错指 exportStorageState 整包往返；域匹配不区分大小写、输入前导点剥掉；cloned 小于 matched 时回 failed 与 firstError。",
         example: r#"await cloneCookies(["example.com"])"#,
     },
     CmdSpec {
@@ -840,7 +840,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "downloads(since?)",
         args: &[arg!("since", "number", false, "0（seq 游标）")],
-        description: "下载列表（#38）：Browser.downloadWillBegin 行情加同 guid 最新 downloadProgress（state/receivedBytes/totalBytes）；落盘目录是状态目录 downloads/，捕获随 tab 入口自动开（Browser 域事件不做活动 tab 过滤）。",
+        description: "下载列表：Browser.downloadWillBegin 行情加同 guid 最新 downloadProgress（state/receivedBytes/totalBytes）；落盘目录是状态目录 downloads/，捕获随 tab 入口自动开（Browser 域事件不做活动 tab 过滤）。",
         example: "return await downloads()",
     },
     CmdSpec {
@@ -851,7 +851,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("guid", "string", true),
             arg!("timeoutS", "number", false, "20"),
         ],
-        description: "等下载完成后回落盘路径（#38）：completed 给 named 路径（改名未落时给 guid 原始名候选），canceled 报错，超时带当前态 CTA；guid 来自 downloads()。",
+        description: "等下载完成后回落盘路径：completed 给 named 路径（改名未落时给 guid 原始名候选），canceled 报错，超时带当前态 CTA；guid 来自 downloads()。",
         example: "return await downloadPath(\"<guid>\")",
     },
     CmdSpec {
@@ -863,7 +863,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("full", "boolean", false, "false"),
             arg!("opts", "object", false, "{format,quality,ifChanged}"),
         ],
-        description: "页内截图存文件；opts（#24）：format png/jpeg、quality（jpeg 1-100 缺省 80）、ifChanged（与既有文件逐字节相同即 skipped，省读回不省拍摄；字节可比性限同一引擎二进制）。回 {path,bytes,skipped}。同片段 navigate 后的提交窗竞速由 host 层统一等提交（#34 根因级，页面级调用闸到主框架 frameNavigated），本函数另内建 Not attached 有界重试兜底；opts.ref 元素级截图（clip 到 bbox，#41）加 opts.hires/scale 高倍采样。",
+        description: "页内截图存文件；opts：format png/jpeg、quality（jpeg 1-100 缺省 80）、ifChanged（与既有文件逐字节相同即 skipped，省读回不省拍摄；字节可比性限同一引擎二进制）。回 {path,bytes,skipped}。同片段 navigate 后的提交窗竞速由 host 层统一等提交（根因级，页面级调用闸到主框架 frameNavigated），本函数另内建 Not attached 有界重试兜底；opts.ref 元素级截图（clip 到 bbox）加 opts.hires/scale 高倍采样。",
         example: r#"return await screenshot(null, false, {ifChanged: true})"#,
     },
     CmdSpec {
@@ -879,7 +879,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "newTab(url?)",
         args: &[arg!("url", "string", false, "about:blank")],
-        description: "开新 tab 并设为活动路由（先 about:blank 再 goto，防竞速假完成）；带 url 时内部等加载预算 15 秒与 goto 缺省对齐（#57 G3）。",
+        description: "开新 tab 并设为活动路由（先 about:blank 再 goto，防竞速假完成）；带 url 时内部等加载预算 15 秒与 goto 缺省对齐（G3）。",
         example: "await newTab(\"https://example.com\")",
     },
     CmdSpec {
@@ -914,7 +914,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("url", "string", true),
             arg!("opts", "object", false, "{timeout:15}"),
         ],
-        description: "一步导航（#19）：navigate 加 waitLoad 一体收尾，可选 waitIdle: true（或秒数）再等网络静默，回 {url,title,elapsedMs}；已加载页立即返回。替代 navigate 加 waitFor(loadEventFired) 组合（后者事件已发再注册即假超时，竞速窗），本函数走 readyState 轮询无此窗。timeout 秒口径（#51；不小于 1000 按毫秒误写换算并告警，封顶 600 秒）。下载型导航回 net::ERR_ABORTED 属正常（导航让位下载）：要下文件用裸 Page.navigate 加 downloads()/downloadPath()。技能触发层（#50/#51）：命中 workspace 站点知识或页面特征时回执附 domain_skills/page_skills 清单与 hint、framework:{name,version}，未命中零新增键，BROWSE_DOMAIN_SKILLS=0 / BROWSE_PAGE_SKILLS=0 分层关闭。",
+        description: "一步导航：navigate 加 waitLoad 一体收尾，可选 waitIdle: true（或秒数）再等网络静默，回 {url,title,elapsedMs}；已加载页立即返回。替代 navigate 加 waitFor(loadEventFired) 组合（后者事件已发再注册即假超时，竞速窗），本函数走 readyState 轮询无此窗。timeout 秒口径（；不小于 1000 按毫秒误写换算并告警，封顶 600 秒）。下载型导航回 net::ERR_ABORTED 属正常（导航让位下载）：要下文件用裸 Page.navigate 加 downloads()/downloadPath()。技能触发层：命中 workspace 站点知识或页面特征时回执附 domain_skills/page_skills 清单与 hint、framework:{name,version}，未命中零新增键，BROWSE_DOMAIN_SKILLS=0 / BROWSE_PAGE_SKILLS=0 分层关闭。",
         example: "return await goto(\"https://example.com\", {waitIdle: true})",
     },
     CmdSpec {
@@ -922,7 +922,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "goBack(delta?)",
         args: &[arg!("delta", "number", false, "1")],
-        description: "历史回退 delta 步（#39，越界钳到最早），等加载收尾，回 {steps,url,title}。",
+        description: "历史回退 delta 步（越界钳到最早），等加载收尾，回 {steps,url,title}。",
         example: "return await goBack(2)",
     },
     CmdSpec {
@@ -930,7 +930,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "goForward(delta?)",
         args: &[arg!("delta", "number", false, "1")],
-        description: "历史前进 delta 步（#39，越界钳到最新），等加载收尾，回 {steps,url,title}。",
+        description: "历史前进 delta 步（越界钳到最新），等加载收尾，回 {steps,url,title}。",
         example: "return await goForward()",
     },
     CmdSpec {
@@ -938,7 +938,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "reload(opts?)",
         args: &[arg!("opts", "object", false, "{}")],
-        description: "刷新当前页（#39）：opts.ignoreCache 走强制刷新；等加载收尾，回 {ignoredCache,url,title,elapsedMs}。",
+        description: "刷新当前页：opts.ignoreCache 走强制刷新；等加载收尾，回 {ignoredCache,url,title,elapsedMs}。",
         example: "return await reload({ignoreCache: true})",
     },
     CmdSpec {
@@ -946,7 +946,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "mouseMove(x, y)",
         args: &[arg!("x", "number", true), arg!("y", "number", true)],
-        description: "移动鼠标（#35）：触发 CSS :hover 与 mouseenter/leave 路径；hoverAt 是同义坐标版。",
+        description: "移动鼠标：触发 CSS :hover 与 mouseenter/leave 路径；hoverAt 是同义坐标版。",
         example: "await mouseMove(120, 40)",
     },
     CmdSpec {
@@ -963,7 +963,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("x", "number", false, "缺省最近 mouseMove 落点"),
             arg!("y", "number", false),
         ],
-        description: "按下不释放（#35）：拖拽与长按语义的半边，与 mouseUp 配对；坐标缺省沿用最近 mouseMove 落点（按下前自动 move 打点）。",
+        description: "按下不释放：拖拽与长按语义的半边，与 mouseUp 配对；坐标缺省沿用最近 mouseMove 落点（按下前自动 move 打点）。",
         example: "await mouseDown()",
     },
     CmdSpec {
@@ -975,7 +975,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("x", "number", false, "缺省最近落点"),
             arg!("y", "number", false),
         ],
-        description: "释放按键（#35）：与 mouseDown 配对；坐标缺省沿用最近落点。",
+        description: "释放按键：与 mouseDown 配对；坐标缺省沿用最近落点。",
         example: "await mouseUp()",
     },
     CmdSpec {
@@ -983,7 +983,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "mouseWheel(dx, dy)",
         args: &[arg!("dx", "number", true), arg!("dy", "number", true)],
-        description: "滚轮（#35）：像素量（向下滚 dy 正），走 synthesizeScrollGesture 手势合成（导航后首发吞没问题已绕开；落点用最近 mouseMove 位置缺省中上）；SPA 懒加载监听 wheel 时 JS scrollBy 不可替代。要精确单 wheel 事件裸调 Input.dispatchMouseEvent（注意导航后首个会被吞）。",
+        description: "滚轮：像素量（向下滚 dy 正），走 synthesizeScrollGesture 手势合成（导航后首发吞没问题已绕开；落点用最近 mouseMove 位置缺省中上）；SPA 懒加载监听 wheel 时 JS scrollBy 不可替代。要精确单 wheel 事件裸调 Input.dispatchMouseEvent（注意导航后首个会被吞）。",
         example: "await mouseWheel(0, 600)",
     },
     CmdSpec {
@@ -994,7 +994,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("ref", "string", true),
             arg!("paths", "array", true, "daemon 侧绝对路径"),
         ],
-        description: "文件灌入 input[type=file]（#35）：DOM.setFileInputFiles 直灌（可靠面，multiple 支持，路径预检不存在即报错防 CDP 静默假成功）；拖拽事件序列用 mouseDown/Move/Up 手拼。",
+        description: "文件灌入 input[type=file]：DOM.setFileInputFiles 直灌（可靠面，multiple 支持，路径预检不存在即报错防 CDP 静默假成功）；拖拽事件序列用 mouseDown/Move/Up 手拼。",
         example: "await dropFiles(\"e3\", [\"/tmp/a.png\"])",
     },
     CmdSpec {
@@ -1012,7 +1012,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             ),
             arg!("clickCount", "number", false, "1（2 即双击语义）"),
         ],
-        description: "视口坐标 trusted 点击（点当前可见物，不做遮挡检查）；opts（#35）button 换键、clickCount 双击。",
+        description: "视口坐标 trusted 点击（点当前可见物，不做遮挡检查）；optsbutton 换键、clickCount 双击。",
         example: "await clickAt(120, 40)",
     },
     CmdSpec {
@@ -1029,7 +1029,7 @@ pub const COMMANDS: &[CmdSpec] = &[
                 "false（true 或 {submit:true} 填完顺带 Enter）"
             ),
         ],
-        description: "按 CSS 选择器填输入框（SelectAll 不发 Ctrl+A，回读严格验证；select 走 selectOption；submit 填完顺带 Enter（#39）；提交若触发导航或对话框，后续用 goto()/waitLoad() 收尾或先 dialogStatus()。",
+        description: "按 CSS 选择器填输入框（SelectAll 不发 Ctrl+A，回读严格验证；select 走 selectOption；submit 填完顺带 Enter；提交若触发导航或对话框，后续用 goto()/waitLoad() 收尾或先 dialogStatus()。",
         example: "await fillInput(\"#q\", \"hello\", {submit: true})",
     },
     CmdSpec {
@@ -1045,7 +1045,7 @@ pub const COMMANDS: &[CmdSpec] = &[
                 "{button:left,clickCount:1,waitNav:false,timeout:10}"
             ),
         ],
-        description: "按 snapshot 短 ref 点击：滚动可见、量中心、遮挡命中测试（被盖即拒绝并报遮挡物）、trusted 派发；opts（#35）button/clickCount 与 waitNav 可同给；opts.waitNav 链接型点击后走有界提交等待（#19）：grace 窗（2 秒或 timeout 较小者）内探到导航即等加载收尾（waitLoad.settled=nav），无导航迹象即返回（waitLoad.settled=no-nav，同文档锚点与 JS 按钮不再误等全窗），timeout 秒口径；同源 iframe 内节点坐标沿 frameElement 链提升到顶层视口系（#47），OOPIF（跨域 iframe）内节点在子 session 量中心后用父页 iframe rect 提升（#60，嵌套 OOPIF 只提升一层）。",
+        description: "按 snapshot 短 ref 点击：滚动可见、量中心、遮挡命中测试（被盖即拒绝并报遮挡物）、trusted 派发；optsbutton/clickCount 与 waitNav 可同给；opts.waitNav 链接型点击后走有界提交等待：grace 窗（2 秒或 timeout 较小者）内探到导航即等加载收尾（waitLoad.settled=nav），无导航迹象即返回（waitLoad.settled=no-nav，同文档锚点与 JS 按钮不再误等全窗），timeout 秒口径；同源 iframe 内节点坐标沿 frameElement 链提升到顶层视口系，OOPIF（跨域 iframe）内节点在子 session 量中心后用父页 iframe rect 提升（嵌套 OOPIF 只提升一层）。",
         example: "await clickRef(\"e3\", {waitNav: true})",
     },
     CmdSpec {
@@ -1062,7 +1062,7 @@ pub const COMMANDS: &[CmdSpec] = &[
                 "false（true 或 {submit:true} 填完顺带 Enter）"
             ),
         ],
-        description: "按 ref 填输入框：objectId focus、SelectAll+insertText、同节点回读严格验证（OOPIF 内节点全程走子 session，#60）；submit 填完顺带 Enter（#39）；提交若触发导航或对话框，后续用 goto()/waitLoad() 收尾或先 dialogStatus()。",
+        description: "按 ref 填输入框：objectId focus、SelectAll+insertText、同节点回读严格验证（OOPIF 内节点全程走子 session）；submit 填完顺带 Enter；提交若触发导航或对话框，后续用 goto()/waitLoad() 收尾或先 dialogStatus()。",
         example: "await fillRef(\"e2\", \"hello\", true)",
     },
     CmdSpec {
@@ -1078,7 +1078,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "checkRef(ref)",
         args: &[arg!("ref", "string", true)],
-        description: "勾选 checkbox/radio（#39）：读实态不一致才点击，幂等（checkRef 后必 true）；radio 已选中再 uncheck 无意义不点击；非 checkbox/radio 报错指 clickRef。",
+        description: "勾选 checkbox/radio：读实态不一致才点击，幂等（checkRef 后必 true）；radio 已选中再 uncheck 无意义不点击；非 checkbox/radio 报错指 clickRef。",
         example: "return await checkRef(\"e5\")",
     },
     CmdSpec {
@@ -1086,7 +1086,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "uncheckRef(ref)",
         args: &[arg!("ref", "string", true)],
-        description: "取消勾选 checkbox（#39）：同 checkRef 反向，幂等。",
+        description: "取消勾选 checkbox：同 checkRef 反向，幂等。",
         example: "return await uncheckRef(\"e5\")",
     },
     CmdSpec {
@@ -1094,7 +1094,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "pressKey(key)",
         args: &[arg!("key", "string", true)],
-        description: "按键；单键与组合（#23）：Enter 等命名键、单字符、\"Control+a\" 式修饰组合（组合不发字符；Shift 组合不产生大写输入，大写用 typeRef/fillRef；浏览器级快捷键不保证）。",
+        description: "按键；单键与组合：Enter 等命名键、单字符、\"Control+a\" 式修饰组合（组合不发字符；Shift 组合不产生大写输入，大写用 typeRef/fillRef；浏览器级快捷键不保证）。",
         example: "await pressKey(\"Control+a\")",
     },
     CmdSpec {
@@ -1143,7 +1143,7 @@ pub const COMMANDS: &[CmdSpec] = &[
                 "{status:200, contentType:\"text/html\"}"
             ),
         ],
-        description: "网络拦截：命中的请求本地应答（默认带 ACAO *）；opts.headers（#38）加额外响应头（如 Content-Disposition 触发下载）；headers 追加非覆盖（同名 Content-Type 会并存，换 CT 用 contentType 参数）；跨源页读自定义头要一并给 Access-Control-Expose-Headers。",
+        description: "网络拦截：命中的请求本地应答（默认带 ACAO *）；opts.headers加额外响应头（如 Content-Disposition 触发下载）；headers 追加非覆盖（同名 Content-Type 会并存，换 CT 用 contentType 参数）；跨源页读自定义头要一并给 Access-Control-Expose-Headers。",
         example: "await routeMock(\"http://mock.test/api*\", \"{\\\"ok\\\":1}\", {contentType: \"application/json\"})",
     },
     CmdSpec {
@@ -1159,7 +1159,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "waitLoad(s?)",
         args: &[arg!("s", "number", false, "10")],
-        description: "等 document.readyState 到 complete（已加载立即返回）。timeout 秒口径（#51）：不小于 1000 视为毫秒误写，换算并告警，封顶 600 秒（#57 F1 判据收紧，1000 至 3600 不再静默秒直解）；秒直写三位数内（上界 999 秒）；旧毫秒习惯值等价迁移。",
+        description: "等 document.readyState 到 complete（已加载立即返回）。timeout 秒口径：不小于 1000 视为毫秒误写，换算并告警，封顶 600 秒（1000 至 3600 不再静默秒直解）；秒直写三位数内（上界 999 秒）；旧毫秒习惯值等价迁移。",
         example: "await waitLoad(8)",
     },
     CmdSpec {
@@ -1170,7 +1170,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("pattern", "string", true),
             arg!("s", "number", false, "15"),
         ],
-        description: "等 URL 命中 glob（与 routeBlock/routeMock 同写法）的最近一个响应完成（#20，只认活动 tab）：回 {requestId,url,status,headers,body,base64Encoded,json}；命中含历史（Network 域须在触发前已开，本函数幂等开收不到已发出的响应），方言无并发，可用形态是触发后等待；体等 loadingFinished 再取（5 秒窗），失败显式 bodyError；base64 自动解码，可解析时附 json。timeout 秒口径（#51：不小于 1000 按毫秒误写换算并告警，封顶 600 秒；秒直写三位数内（上界 999 秒））。",
+        description: "等 URL 命中 glob（与 routeBlock/routeMock 同写法）的最近一个响应完成（只认活动 tab）：回 {requestId,url,status,headers,body,base64Encoded,json}；命中含历史（Network 域须在触发前已开，本函数幂等开收不到已发出的响应），方言无并发，可用形态是触发后等待；体等 loadingFinished 再取（5 秒窗），失败显式 bodyError；base64 自动解码，可解析时附 json。timeout 秒口径（不小于 1000 按毫秒误写换算并告警，封顶 600 秒；秒直写三位数内（上界 999 秒）。",
         example: r#"return await waitForResponse("https://x.test/api*")"#,
     },
     CmdSpec {
@@ -1178,7 +1178,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "pageEval(js)",
         args: &[arg!("js", "string", true)],
-        description: "全量 JS 一次求值（#22 受限旁路的方言内形态）：直发 Runtime.evaluate（returnByValue 加 awaitPromise），值序列化回传；模板字符串/正则/函数声明直接写。CLI 侧等价 browse --js。",
+        description: "全量 JS 一次求值（受限旁路的方言内形态）：直发 Runtime.evaluate（returnByValue 加 awaitPromise），值序列化回传；模板字符串/正则/函数声明直接写。CLI 侧等价 browse --js。",
         example: r#"return await pageEval("(() => { const xs = [1,2,3]; return xs.map(x => x * 2).join(','); })()")"#,
     },
     CmdSpec {
@@ -1186,7 +1186,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "responseBody(requestId)",
         args: &[arg!("requestId", "string", true)],
-        description: "按 requestId 取响应体（#20）：peekEvents/findEvents 拿到的 id 皆可用，base64 自动解码，回 {body,base64Encoded,json} 与 waitForResponse 同形。",
+        description: "按 requestId 取响应体：peekEvents/findEvents 拿到的 id 皆可用，base64 自动解码，回 {body,base64Encoded,json} 与 waitForResponse 同形。",
         example: r#"return await responseBody(rid)"#,
     },
     CmdSpec {
@@ -1194,7 +1194,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "hoverRef(ref)",
         args: &[arg!("ref", "string", true)],
-        description: "悬停到元素中心（#23）：触发 CSS :hover 与悬停菜单。",
+        description: "悬停到元素中心：触发 CSS :hover 与悬停菜单。",
         example: r#"await hoverRef("e3")"#,
     },
     CmdSpec {
@@ -1202,7 +1202,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "hoverAt(x, y)",
         args: &[arg!("x", "number", true), arg!("y", "number", true)],
-        description: "悬停到视口坐标（#23）：mouseMoved。",
+        description: "悬停到视口坐标：mouseMoved。",
         example: "await hoverAt(120, 40)",
     },
     CmdSpec {
@@ -1210,7 +1210,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "dblclickRef(ref)",
         args: &[arg!("ref", "string", true)],
-        description: "双击元素（#23）：press/release 两轮 clickCount 递增。",
+        description: "双击元素：press/release 两轮 clickCount 递增。",
         example: r#"await dblclickRef("e5")"#,
     },
     CmdSpec {
@@ -1221,7 +1221,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("srcRef", "string", true),
             arg!("dstRef", "string", true),
         ],
-        description: "拖拽：源中心按下分八步移到目标中心松开（#23）；覆盖 pointer/mouse 型拖拽，原生 HTML5 draggable 不在序列内。",
+        description: "拖拽：源中心按下分八步移到目标中心松开；覆盖 pointer/mouse 型拖拽，原生 HTML5 draggable 不在序列内。",
         example: r#"await dragRef("e2", "e4")"#,
     },
     CmdSpec {
@@ -1229,7 +1229,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "keydown(key)",
         args: &[arg!("key", "string", true)],
-        description: "按下不松（#23）：裸 keyDown，配合 keyup 成按住语义；组合写法同 pressKey。",
+        description: "按下不松：裸 keyDown，配合 keyup 成按住语义；组合写法同 pressKey。",
         example: r#"await keydown("Shift")"#,
     },
     CmdSpec {
@@ -1237,7 +1237,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "keyup(key)",
         args: &[arg!("key", "string", true)],
-        description: "松开按键（#23）：裸 keyUp，与 keydown 成对。",
+        description: "松开按键：裸 keyUp，与 keydown 成对。",
         example: r#"await keyup("Shift")"#,
     },
     CmdSpec {
@@ -1245,7 +1245,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "typeRef(ref, text)",
         args: &[arg!("ref", "string", true), arg!("text", "string", true)],
-        description: "真实按键序列输入（#23）：focus 后逐字符 keyDown+keyUp，contenteditable/ProseMirror 类编辑器用；普通输入框用 fillRef（insertText）。",
+        description: "真实按键序列输入：focus 后逐字符 keyDown+keyUp，contenteditable/ProseMirror 类编辑器用；普通输入框用 fillRef（insertText）。",
         example: r#"await typeRef("e7", "hello")"#,
     },
     CmdSpec {
@@ -1264,7 +1264,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             ),
             arg!("media", "string", false, "screen/print"),
         ],
-        description: "a11y 媒质仿真族（#40）：Emulation.setEmulatedMedia features 面，五参任给其一以上（非法枚举当场报错列合法值）；页内 matchMedia 感知。单次调用是全量替换：多特征同一次 opts 里给；仿真挂在 target 上跨导航保留，goto 后要 stock 视图记得 emulateMediaClear()。与 emulate({viewport,mobile,userAgent}) 并列成族。",
+        description: "a11y 媒质仿真族：Emulation.setEmulatedMedia features 面，五参任给其一以上（非法枚举当场报错列合法值）；页内 matchMedia 感知。单次调用是全量替换：多特征同一次 opts 里给；仿真挂在 target 上跨导航保留，goto 后要 stock 视图记得 emulateMediaClear()。与 emulate({viewport,mobile,userAgent}) 并列成族。",
         example: "await emulateMedia({colorScheme: \"dark\", media: \"print\"})",
     },
     CmdSpec {
@@ -1272,7 +1272,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "emulateMediaClear()",
         args: &[],
-        description: "还原媒质仿真（#40）：五特征与媒质全部回 stock。",
+        description: "还原媒质仿真：五特征与媒质全部回 stock。",
         example: "await emulateMediaClear()",
     },
     CmdSpec {
@@ -1280,7 +1280,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "emulate(opts)",
         args: &[arg!("opts", "object", true)],
-        description: "视口与 UA 仿真（#24）：viewport 加 mobile 加 userAgent 全可省；mobile 档同站更省 token；userAgent 只覆写 UA 字符串，UA-CH 高熵字段未动（引擎级覆写是 #28 范围）；userAgentMetadata（#28）随 userAgent 直传 setUserAgentOverride，UA-CH 高熵字段（brands/platform/model 等，architecture 与 platformVersion 为 CDP 必填）原生覆写非 JS 注入。",
+        description: "视口与 UA 仿真：viewport 加 mobile 加 userAgent 全可省；mobile 档同站更省 token；userAgent 只覆写 UA 字符串，UA-CH 高熵字段未动（引擎级覆写另属引擎旗标面）；userAgentMetadata随 userAgent 直传 setUserAgentOverride，UA-CH 高熵字段（brands/platform/model 等，architecture 与 platformVersion 为 CDP 必填）原生覆写非 JS 注入。",
         example: "return await emulate({viewport:{width:390,height:844}, mobile:true})",
     },
     CmdSpec {
@@ -1288,7 +1288,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "setInitScript(code)",
         args: &[arg!("code", "string", true)],
-        description: "每新文档前注入脚本（#25.2）：反检测补丁、杀 cookie 横幅；SPA 路由不重跑（只对新文档生效），空串清除。",
+        description: "每新文档前注入脚本：反检测补丁、杀 cookie 横幅；SPA 路由不重跑（只对新文档生效），空串清除。",
         example: r#"await setInitScript("window.__no_banner = 1")"#,
     },
     CmdSpec {
@@ -1296,7 +1296,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "exportStorageState()",
         args: &[],
-        description: "导出会话态（#25.3）：cookies 全量加当前页 origin 的 localStorage；多 origin 逐个切 tab 再导。",
+        description: "导出会话态：cookies 全量加当前页 origin 的 localStorage；多 origin 逐个切 tab 再导。",
         example: "return await exportStorageState()",
     },
     CmdSpec {
@@ -1304,7 +1304,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "importStorageState(state 或 path)",
         args: &[arg!("state", "any", true)],
-        description: "导入会话态（#25.3）：吃 exportStorageState 的返回值或其落盘文件路径，回两边计数。",
+        description: "导入会话态：吃 exportStorageState 的返回值或其落盘文件路径，回两边计数。",
         example: "return await importStorageState(st)",
     },
     CmdSpec {
@@ -1312,7 +1312,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "waitIdle(s?)",
         args: &[arg!("s", "number", false, "10")],
-        description: "等 network 静默（窗口语义：起点前挂着的请求不计）。timeout 秒口径（#51）：不小于 1000 视为毫秒误写，换算并告警，封顶 600 秒（#57 F1 判据收紧，1000 至 3600 不再静默秒直解）；秒直写三位数内（上界 999 秒）。",
+        description: "等 network 静默（窗口语义：起点前挂着的请求不计）。timeout 秒口径：不小于 1000 视为毫秒误写，换算并告警，封顶 600 秒（1000 至 3600 不再静默秒直解）；秒直写三位数内（上界 999 秒）。",
         example: "await waitIdle(5)",
     },
     CmdSpec {
@@ -1320,7 +1320,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "recordStart(opts?)",
         args: &[arg!("opts", "object", false, "{everyNthFrame:1}")],
-        description: "开始录屏（Screencast 帧流落盘；everyNthFrame 源端抽帧、maxWidth/maxHeight 限宽高）；opts（#43）cursor 画跟随光标元素加 showActions 点击处闪圈（screencast 帧可见，回放可读；stop 自动清）。",
+        description: "开始录屏（Screencast 帧流落盘；everyNthFrame 源端抽帧、maxWidth/maxHeight 限宽高）；optscursor 画跟随光标元素加 showActions 点击处闪圈（screencast 帧可见，回放可读；stop 自动清）。",
         example: "return await recordStart({everyNthFrame: 2})",
     },
     CmdSpec {
@@ -1328,7 +1328,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "recordChapter(title)",
         args: &[arg!("title", "string", true)],
-        description: "录制中插章节标记（#43）：按当前帧计数追加到录制目录 chapters.jsonl（文件格式已冻结：每行 {atFrames,title}；消费方回放工具二期，当前仓内只写不读）。",
+        description: "录制中插章节标记：按当前帧计数追加到录制目录 chapters.jsonl（文件格式已冻结：每行 {atFrames,title}；消费方回放工具二期，当前仓内只写不读）。",
         example: "await recordChapter(\"登录流程\")",
     },
     CmdSpec {
@@ -1360,7 +1360,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "JSON.parse(s)",
         args: &[arg!("s", "string", true)],
-        description: "宿主侧把 JSON 文本解析成值（getResponseBody 等结果的小加工，#21）。",
+        description: "宿主侧把 JSON 文本解析成值（getResponseBody 等结果的小加工）。",
         example: r#"return JSON.parse(body).title"#,
     },
     CmdSpec {
@@ -1376,7 +1376,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "值.slice(start,end?) 等",
         args: &[],
-        description: "字符串与数组的小加工（#21）：字符串 slice(start,end?)/split(sep)/includes(sub)/startsWith(sub)/endsWith(sub)/trim()/toUpperCase()/toLowerCase()；数组 slice(start,end?)/join(sep?)/includes(v)/concat(数组...)。slice 按 UTF-16 单元（同 .length，代理对切中间出替换符）；大小写转换非 locale；join 对容器元素打紧凑 JSON；includes 数值宽等（1 与 1.0 同值），容器按 JSON 深等（与 JS 引用等值不同）。纯函数无控制流，页面内逻辑仍走 Runtime.evaluate。",
+        description: "字符串与数组的小加工：字符串 slice(start,end?)/split(sep)/includes(sub)/startsWith(sub)/endsWith(sub)/trim()/toUpperCase()/toLowerCase()；数组 slice(start,end?)/join(sep?)/includes(v)/concat(数组...)。slice 按 UTF-16 单元（同 .length，代理对切中间出替换符）；大小写转换非 locale；join 对容器元素打紧凑 JSON；includes 数值宽等（1 与 1.0 同值），容器按 JSON 深等（与 JS 引用等值不同）。纯函数无控制流，页面内逻辑仍走 Runtime.evaluate。",
         example: r#"return body.slice(0, 200)"#,
     },
     // ---- session 方法 ----
@@ -1436,7 +1436,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("method", "string", true),
             arg!("s", "number", false, "15"),
         ],
-        description: "从事件缓冲取第一个 method 事件（取出即移除；超时报错，秒口径 #51）。只认活动 tab 与 browser 级事件，钉住 session（录制中）与他 tab 的不被误领；要看全缓冲用 peekEvents（不过滤）。竞速警示（#19）：loadEventFired 这类一次性事件可能在你注册前已发（假超时），等加载用 goto()/waitLoad()，等导航事件用 frameNavigated。",
+        description: "从事件缓冲取第一个 method 事件（取出即移除；超时报错，秒口径）。只认活动 tab 与 browser 级事件，钉住 session（录制中）与他 tab 的不被误领；要看全缓冲用 peekEvents（不过滤）。竞速警示：loadEventFired 这类一次性事件可能在你注册前已发（假超时），等加载用 goto()/waitLoad()，等导航事件用 frameNavigated。",
         example: "await session.waitFor(\"Page.frameNavigated\", undefined, 15)",
     },
     CmdSpec {
@@ -1447,7 +1447,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("expression", "string", true),
             arg!("s", "number", false, "10"),
         ],
-        description: "页内谓词轮询（真 V8 表达式），等到即返回真值本身。timeout 秒口径（#51）：不小于 1000 视为毫秒误写，换算并告警，封顶 600 秒（#57 F1 判据收紧，1000 至 3600 不再静默秒直解）；秒直写三位数内（上界 999 秒）。",
+        description: "页内谓词轮询（真 V8 表达式），等到即返回真值本身。timeout 秒口径：不小于 1000 视为毫秒误写，换算并告警，封顶 600 秒（1000 至 3600 不再静默秒直解）；秒直写三位数内（上界 999 秒）。",
         example: "await session.waitJs(\"document.querySelector('#x') !== null\", 5)",
     },
     CmdSpec {
@@ -1639,7 +1639,7 @@ const COMPANION_FLAGS: &[(&str, &str)] = &[
     ),
     (
         "--engine-arg <a>",
-        "引擎附加旗标（#48，可叠加）：spawn 时 argv 原样直通，如 --engine-arg --enable-features=CleanChromeBrowseDomain 开 clean-chrome 扩展域（伴 up）；BROWSE_ENGINE_ARGS 空格分隔同值；与 browse 自身 spawn 旗标（user-data-dir、remote-debugging-port 等）撞车时后值胜、会破调试口握手，慎叠",
+        "引擎附加旗标（可叠加）：spawn 时 argv 原样直通，如 --engine-arg --enable-features=CleanChromeBrowseDomain 开 clean-chrome 扩展域（伴 up）；BROWSE_ENGINE_ARGS 空格分隔同值；与 browse 自身 spawn 旗标（user-data-dir、remote-debugging-port 等）撞车时后值胜、会破调试口握手，慎叠",
     ),
     ("--eval, -e <片段>", "显式求值（与缺省形态等价）"),
     ("--full", "--llms 变体：完整目录"),
@@ -1691,10 +1691,108 @@ fn disp_width(s: &str) -> usize {
         .sum()
 }
 
-/// 渲染 `--help` 与裸调用共用的帮助面（cli-docs 标准节序）：头行 name@版本
-/// 加一句定位、Usage synopsis、Commands（[`COMMANDS`] 活树派生，描述单一
-/// 真源）、Options（目录旗标加伴生旗标，字典序列对齐）、片段方言、环境
-/// 变量、退出码。`help_covers_catalog` 守卫测试锁命令树全覆盖与版本注入。
+/// 帮助面 Commands 分组表：组标题到目录显示名（[`help_display_name`]
+/// 派生形）的显式映射。`help_groups_cover_catalog` 守卫锁全条目归组，
+/// 目录加新 CLI 条目必须同步归组，否则测试红。
+pub const HELP_GROUPS: &[(&str, &[&str])] = &[
+    (
+        "求值与抓取",
+        &[
+            "browse '<片段>'",
+            "browse -e '<片段>'",
+            "browse < 文件",
+            "browse fetch <url>",
+        ],
+    ),
+    (
+        "引擎管理",
+        &[
+            "browse up",
+            "browse down",
+            "browse status",
+            "browse chrome install <版本>",
+            "browse chrome list",
+            "browse chrome use <版本>",
+            "browse chrome update",
+            "browse chrome remove <版本>",
+            "browse chrome doctor",
+        ],
+    ),
+    (
+        "片段与知识仓",
+        &[
+            "browse snippets list",
+            "browse snippets show <rel>",
+            "browse workspace status",
+            "browse workspace install",
+            "browse workspace update",
+            "browse workspace list",
+            "browse workspace site <段>[/<文件>]",
+            "browse workspace page <slug>",
+        ],
+    ),
+    (
+        "账本与产物",
+        &[
+            "browse issue new <标题>",
+            "browse issue list",
+            "browse issue show <id>",
+            "browse artifact publish",
+            "browse artifact attest <id>",
+            "browse artifact list",
+            "browse ledger keygen",
+        ],
+    ),
+    ("自更新", &["browse update"]),
+];
+
+/// 目录条目在帮助面与分组表里的显示名：签名截到首个可选段与首个内联
+/// 旗标，只留命令路径与位置参数。
+pub fn help_display_name(c: &CmdSpec) -> &str {
+    c.signature
+        .split(" [")
+        .next()
+        .unwrap_or(c.signature)
+        .split(" --")
+        .next()
+        .unwrap_or(c.signature)
+}
+
+/// 帮助面短述：description 首子句机械派生（首个全角括号、冒号、分号或
+/// 句号前截断）。帮助与 llms/schema 共用同一描述真源、按面分层深度，
+/// 不另立第二份手维护文案。
+fn short_desc(d: &str) -> &str {
+    d.split(['（', '：', '；', '。'])
+        .next()
+        .unwrap_or(d)
+        .trim()
+        .trim_end_matches('，')
+}
+
+/// 旗标行描述：短述加默认值回填（首子句截断会丢括号内的 default 信
+/// 息，从全文机械提取补尾，不手维护）。
+fn flag_row_desc(full: &str) -> String {
+    let mut s = short_desc(full).to_string();
+    if !s.contains("default:")
+        && let Some(rest) = full.split("default: ").nth(1)
+    {
+        let end = rest.find(['，', '；', '）']).unwrap_or(rest.len());
+        s.push_str(&format!("（default: {}）", &rest[..end]));
+    }
+    s
+}
+
+/// 渲染 `--help` 与裸调用共用的帮助面（cli-docs 标准节序）：头行
+/// name@版本加一句定位、Usage synopsis、Commands（[`COMMANDS`] 活树按
+/// [`HELP_GROUPS`] 分组派生，组内名对齐、描述走首子句短述）、Options
+/// （目录旗标加伴生旗标，字典序对齐、短述带默认值回填）、片段方言、
+/// 环境变量、退出码。`help_covers_catalog` 与 `help_groups_cover_
+/// catalog` 守卫测试锁命令树全覆盖、全归组与版本注入。
+///
+/// # Panics
+///
+/// 分组表 [`HELP_GROUPS`] 含目录外显示名时（守卫测试前置拦截，正常
+/// 构建不触达）。
 ///
 /// ```
 /// let help = browse_core::surface::render_help();
@@ -1709,26 +1807,37 @@ pub fn render_help() -> String {
     );
     out.push_str("Usage: browse [options] '<方言片段>'\n       browse <command> [options]\n\n");
 
-    // Commands：目录 CLI 形态条目（子命令与缺省形态），名截去可选尾按最长名对齐
-    let cmds: Vec<(&str, &str)> = COMMANDS
-        .iter()
-        .filter(|c| c.kind == CmdKind::Cli && !c.signature.starts_with("browse --"))
-        .map(|c| {
-            (
-                c.signature.split(" [").next().unwrap_or(c.signature),
-                c.description.trim_end_matches('。'),
-            )
-        })
-        .collect();
-    let cw = cmds.iter().map(|(n, _)| disp_width(n)).max().unwrap_or(0);
+    // Commands：目录 CLI 形态条目按分组表渲染，组内名按最长名对齐
     out.push_str("Commands:\n");
-    for (n, d) in &cmds {
-        out.push_str(&format!("  {n}{}  {d}\n", " ".repeat(cw - disp_width(n))));
+    for (group, names) in HELP_GROUPS {
+        out.push_str(&format!("{group}：\n"));
+        let entries: Vec<&CmdSpec> = names
+            .iter()
+            .map(|n| {
+                COMMANDS
+                    .iter()
+                    .find(|c| c.kind == CmdKind::Cli && help_display_name(c) == *n)
+                    .unwrap_or_else(|| panic!("分组表名不在目录：{n}"))
+            })
+            .collect();
+        let gw = entries
+            .iter()
+            .map(|c| disp_width(help_display_name(c)))
+            .max()
+            .unwrap_or(0);
+        for c in entries {
+            let n = help_display_name(c);
+            out.push_str(&format!(
+                "  {n}{}  {}\n",
+                " ".repeat(gw - disp_width(n)),
+                short_desc(c.description)
+            ));
+        }
     }
 
-    // Options：目录旗标条目（描述单一真源）加伴生旗标，合并字典序。
+    // Options：目录旗标条目（短述带默认值回填）加伴生旗标，合并字典序。
     // 旗标名取签名里旗标 token 连取值占位（遇可选 [ 与片段实参 '< 截止）。
-    let mut flags: Vec<(String, &str)> = COMMANDS
+    let mut flags: Vec<(String, String)> = COMMANDS
         .iter()
         .filter(|c| c.kind == CmdKind::Cli && c.signature.starts_with("browse --"))
         .map(|c| {
@@ -1739,10 +1848,14 @@ pub fn render_help() -> String {
                 .take_while(|t| !t.starts_with('[') && !t.starts_with('\''))
                 .collect::<Vec<_>>()
                 .join(" ");
-            (name, c.description.trim_end_matches('。'))
+            (name, flag_row_desc(c.description))
         })
         .collect();
-    flags.extend(COMPANION_FLAGS.iter().map(|(n, d)| ((*n).to_string(), *d)));
+    flags.extend(
+        COMPANION_FLAGS
+            .iter()
+            .map(|(n, d)| ((*n).to_string(), flag_row_desc(d))),
+    );
     flags.sort_unstable_by(|a, b| a.0.cmp(&b.0));
     let fw = flags.iter().map(|(n, _)| disp_width(n)).max().unwrap_or(0);
     out.push_str("\nOptions:\n");
@@ -1751,15 +1864,14 @@ pub fn render_help() -> String {
     }
 
     out.push_str(
-        "\n片段方言：\n  await session.connect({port:9222})\n  const tabs = await listPageTargets()\n  await session.use(tabs[0].targetId)\n  await session.Page.navigate({url:\"https://example.com\"})\n  await session.waitFor(\"Page.frameNavigated\", undefined, 15)  // 秒；loadEventFired 有竞速窗，等加载用 goto()/waitLoad()\n  支持：字面量/对象/数组/成员/下标/await/const-let-var/return。\n  模板字符串（反引号）raw 语义：内容逐字保留（只有 \\\\` 与 \\\\${ 是转义，模板内 \\\\${ 降格为 ${），可多行，页面代码原样内嵌 expression。\n  普通字符串只转义 \\\\n/\\\\t/\\\\\\\\/引号，其余保留反斜杠（与 JS 不同）。\n  不支持：函数字面量、if/for；页面逻辑放 Runtime.evaluate 的 expression。\n  片段库（#44）：可复用片段存状态目录 snippets/（<site>/<task>.js 分层，首行 // 用途： 注释头），browse snippets list/show 查读，先查库再写新的；执行走 --js 管道或 POST /eval。\n",
+        "\n片段方言：\n  const tabs = await listPageTargets()\n  await session.use(tabs[0].targetId)\n  await goto(\"https://example.com\", {waitIdle: true})\n  支持 await/const/return、字面量与成员下标；模板字符串 raw 语义可多行内嵌页面代码。\n  函数字面量与控制流走 --js（全量 JS 旁路）；等加载用 goto()/waitLoad()，别等 loadEventFired。\n  完整语言面、全局函数与 session 方法清单：browse --llms\n",
     );
     out.push_str(
-        "\nEnvironment Variables:\n  BROWSE_PORT          daemon 端口（default: 9880）\n  BROWSE_NAME          命名实例：状态目录加派生端口 9900-9999 隔离，多实例并行\n  BROWSE_CHROME        chrome 路径（default: 走发现序：显式、托管 pin、祖先部署、常规路径）\n  BROWSE_PROFILE       spawn 引擎 user-data-dir（default: 固定 engine-profile，down 不删）\n  BROWSE_CDP_WS        钉死连接的 WS URL\n  BROWSE_NO_ATTACH=1   跳过附着探测，强制 spawn 隔离实例\n  BROWSE_EVAL_TIMEOUT  单次求值超时秒数（default: 300）\n  BROWSE_IDLE_TIMEOUT  引擎闲置回收毫秒，到期退引擎下次求值自动拉起（default: 3600000，0 关闭）\n  BROWSE_PROXY         引擎代理 --proxy-server（与 --proxy 旗标同值）\n  BROWSE_PROXY_BYPASS  代理旁路 --proxy-bypass-list\n  BROWSE_ENGINE_ARGS  引擎附加旗标（#48）：空格分隔 spawn 时 argv 直通（--engine-arg 同道）\n  BROWSE_SECRETS       dotenv 密钥文件（--secrets 同值；输出回显脱敏）\n  BROWSE_WORKSPACE    技能仓根（default: ~/.browse-rs/workspace，跨实例共享不分 BROWSE_NAME）\n  BROWSE_DOMAIN_SKILLS=0  关 goto 回执域名技能点名（#50）\n  BROWSE_PAGE_SKILLS=0    关 goto 回执页面特征点名（#51）\n",
+        "\nEnvironment Variables:\n  BROWSE_PORT              daemon 端口（default: 9880）\n  BROWSE_NAME              命名实例：状态目录加派生端口 9900-9999，多实例并行\n  BROWSE_CHROME            chrome 路径（default: 走发现序：显式、托管 pin、祖先部署、常规路径）\n  BROWSE_PROFILE           spawn 引擎 user-data-dir（default: 固定 engine-profile，down 不删）\n  BROWSE_CDP_WS            钉死连接的 WS URL\n  BROWSE_NO_ATTACH=1       跳过附着探测，强制 spawn 隔离实例\n  BROWSE_EVAL_TIMEOUT      单次求值超时秒数（default: 300）\n  BROWSE_IDLE_TIMEOUT      引擎闲置回收毫秒（default: 3600000，0 关闭）\n  BROWSE_PROXY             引擎代理 --proxy-server（与 --proxy 同值）\n  BROWSE_PROXY_BYPASS      代理旁路 --proxy-bypass-list\n  BROWSE_ENGINE_ARGS       引擎附加旗标，空格分隔直通 spawn argv（--engine-arg 同道）\n  BROWSE_SECRETS           dotenv 密钥文件（--secrets 同值；输出回显脱敏）\n  BROWSE_WORKSPACE         技能仓根（default: ~/.browse-rs/workspace，跨实例共享）\n  BROWSE_DOMAIN_SKILLS=0   关 goto 回执域名技能点名\n  BROWSE_PAGE_SKILLS=0     关 goto 回执页面特征点名\n",
     );
     out.push_str("\n退出码：\n  0 成功 / 1 执行失败 / 2 用法错\n");
     out
 }
-
 /// 渲染紧凑 LLM 清单 `llms.txt`（索引层，一行一命令）。
 pub fn render_llms() -> String {
     let mut out = String::from(
