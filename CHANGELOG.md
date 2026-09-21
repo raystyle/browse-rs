@@ -2,6 +2,11 @@
 
 版本级里程碑；逐批过程见 docs/diary。semver 判据在册 docs/requirements/REQ-004。
 
+## 0.11.0 - 2026-09-21
+
+- **fetch 引擎腿懒拉起（#49）**：三条件升级的引擎腿 POST /eval 前补 ensure_daemon，冷启动 `browse fetch` 与方言缺省形态同构（daemon 与引擎自动拉起，无需先手工 `browse up`）；win 0.10.0 首报、wsl 复现，修复后冷启动直达 via=engine。评审一轮 CONFIRM（隔离实例冷启动独立复验）
+- semver 判据结论（0.11.0 裁定）：行为变化取 minor（REQ-004 判据行）
+
 ## 0.10.0 - 2026-09-21
 
 - **引擎附加旗标直通道（#48，REQ-014）**：`--engine-arg <a>`（可叠加）与 `BROWSE_ENGINE_ARGS`（空格分隔）双通道直通 spawn argv，托管 pin 形态下 clean-chrome 扩展域（Browse.* 四函数）零包装脚本启用；求值前置形态直达。`/engine/up` 并集 env 先行、显式随后（chrome 重复旗标后值胜）加同值去重；撞车旗标慎叠注记与六处指路文案随迁。评审两轮（F1/G1/G2/G3 全修后 CONFIRM）
