@@ -599,6 +599,7 @@ mod tests {
     }
 
     /// 造一个单顶层目录的 tar.gz 发布包（unix 面）。
+    #[cfg(unix)]
     fn fixture_targz(dir: &Path, bin_body: &str) -> Vec<u8> {
         let src = dir.join("browse-v9.9.9");
         std::fs::create_dir_all(&src).unwrap();
@@ -683,6 +684,7 @@ mod tests {
     }
 
     /// 本地 mock 镜像（同 chrome_mgr 先例）：路由表 + 线程 TcpListener。
+    #[cfg(unix)]
     fn mock_mirror(routes: Vec<(String, Vec<u8>)>) -> String {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();

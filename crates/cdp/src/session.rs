@@ -1526,6 +1526,7 @@ mod tests {
 
     /// #57 F3 回归锁：同文档 fragment 导航（回执无 loaderId）不换代——
     /// 无条件递增会假换代白拒有效 ref（评审实弹 g2 到 g3）。
+    #[cfg(unix)]
     #[tokio::test]
     async fn fragment_navigate_does_not_bump_doc_generation() {
         use std::io::{Read, Write};
@@ -1589,6 +1590,7 @@ mod tests {
 
     /// #57 F4 回归锁：close() 即时 drain 在途调用（修前白等满 30 秒
     /// CALL_TIMEOUT 并占 eval 单飞槽）。
+    #[cfg(unix)]
     #[tokio::test]
     async fn close_fails_inflight_calls() {
         use std::io::Read;
