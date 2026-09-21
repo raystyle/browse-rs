@@ -18,7 +18,7 @@
 | REQ-012 | implemented | should | 引擎层扩展域批（issue #27/#61，clean-chrome 联动） | 批 1 至 4 引擎加 browse 侧全落（diary 批 27 至 30） |
 | REQ-013 | implemented | must | 账本面（ohmycloud REQ-063 客户端集成与总台修正令收口） | v0.8.0 实弹三绿（6b055cd）加收口批 v0.1.1 GET 实弹与移除面三拒（104f37d） |
 | REQ-014 | implemented | should | 引擎附加旗标直通道（issue #48，clean-chrome 扩展域启用面） | 实弹四绿加 spawn_extra_args_shape 锁形；评审两轮 CONFIRM（61d0297） |
-| REQ-015 | draft | should | 技能触发层与 workspace 单仓（issue #50/#51） | null（实现中） |
+| REQ-015 | implemented | should | 技能触发层与 workspace 单仓（issue #50/#51） | e2e 三块断言（双通道实弹）加单测 12 件加实弹 install/goto 命中；ADR-0008 立册 |
 
 ## Roadmap（issue 台账批次规划）
 

@@ -1,9 +1,9 @@
 ---
 id: REQ-015
 title: 技能触发层与 workspace 单仓（issue #50/#51）
-status: draft
+status: implemented
 priority: should
-trace: 待实现后回填（e2e 断言 + 实弹 install/goto 命中）
+trace: e2e 三块断言全绿（域名命中加 hint、特征页六 slug 含置信档、素页键集恰三键、两层独立关闭交叉验证，双通道 58 秒实弹）；实弹 install 真 clone GitHub 仓与 goto github.com 命中 github 段；单测 12 件（skills 5 加 workspace 7）；surface 六词条与 env 节随卷；ADR-0008 立册
 ---
 
 # REQ-015：技能触发层与 workspace 单仓

@@ -171,6 +171,8 @@ pub fn list_json(root: &Path) -> serde_json::Value {
         let mut slugs: Vec<String> = rd
             .filter_map(|e| e.ok())
             .filter(|e| e.path().extension().is_some_and(|x| x == "md"))
+            // README.md 是层索引不是配方（README 当 slug 会被读全文命令误下钻）
+            .filter(|e| e.file_name() != "README.md")
             .filter_map(|e| {
                 e.path()
                     .file_stem()

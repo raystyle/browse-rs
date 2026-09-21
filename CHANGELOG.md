@@ -2,6 +2,13 @@
 
 版本级里程碑；逐批过程见 docs/diary。semver 判据在册 docs/requirements/REQ-004。
 
+## 0.12.0 - 2026-09-21
+
+- **domain skill 触发层（#50，REQ-015）**：goto 回执按 URL 域名段（hostname 去 www 首段）点名 workspace 站点知识，命中附 `domain_skills`（封顶 10）与 `domain_skills_hint`（读全文命令）；未命中回执零新增键（BTreeMap 键序下逐字节一致，e2e 键集锁）；`BROWSE_DOMAIN_SKILLS=0` 关闭（opt-out 镜像前代 bh）；daemon 三变量透传（改配置重启 daemon 口径同 BROWSE_SECRETS）
+- **page skill 启发式触发层（#51，REQ-015）**：goto 后一次有界 pageEval（TreeWalker 前 800 节点封顶、iframe 判定源封顶 50、8 秒超时静默降级）检出 10 特征 slug 两档置信（spa/hydration/shadow-dom/iframe/iframe-cross-origin/lazy-scroll/bot-shield/login-wall/captcha/service-worker）附 `page_skills`/`page_skills_hint`；框架名与版本单列回执 `framework:{name,version}` 不占 slug；`BROWSE_PAGE_SKILLS=0` 独立关闭
+- **workspace 单仓命令族**：`browse workspace` 六件（status/install/update/list/site/page），git shell-out（clone / pull --ff-only 脏树拒绝、本地修改可回推）；种子仓 github.com/raystyle/browse_workspace（三平台用户目录部署 `~/.browse-rs/workspace`，BROWSE_WORKSPACE 覆盖，跨实例共享不分 BROWSE_NAME）；仓骨架已推（page-skills 10 篇配方 + domain-skills 样例 + intent-skills 索引）；仓内 interaction 机制知识迁 workspace 统一维护（docs/skills/ 留指路碑）
+- semver 判据结论（0.12.0 裁定）：能力新增取 minor（REQ-004 判据行）；#50/#51 关单走 omc 委托道
+
 ## 0.11.0 - 2026-09-21
 
 - **fetch 引擎腿懒拉起（#49）**：三条件升级的引擎腿 POST /eval 前补 ensure_daemon，冷启动 `browse fetch` 与方言缺省形态同构（daemon 与引擎自动拉起，无需先手工 `browse up`）；win 0.10.0 首报、wsl 复现，修复后冷启动直达 via=engine。评审一轮 CONFIRM（隔离实例冷启动独立复验）

@@ -31,10 +31,18 @@ crates/browse-core  语义与 daemon（不碰 argv）
                     #30 消注入痕）；全局函数族（见 README 清单）
   semantic.rs       语义层：tab 族、交互三件（clickAt/fillInput/pressKey）、
                     clickRef/fillRef（backendNodeId 锚）、等待判官
-                    （waitLoad/waitIdle）；Input 挂起自愈重试
+                    （waitLoad/waitIdle）；Input 挂起自愈重试；goto 回执
+                    构建后经 skills::augment_goto 条件附技能键
+  skills.rs         技能触发层（#50/#51，ADR-0008）：goto 后按域名段点名
+                    workspace 站点知识、按页面特征（一次有界 pageEval，
+                    10 slug 两档置信）点名机制配方；未命中零新增键
   record.rs         录制：startScreencast 帧流泵落盘 + 按 sessionId ack
   paths.rs          实例命名空间（BROWSE_NAME -> 状态目录 + 派生端口，
-                    ADR-0006）；engine_profile_dir 等落点
+                    ADR-0006）；engine_profile_dir 与 workspace_dir（跨
+                    实例共享的知识仓根）等落点
+  workspace.rs      workspace 单仓管理（git shell-out）：clone/pull 与
+                    仓内文件读取（site/page 的越界守卫），CLI 直读不经
+                    daemon
   engine.rs         引擎状态机：附着优先缺则自起（BROWSE_NO_ATTACH 可跳过
                     探测）；只杀自己 spawn 的；auto attach 首个 page target
   server.rs         daemon HTTP API：/eval（单飞槽 + 懒引擎 + 超时）、
@@ -80,6 +88,17 @@ POST /eval {code}
 一个名字同时决定状态目录（daemon 日志/drops/screenshots/录制/engine-profile）
 与 daemon 端口（fnv1a 派生 9900-9999；`BROWSE_PORT` 显式优先）。默认实例
 零变化。命名实例各自 spawn chrome（profile 独占不互锁）。
+
+## workspace 技能仓（ADR-0008）
+
+知识仓 `github.com/raystyle/browse_workspace` 部署在 `~/.browse-rs/workspace`
+（`BROWSE_WORKSPACE` 覆盖；**不分 BROWSE_NAME**，跨实例共享）。三层使用面：
+goto 回执自动点名（domain_skills/page_skills 加 hint，`BROWSE_DOMAIN_SKILLS=0`
+/`BROWSE_PAGE_SKILLS=0` 分层关）-> `browse workspace site/page` 免浏览器读全文
+（CLI 直读文件，canonicalize 越界守卫）-> `browse workspace list` 意图反查。
+install/update 走 git shell-out（clone / pull --ff-only 脏树拒绝），本地修改
+手工 commit/push 回推。env 三变量经 `ensure_daemon_with_env` 透传给新拉起的
+daemon（改配置重启 daemon，BROWSE_SECRETS 同口径）。
 
 ## 守卫（cdp::Session::call 层，程序级强制）
 

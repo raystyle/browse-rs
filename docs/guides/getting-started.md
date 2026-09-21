@@ -91,6 +91,20 @@ browse chrome remove 152.0.7977.84   # 删旧版（pin 指向的拒删，先 use
 browse chrome doctor                 # 部署体检（在位/文件基线/pin）
 ```
 
+## 10. 站点与机制知识（workspace 技能仓）
+
+```bash
+browse workspace install             # git clone 知识仓到 ~/.browse-rs/workspace（BROWSE_WORKSPACE 可改路径）
+browse workspace update              # git pull --ff-only（本地有未提交修改会拒绝）
+browse workspace list                # 列全部站点段与页面特征 slug
+browse workspace site github         # 读单站知识清单；site github/scraping.md 读全文
+browse workspace page captcha        # 读机制配方全文
+```
+
+goto 会自动点名：命中站点知识或页面特征（iframe、验证码、水合等）时回执附
+`domain_skills`/`page_skills` 清单与 hint 字段，照 hint 拉全文即可；两层可用
+`BROWSE_DOMAIN_SKILLS=0` / `BROWSE_PAGE_SKILLS=0` 独立关闭。
+
 ## 常见坑
 
 - 方言没有 `if/for/函数`：页面逻辑写进 `Runtime.evaluate` 的 `expression` 字符串（页内是真 V8）。模板字符串有：反引号 raw 语义，`\n`、`\d` 等逐字保留、可多行，页面代码直接内嵌。
