@@ -541,58 +541,6 @@ l`.length === 3].join(\"|\")", returnByValue:true})).result.value"#;
     restore_env(&saved_env);
     let _ = std::fs::remove_dir_all(&ws);
 
-    // ---- #52：探测腿 deadline 收内层（挂死页 8 秒清登记不积尸） ----
-    // cookie getter 死循环让 PAGE_PROBE_JS 的 d.cookie 读取永挂：
-    // Runtime.evaluate 永不返回，call_with_deadline 的 8 秒内层超时
-    // 负责清 pending（旧行为：外层 timeout drop 掉清登记路径留僵尸）
-    host.eval_snippet(
-        r#"await routeMock("http://hung.test/*", "<title>hung</title><script>Object.defineProperty(document, 'cookie', {get: function(){ while(true){} }});</script><h1>h</h1>", {contentType: "text/html"})"#,
-    )
-    .await
-    .expect("routeMock 挂死页");
-    let t_hung = std::time::Instant::now();
-    let hung = host
-        .eval_snippet(r#"return await goto("http://hung.test/f", {timeout: 15})"#)
-        .await
-        .expect("goto 挂死页不应拖死 goto");
-    let wall = t_hung.elapsed().as_secs_f64();
-    assert!(
-        hung.get("page_skills").is_none() && hung.get("framework").is_none(),
-        "探测超时静默降级零 page 键: {hung}"
-    );
-    assert!(
-        (7.0..25.0).contains(&wall),
-        "8 秒内层 deadline 生效（实测 {wall:.1}s：过快=没等，过慢=退到 30s 档）"
-    );
-    assert!(
-        engine.session().pending_len().await == 0,
-        "#52 验收：超时后 pending 表归零（清登记没被 drop 丢掉）"
-    );
-    // 会话仍健：browser 级调用（Target.getTargets 面）不受页内挂死影响
-    let healthy = host
-        .eval_snippet("return await currentTab()")
-        .await
-        .expect("挂死探测后 browser 级调用仍通");
-    assert!(healthy.get("targetId").is_some(), "会话健康: {healthy}");
-    // 解楔：busy-loop 楔死渲染器主线程后，导航与 Page.crash 都是页内
-    // session 面（连 crash 命令都进不去，实测 30s 超时）；唯一正道是
-    // browser 级开新 own tab 切走，楔死 tab 留后台不再触碰（后续测试
-    // 全在活动 tab 上；teardown 引擎退出连带收割）
-    host.eval_snippet(r#"await newTab("data:text/html,<title>revived</title><p>r</p>")"#)
-        .await
-        .expect("newTab 解楔切走");
-    let cur = host
-        .eval_snippet("return await currentTab()")
-        .await
-        .expect("currentTab 复活面");
-    assert_eq!(
-        cur.get("title"),
-        Some(&json!("revived")),
-        "新渲染器就位（活动 tab 已切走楔死页）: {cur}"
-    );
-    host.eval_snippet("await routeClear()")
-        .await
-        .expect("routeClear 挂死页");
     // 秒口径（#51）：直写秒与旧毫秒习惯值等价，混用守卫带 timeoutWarning
     let wl_s = host
         .eval_snippet("return await waitLoad(2)")
@@ -2371,6 +2319,62 @@ return await responseBody(evs[0].params.requestId)"#,
     host.eval_snippet(r#"await session.Emulation.clearDeviceMetricsOverride({})"#)
         .await
         .expect("清仿真");
+
+    // ---- #52：探测腿 deadline 收内层（挂死页 8 秒清登记不积尸） ----
+    // （评审 G1 移位：本块楔死一个 tab 并留尾不收，放在 closeTab/守卫段
+    // 之前的最后位置，tabs 段的 t1 挑选不再有按序落进楔死 tab 的风险；
+    // 后续 closeTab 与守卫段全是 browser 级调用，对楔死免疫）
+    // cookie getter 死循环让 PAGE_PROBE_JS 的 d.cookie 读取永挂：
+    // Runtime.evaluate 永不返回，call_with_deadline 的 8 秒内层超时
+    // 负责清 pending（旧行为：外层 timeout drop 掉清登记路径留僵尸）
+    host.eval_snippet(
+        r#"await routeMock("http://hung.test/*", "<title>hung</title><script>Object.defineProperty(document, 'cookie', {get: function(){ while(true){} }});</script><h1>h</h1>", {contentType: "text/html"})"#,
+    )
+    .await
+    .expect("routeMock 挂死页");
+    let t_hung = std::time::Instant::now();
+    let hung = host
+        .eval_snippet(r#"return await goto("http://hung.test/f", {timeout: 15})"#)
+        .await
+        .expect("goto 挂死页不应拖死 goto");
+    let wall = t_hung.elapsed().as_secs_f64();
+    assert!(
+        hung.get("page_skills").is_none() && hung.get("framework").is_none(),
+        "探测超时静默降级零 page 键: {hung}"
+    );
+    assert!(
+        (7.0..25.0).contains(&wall),
+        "8 秒内层 deadline 生效（实测 {wall:.1}s：过快=没等，过慢=退到 30s 档）"
+    );
+    assert!(
+        engine.session().pending_len().await == 0,
+        "#52 验收：超时后 pending 表归零（清登记没被 drop 丢掉）"
+    );
+    // 会话仍健：browser 级调用（Target.getTargets 面）不受页内挂死影响
+    let healthy = host
+        .eval_snippet("return await currentTab()")
+        .await
+        .expect("挂死探测后 browser 级调用仍通");
+    assert!(healthy.get("targetId").is_some(), "会话健康: {healthy}");
+    // 解楔：busy-loop 楔死渲染器主线程后，导航与 Page.crash 都是页内
+    // session 面（连 crash 命令都进不去，实测 30s 超时）；唯一正道是
+    // browser 级开新 own tab 切走，楔死 tab 留后台不再触碰（后续测试
+    // 全在活动 tab 上；teardown 引擎退出连带收割）
+    host.eval_snippet(r#"await newTab("data:text/html,<title>revived</title><p>r</p>")"#)
+        .await
+        .expect("newTab 解楔切走");
+    let cur = host
+        .eval_snippet("return await currentTab()")
+        .await
+        .expect("currentTab 复活面");
+    assert_eq!(
+        cur.get("title"),
+        Some(&json!("revived")),
+        "新渲染器就位（活动 tab 已切走楔死页）: {cur}"
+    );
+    host.eval_snippet("await routeClear()")
+        .await
+        .expect("routeClear 挂死页");
 
     eprintln!("[e2e] closeTab 开始");
     // closeTab：关当前活动 tab（newTab 建的 t2，自建 -> 守卫放行）

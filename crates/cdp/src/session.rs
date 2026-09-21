@@ -702,10 +702,13 @@ impl Session {
 
     /// 同 [`Session::call`]，但调用自带更短的 deadline（issue #52）。
     /// 何时用：「怪页可能挂死」的窄面调用（技能探测、Input 短超时自愈）。
-    /// 边界：**不要在外面再包 `tokio::time::timeout`**：外层先到会把
+    /// 边界一：**不要在外面再包 `tokio::time::timeout`**：外层先到会把
     /// 本调用整个 drop，内层的超时清登记路径（pending 应答表）跟着被
     /// 丢，真挂死页的响应永不到则留下 pending 僵尸；deadline 收进本
-    /// 接口内层才清得干净。
+    /// 接口内层才清得干净。边界二：本接口不复刻 [`Session::call`] 的
+    /// `Page.navigate` 记账（提交屏障水位与文档代）与
+    /// `Target.createTarget` 的 own 登记，这类方法走 [`Session::call`]。
+    /// 守卫与提交屏障等待与 call 同。
     ///
     /// # Errors
     ///
