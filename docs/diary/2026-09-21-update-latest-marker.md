@@ -24,4 +24,4 @@ self_update 测试族加两测：latest_version_mirror_first_and_fallback（mock
 - 推送 687e084..bb4edee 三笔，CI 双绿（ci 35594054500 三岗 2m38s、docs 35594054274 2m57s）
 - 发版 v0.13.0：release.ps1 全链 exit 0（六件加边车、跨宿主冒烟）；seed run 35594443618 success 49s，stable/latest 标记首写落镜像（curl 实读 0.13.0）
 - 端到端验收全通：真升级道 GH_TOKEN browse update 0.12.2 升 0.13.0（updated，下载腿走镜像）；匿名（env -u GH_TOKEN -u GITHUB_TOKEN）browse update 判新走镜像 stable/latest（0.13.0）出 upToDate，零 GitHub 依赖，#54 验收判据实弹达成
-- #54 关单走 omc 集中道（回执随后补记 seq）
+- #54 关毕：omc 工位忙清理任务期间经管理面直关（force-status，seq 174，开单 seq 173）；委托道未走成不补（用户拦插队在先，管理面道等效）
