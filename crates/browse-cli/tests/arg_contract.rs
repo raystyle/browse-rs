@@ -23,11 +23,33 @@ fn run(args: &[&str], env: &[(&str, &str)]) -> (i32, String, String) {
 }
 
 /// BROWSE_NAME 传绝对路径即整仓 state_dir（G7 口径）：测试态隔离不碰
-/// 本机 ~/.browse-rs（keygen 会写真密钥、snippets 读真库）。
-fn isolated_state(tag: &str) -> String {
-    let d = std::env::temp_dir().join(format!("browse-arg-contract-{}-{tag}", std::process::id()));
-    std::fs::create_dir_all(&d).expect("建临时 state 目录");
-    d.to_string_lossy().into_owned()
+/// 本机 ~/.browse-rs（keygen 会写真密钥、snippets 读真库）。Drop 收渣
+/// （#53 评审 G-lite：反复跑不留临时目录）。
+struct TempState(String);
+
+impl TempState {
+    fn new(tag: &str) -> Self {
+        let d = std::env::temp_dir().join(format!(
+            "browse-arg-contract-{}-{tag}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        std::fs::create_dir_all(&d).expect("建临时 state 目录");
+        Self(d.to_string_lossy().into_owned())
+    }
+
+    fn path(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Drop for TempState {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
 }
 
 /// 七处旗标收集循环（含 `while let Some` 与 `loop { match }` 两形态）与
@@ -49,18 +71,14 @@ fn flag_collection_loops_terminate() {
 
     // snippets list 裸调：可选位 [site] 缺省列全库（隔离态空库，空库提
     // 示在 stderr）
-    let (code, _, err) = run(
-        &["snippets", "list"],
-        &[("BROWSE_NAME", &isolated_state("snips"))],
-    );
+    let snips = TempState::new("snips");
+    let (code, _, err) = run(&["snippets", "list"], &[("BROWSE_NAME", snips.path())]);
     assert_eq!(code, 0, "裸 snippets list 应 0");
     assert!(err.contains("片段库为空"), "空库回执：{err}");
 
     // ledger keygen 裸调：循环收尾后真落钥（隔离态，勿碰本机密档）
-    let (code, out, err) = run(
-        &["ledger", "keygen"],
-        &[("BROWSE_NAME", &isolated_state("key"))],
-    );
+    let key = TempState::new("key");
+    let (code, out, err) = run(&["ledger", "keygen"], &[("BROWSE_NAME", key.path())]);
     assert_eq!(code, 0, "keygen 应 0：{err}");
     assert!(out.contains("\"ok\": true"), "keygen 回执：{out}");
 
@@ -86,12 +104,17 @@ fn required_value_face_still_exits_2() {
     assert!(err.contains("fetch <url> 需要一个值"), "{err}");
 }
 
-/// G-F 的 Mode 层缺参处理器复活（0.12.1 里被解析层假报先拦成死代码）。
+/// G-F 的 Mode 层缺参处理器复活（0.12.1 里被解析层假报先拦成死代码）；
+/// snippets show 从无守卫（#53 评审 F1），本批补齐同款。
 #[test]
 fn mode_level_missing_param_reachable() {
     let (code, _, err) = run(&["workspace", "site"], &[]);
     assert_eq!(code, 2, "{err}");
     assert!(err.contains("workspace site 缺段"), "{err}");
+
+    let (code, _, err) = run(&["snippets", "show"], &[]);
+    assert_eq!(code, 2, "{err}");
+    assert!(err.contains("snippets show 缺 rel"), "{err}");
 }
 
 /// bail_arg 措辞中性化：非 issue 子命令的坏旗标不再误报「issue 参数不

@@ -1,6 +1,6 @@
 # 2026-09-21 #53 批（argv 取值口双面拆分，修 0.12.1 G-F 收口回归）
 
-背景：台账实质清零后例行核账（`browse issue list` 看 open 集），裸调当场假报「issue list 旗标 需要一个值」exit 2。追根：06b93f3（#52 批 G-F 收口）把 CLI `next` 取值口从「Err + anyhow exit 1」改为直出 exit 2，但七处子命令旗标收集循环按「参数尽返 Err 即收尾」旧契约写，Err 分支全成死代码：fetch、artifact publish/attest/list、ledger keygen、issue new、issue list 任意调用都在旗标耗尽时假报用法错（带不带旗标都死）。附带踩碎面：`snippets list` 可选位 `[site]`（`.ok()`）裸调恒 exit 2；`snippets show` / `workspace site`/`page` 的 unwrap_or_default 位与 Mode 层 G-F 缺参处理器（解析层先拦，处理器成死代码）。0.12.1 里连开单工具 `issue new` 自己都是坏的，开单只能用工作树修好的 debug 二进制实弹。
+背景：台账实质清零后例行核账（`browse issue list` 看 open 集），裸调当场假报「issue list 旗标 需要一个值」exit 2。追根：06b93f3（#52 批 G-F 收口）把 CLI `next` 取值口从「Err + anyhow exit 1」改为直出 exit 2，但七处子命令旗标收集循环按「参数尽返 Err 即收尾」旧契约写，Err 分支全成死代码：fetch、artifact publish/attest/list、ledger keygen、issue new、issue list 任意调用都在旗标耗尽时假报用法错（带不带旗标都死）。附带踩碎面：`snippets list` 可选位 `[site]`（`.ok()`）裸调恒 exit 2；`workspace site`/`page` 的 Mode 层 G-F 缺参处理器被解析层先拦成死代码；`snippets show` 从无 Mode 层守卫（评审 F1 勘误：初版本档与 CHANGELOG 误称其有，实际 0.12.1 前裸调走 Err 到空串落「片段 不存在」exit 1 误导面，本批补齐）。0.12.1 里连开单工具 `issue new` 自己都是坏的，开单只能用工作树修好的 debug 二进制实弹。
 
 ## 修法（一个 next 服务两个契约是根因，拆双口）
 
@@ -18,4 +18,4 @@ browse-cli 首建 tests/arg_contract.rs（CARGO_BIN_EXE_browse 真二进制四�
 
 ## 评审闸门与关单（待补账）
 
-评审与推送、#53 关单（omc 集中道）后补。
+一轮快核（browse-codex-review 重组窗格，deepseek-v4-flash）：(a) F1 必修：snippets show 裸调漂移回 G-F 前 exit 1（从无 Mode 层守卫，初版文案误称「处理器复活」），补 SnippetsShow 空 rel 守卫（workspace site 同款）加 arg_contract 裸调断言，CHANGELOG 与本档措辞同步勘误；(b) CONFIRM（迁移完整：54 处 baseline 逐一比对，args.next 43 加 next_opt 12，无第二解析面）；(c) CONFIRM 带 G1（win-gnu 交叉岗 check 裸跑不编译集成测试，补 --all-targets）与 G-lite（TempState Drop 收渣）；(d) CONFIRM（bail_arg 新串无锁风险，surface 零命中）。二轮快核与终审、推送、#53 关单后补。

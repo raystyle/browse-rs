@@ -868,6 +868,15 @@ async fn main() -> Result<()> {
             Ok(())
         }
         Mode::SnippetsShow(rel) => {
+            if rel.is_empty() {
+                // 用法错直出 exit 2（#53 评审 F1：G-F 口径补齐——snippets
+                // show 从无 Mode 层缺参守卫，裸调曾落「片段 不存在」exit 1
+                // 的误导面，与 workspace site/page 同款收口）
+                eprintln!(
+                    "browse: snippets show 缺 rel；用法：browse snippets show <rel>（退出 2）"
+                );
+                std::process::exit(2);
+            }
             let root = browse_core::paths::state_dir().join("snippets");
             let path = root.join(&rel);
             // 越界守卫（#44 评审 F2）：canonicalize 后必须仍在库内，挡
