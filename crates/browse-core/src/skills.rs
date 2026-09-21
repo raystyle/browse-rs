@@ -210,7 +210,7 @@ pub const PAGE_PROBE_JS: &str = r##"(() => {
 })()"##;
 
 /// #51 冻结 slug 名单（探测与回执的合法值域；页面可控串注入面的
-/// 白名单，评审 F3）。种子仓 page-skills/<slug>.md 与此同名同序。
+/// 白名单，评审 F3）。种子仓 `page-skills/<slug>.md` 与此同名同序。
 pub const FROZEN_PAGE_SLUGS: &[&str] = &[
     "spa",
     "hydration",
@@ -437,6 +437,35 @@ mod tests {
         assert!(parse_probe("not json").is_none());
         assert!(parse_probe("[1,2]").is_none(), "数组非对象拒");
         assert!(parse_probe(r#""str""#).is_none(), "标量非对象拒");
+    }
+
+    /// 冻结名单与探针发射名单零漂移（评审 G-A）：名单每项探针都有
+    /// add( 发射位；反向探针发射的每个 slug 都在名单内（否则会被
+    /// 白名单静默滤掉，无键无测试红）。bot-shield 双腿（DOM/cookie
+    /// 两置信档）是同 slug 双发射位，按集合比对不按次数。
+    #[test]
+    fn frozen_slugs_match_probe() {
+        let mut emitted: Vec<&str> = PAGE_PROBE_JS
+            .lines()
+            .filter_map(|l| {
+                let idx = l.find("add('")?;
+                let rest = &l[idx + 5..];
+                let end = rest.find('\'')?;
+                Some(&rest[..end])
+            })
+            .collect();
+        emitted.sort_unstable();
+        emitted.dedup();
+        assert_eq!(emitted.len(), FROZEN_PAGE_SLUGS.len(), "发射集与名单数同");
+        for slug in FROZEN_PAGE_SLUGS {
+            assert!(emitted.contains(slug), "名单项 {slug} 探针未发射");
+        }
+        for e in &emitted {
+            assert!(
+                FROZEN_PAGE_SLUGS.contains(e),
+                "探针发射 {e} 不在冻结名单（会被白名单静默滤掉）"
+            );
+        }
     }
 
     /// page_fields：空骨架零键；framework 单独可出；slugs 出两键带命令。

@@ -379,8 +379,8 @@ l`.length === 3].join(\"|\")", returnByValue:true})).result.value"#;
 
     // ---- #50 技能触发层（domain）：命中点名 + 未命中零新增键 + 可关 ----
     // 临时 workspace 注入：e2e 进程内逐调用读 env（skills.rs 不缓存），
-    // SEQ 串行窗内窄改、按原值还原（评审 G3：save/restore 面，断言 panic
-    // 也不把临时值漏给后续；surface_contract.rs 同款先例）
+    // SEQ 串行窗内窄改、块尾按原值还原（评审 G3：确定性还原口在中途
+    // panic 之外——panic 时临时仓仍在盘、后续块域名段不命中，无观测面）
     let ws = std::env::temp_dir().join(format!("browse-ws-e2e-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&ws);
     let seg_dir = ws.join("domain-skills").join("skill");

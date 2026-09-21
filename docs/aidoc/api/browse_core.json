@@ -640,7 +640,7 @@
     {
       "path": "browse_core::skills::FROZEN_PAGE_SLUGS",
       "kind": "constant",
-      "docs": "#51 冻结 slug 名单（探测与回执的合法值域；页面可控串注入面的\n白名单，评审 F3）。种子仓 page-skills/<slug>.md 与此同名同序。"
+      "docs": "#51 冻结 slug 名单（探测与回执的合法值域；页面可控串注入面的\n白名单，评审 F3）。种子仓 `page-skills/<slug>.md` 与此同名同序。"
     },
     {
       "path": "browse_core::skills::PAGE_PROBE_JS",

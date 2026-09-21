@@ -318,17 +318,24 @@ fn first_heading(path: &Path) -> String {
         .unwrap_or_default()
 }
 
-/// 仓内技能计数：`{段数, 域文件数（不封顶）, page slug 数}`。
+/// 仓内技能计数：`{段数, 域文件总数（不封顶，all 口径非 list 封顶）,
+/// page slug 数}`（评审 G-C：status 概览不该跟着 list 的 10 帽少报）。
 fn skill_counts(root: &Path) -> (u64, u64, u64) {
     let list = list_json(root);
-    let domains = list.get("domains").and_then(|d| d.as_array());
-    let sites = domains.map_or(0, |d| d.len() as u64);
-    let files = domains.map_or(0, |d| {
-        d.iter()
-            .filter_map(|e| e.get("files").and_then(|f| f.as_array()))
-            .map(|f| f.len() as u64)
-            .sum()
-    });
+    let sites = list
+        .get("domains")
+        .and_then(|d| d.as_array())
+        .map_or(0, |d| d.len() as u64);
+    let mut files = 0u64;
+    if let Some(doms) = list.get("domains").and_then(|d| d.as_array()) {
+        for d in doms {
+            let seg = d
+                .get("segment")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default();
+            files += all_segment_files(&root.join("domain-skills").join(seg)).len() as u64;
+        }
+    }
     let pages = list
         .get("pages")
         .and_then(|p| p.as_array())
@@ -385,7 +392,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
     }
 
-    /// list 封顶：11 个文件只列 10 个（回执点名同口径）。
+    /// list 封顶与分界（回执点名同口径；评审 G-D 锁「恰 10 不误标」）。
     #[test]
     fn list_caps_at_10() {
         let root = temp_root("cap");
@@ -394,10 +401,24 @@ mod tests {
         for i in 0..11 {
             std::fs::write(seg.join(format!("f{i:02}.md")), "# f\n").unwrap();
         }
+        // 恰 10 个文件的段：capped 必须 false（截断没发生过）
+        let ten = root.join("domain-skills").join("ten");
+        std::fs::create_dir_all(&ten).unwrap();
+        for i in 0..10 {
+            std::fs::write(ten.join(format!("t{i:02}.md")), "# t\n").unwrap();
+        }
         let l = list_json(&root);
-        let files = l["domains"][0]["files"].as_array().unwrap();
-        assert_eq!(files.len(), 10);
-        assert_eq!(l["domains"][0]["capped"], json!(true));
+        let doms = l["domains"].as_array().unwrap();
+        let many = doms.iter().find(|d| d["segment"] == json!("many")).unwrap();
+        assert_eq!(many["files"].as_array().unwrap().len(), 10);
+        assert_eq!(many["capped"], json!(true), "11 个文件截断发生过");
+        let ten_d = doms.iter().find(|d| d["segment"] == json!("ten")).unwrap();
+        assert_eq!(ten_d["files"].as_array().unwrap().len(), 10);
+        assert_eq!(
+            ten_d["capped"],
+            json!(false),
+            "恰 10 个文件不是可能还有更多"
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 
