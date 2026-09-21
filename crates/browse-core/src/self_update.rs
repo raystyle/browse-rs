@@ -1,5 +1,5 @@
 //! browse 自更新（用户令 2026-09-18；对齐 build-release 公共契约第六节
-//! 双通道）：GitHub Releases latest 判新（semver 只升不降）-> 下载本平台
+//! 双通道）：镜像 stable/latest 判新（GitHub 回落）（semver 只升不降）-> 下载本平台
 //! 资产（自家镜像 stable 滚动段优先，GitHub 回落，资产与边车恒同源）->
 //! `.sha256` 边车锚校验（与发布器同 digest 判据，不符即拒不回落）->
 //! 解包取二进制 -> 原子自替换（同目录暂存防跨文件系统 rename，pid 后缀
@@ -139,20 +139,34 @@ fn version_newer(candidate: &str, current: &str) -> bool {
 
 /// 发现最新版本号。
 ///
-/// GitHub Releases latest API（tag 去 `v` 前缀）；镜像 stable 段是下载
-/// 通道非判新源（段内资产名带版本，无法反查最新号）。
+/// 镜像 stable 段的 `latest` 标记优先（播种流水写的单行纯版本号），
+/// 镜像不可达、标记缺失或不成形才回落 GitHub Releases latest API
+/// （tag 去 `v` 前缀）；GitHub 匿名 60/h 机队易撞（#54），镜像面让日
+/// 常判新与下载腿同源，update 全程默认零 GitHub 依赖。
 ///
 /// 阻塞 http，调用方收 `spawn_blocking`。
 ///
 /// # Errors
 ///
-/// API 不可达、限流（403/429 带 token 指引）或未回 tag。
+/// 双源皆失败（含 GitHub 限流 403/429 带 token 指引）或都未给出成形
+/// 版本号。
 pub fn latest_browse_version() -> Result<String> {
     let client = reqwest::blocking::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(30))
         .timeout(std::time::Duration::from_secs(60))
         .build()
         .map_err(|e| anyhow::anyhow!("构建 http client 失败：{e}"))?;
+    // 镜像 latest 优先：任何不成形（404、超时、垃圾文本）静默回落
+    // GitHub，镜像故障不放大成更新失败
+    let latest_url = format!("{}/stable/latest", mirror_base());
+    if let Ok(r) = http_get(&client, &latest_url, false)
+        && let Ok(text) = r.text()
+        && let Some(v) = parse_latest_line(&text)
+    {
+        eprintln!("browse update：判新走镜像 stable/latest（{v}）");
+        return Ok(v);
+    }
+    eprintln!("browse update：镜像 latest 未命中，判新回落 GitHub API");
     let api = format!("https://api.github.com/repos/{GITHUB_REPO}/releases/latest");
     let body: Value = http_get(&client, &api, true)?
         .json()
@@ -170,6 +184,21 @@ pub fn latest_browse_version() -> Result<String> {
         );
     }
     Ok(tag)
+}
+
+/// 从镜像 `latest` 标记文本提取纯版本号：去空白后恰是三段 ASCII 数字
+/// （播种流水写的单行形）；任何其他形态（HTML 错误页、垃圾文本、空）
+/// 返 `None` 交回落，镜像面损坏不误判版本。
+fn parse_latest_line(text: &str) -> Option<String> {
+    let t = text.trim();
+    let well = !t.is_empty()
+        && t.len() <= 16
+        && t.split('.').count() == 3
+        && !t.starts_with('.')
+        && !t.ends_with('.')
+        && !t.contains("..")
+        && t.bytes().all(|b| b.is_ascii_digit() || b == b'.');
+    well.then(|| t.to_string())
 }
 
 /// 从一个源取「边车 + 资产」对（边车先行省流量）；任何一步失败即该源
@@ -709,6 +738,57 @@ mod tests {
             }
         });
         format!("http://{addr}")
+    }
+
+    /// 判新镜像优先（#54，仓内锁）：latest 命中即零 GitHub 依赖；缺标
+    /// 记回落 GitHub（钉死拒连）必报其源错。GitHub 腿经 HTTPS_PROXY 指
+    /// 向拒连环回隔离网络（同 fetch_asset 测试先设后建口径）。
+    #[test]
+    #[cfg(unix)]
+    fn latest_version_mirror_first_and_fallback() {
+        // SAFETY: 测试进程短窗覆写并保存原值，测试后还原；并发测试无代理读者
+        let saved_proxy = std::env::var("HTTPS_PROXY").ok();
+        unsafe {
+            std::env::set_var("HTTPS_PROXY", "http://127.0.0.1:9");
+        }
+        // 态一：镜像 latest 在 -> 判新零 GitHub
+        let mirror = mock_mirror(vec![("/stable/latest".to_string(), b"9.9.9\n".to_vec())]);
+        unsafe { std::env::set_var("BROWSE_RELEASE_MIRROR", &mirror) };
+        assert_eq!(latest_browse_version().unwrap(), "9.9.9");
+
+        // 态二：镜像无标记（404）-> 回落 GitHub（钉死拒连）报 GitHub 源错
+        let mirror_gone = mock_mirror(vec![]);
+        unsafe { std::env::set_var("BROWSE_RELEASE_MIRROR", &mirror_gone) };
+        let err = latest_browse_version().unwrap_err();
+        assert!(
+            format!("{err:#}").contains("api.github.com"),
+            "回落错应指向 GitHub 源：{err:#}"
+        );
+
+        // SAFETY: 同上，按原值还原
+        unsafe {
+            match saved_proxy.as_ref() {
+                Some(v) => std::env::set_var("HTTPS_PROXY", v),
+                None => std::env::remove_var("HTTPS_PROXY"),
+            }
+        }
+    }
+
+    /// latest 标记解析面：单行三段数字成形；前缀、空段、垃圾页不成形。
+    #[test]
+    fn latest_line_parse_forms() {
+        assert_eq!(parse_latest_line("0.12.3\n"), Some("0.12.3".into()));
+        assert_eq!(parse_latest_line(" 0.12.3 "), Some("0.12.3".into()));
+        assert_eq!(parse_latest_line("v0.12.3"), None, "v 前缀不成形");
+        assert_eq!(parse_latest_line("1.2"), None, "两段不成形");
+        assert_eq!(parse_latest_line("1.2.3.4"), None, "四段不成形");
+        assert_eq!(parse_latest_line("1..3"), None, "空段不成形");
+        assert_eq!(parse_latest_line(""), None, "空不成形");
+        assert_eq!(
+            parse_latest_line("<html>404 not found</html>"),
+            None,
+            "错误页不成形"
+        );
     }
 
     /// 双通道三态（仓内锁）：镜像整对优先、镜像缺回落错带双源指引、

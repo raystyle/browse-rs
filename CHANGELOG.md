@@ -2,6 +2,11 @@
 
 版本级里程碑；逐批过程见 docs/diary。semver 判据在册 docs/requirements/REQ-004。
 
+## 0.13.0 - 2026-09-21
+
+- **#54 判新镜像面（update 全程默认零 GitHub 依赖）**：播种流水新增 `stable/latest` 判新标记步（单行纯版本号，rclone rcat 恒在 sync 后重写防 `--delete-excluded` 洗掉，回读红灯锚定）；`latest_browse_version` 改镜像 `latest` 优先（404、超时、垃圾文本静默回落 GitHub Releases API），下载腿本就镜像优先，`browse update` 全程默认走自家镜像（browse.ohmygh.com），GitHub 仅剩镜像故障兜底（此时 GH_TOKEN 才有用）。触发面：判新腿原恒走 GitHub API，匿名 60/h 机队共用易撞（403 即整个 update 退场）
+- semver 判据结论（0.13.0 裁定）：行为变化取 minor（REQ-004 判据行）
+
 ## 0.12.2 - 2026-09-21
 
 - **#53 子命令旗标收集循环假报用法错（0.12.1 G-F 收口回归）**：`next` 取值口改直出 exit 2 后，七处按「参数尽返 Err 收尾」旧契约写的旗标循环（fetch / artifact publish·attest·list / ledger keygen / issue new / issue list）的 Err 分支成死代码，任意调用在旗标耗尽时假报「旗标 需要一个值」exit 2；`snippets list` 可选位同碎，`workspace site`/`page` 的 Mode 层缺参处理器被解析层先拦成死代码（`snippets show` 从无该守卫，评审 F1 本批补齐同款）。修法：CLI 实参游标双口分面，`Args::next` 必值口缺值直出 exit 2（G-F 口径不变），`Args::next_opt` 收集口参数尽返 None 即收尾；bail_arg 措辞中性化（非 issue 子命令的坏旗标不再误报「issue 参数不认识」）。browse-cli 首建 argv 契约测试 `tests/arg_contract.rs`（`CARGO_BIN_EXE_browse` 真二进制四测，零网络；argv 面此前零锁是回归漏网主因）；win-gnu 交叉岗 check 补 `--all-targets`（集成测试此前在 windows 面零编译闸，评审 G1）

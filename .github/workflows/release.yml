@@ -75,6 +75,14 @@ jobs:
             --delete-excluded \
             --header-upload "Cache-Control: public, max-age=60" \
             --checksum -v --stats-one-line
+      # 判新标记（#54，文件名小写 latest）：sync --delete-excluded 会洗掉非资产文件，标记
+      # 恒在 sync 后重写；单行纯版本号，回读红灯锚定
+      - name: Seed stable latest marker (判新面)
+        run: |
+          printf '%s' "$VER" | rclone rcat "r2:${R2_BUCKET}/browse/stable/latest" \
+            --header-upload "Cache-Control: public, max-age=60" -v --stats-one-line
+          got=$(rclone cat "r2:${R2_BUCKET}/browse/stable/latest")
+          [ "$got" = "$VER" ] || { echo "红灯：latest 回读 $got != $VER"; exit 1; }
       - name: Zero-upload red light (双段分别报数，零即红)
         run: |
           v_n=$(rclone lsf "r2:${R2_BUCKET}/browse/${VER}/" | wc -l)

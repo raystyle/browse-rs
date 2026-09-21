@@ -1,6 +1,6 @@
 {
   "crate": "browse-core",
-  "version": "0.12.2",
+  "version": "0.13.0",
   "items": [
     {
       "path": "browse_core::chrome_mgr",
@@ -295,7 +295,7 @@
     {
       "path": "browse_core::self_update",
       "kind": "module",
-      "docs": "browse 自更新（用户令 2026-09-18；对齐 build-release 公共契约第六节\n双通道）：GitHub Releases latest 判新（semver 只升不降）-> 下载本平台\n资产（自家镜像 stable 滚动段优先，GitHub 回落，资产与边车恒同源）->\n`.sha256` 边车锚校验（与发布器同 digest 判据，不符即拒不回落）->\n解包取二进制 -> 原子自替换（同目录暂存防跨文件系统 rename，pid 后缀\n防并发互踩，`--version` 自证带重试，证败回滚并复核终态）。\n\nark 管理的安装拦自更新走 ark 单通道（判据：exe 同目录 `ark-managed`\n落痕，或用户面 bin 目录存在指向本 exe 的符号链接入口即 ark 布局；\n落痕生产者契约随家族统一标准派 ark 侧）。"
+      "docs": "browse 自更新（用户令 2026-09-18；对齐 build-release 公共契约第六节\n双通道）：镜像 stable/latest 判新（GitHub 回落）（semver 只升不降）-> 下载本平台\n资产（自家镜像 stable 滚动段优先，GitHub 回落，资产与边车恒同源）->\n`.sha256` 边车锚校验（与发布器同 digest 判据，不符即拒不回落）->\n解包取二进制 -> 原子自替换（同目录暂存防跨文件系统 rename，pid 后缀\n防并发互踩，`--version` 自证带重试，证败回滚并复核终态）。\n\nark 管理的安装拦自更新走 ark 单通道（判据：exe 同目录 `ark-managed`\n落痕，或用户面 bin 目录存在指向本 exe 的符号链接入口即 ark 布局；\n落痕生产者契约随家族统一标准派 ark 侧）。"
     },
     {
       "path": "browse_core::self_update::GITHUB_REPO",
@@ -320,7 +320,7 @@
     {
       "path": "browse_core::self_update::latest_browse_version",
       "kind": "function",
-      "docs": "发现最新版本号。\n\nGitHub Releases latest API（tag 去 `v` 前缀）；镜像 stable 段是下载\n通道非判新源（段内资产名带版本，无法反查最新号）。\n\n阻塞 http，调用方收 `spawn_blocking`。\n\n# Errors\n\nAPI 不可达、限流（403/429 带 token 指引）或未回 tag。"
+      "docs": "发现最新版本号。\n\n镜像 stable 段的 `latest` 标记优先（播种流水写的单行纯版本号），\n镜像不可达、标记缺失或不成形才回落 GitHub Releases latest API\n（tag 去 `v` 前缀）；GitHub 匿名 60/h 机队易撞（#54），镜像面让日\n常判新与下载腿同源，update 全程默认零 GitHub 依赖。\n\n阻塞 http，调用方收 `spawn_blocking`。\n\n# Errors\n\n双源皆失败（含 GitHub 限流 403/429 带 token 指引）或都未给出成形\n版本号。"
     },
     {
       "path": "browse_core::self_update::swap_binary",

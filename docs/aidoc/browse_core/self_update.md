@@ -1,7 +1,7 @@
 # browse-core::self_update
 
 browse 自更新（用户令 2026-09-18；对齐 build-release 公共契约第六节
-双通道）：GitHub Releases latest 判新（semver 只升不降）-> 下载本平台
+双通道）：镜像 stable/latest 判新（GitHub 回落）（semver 只升不降）-> 下载本平台
 资产（自家镜像 stable 滚动段优先，GitHub 回落，资产与边车恒同源）->
 `.sha256` 边车锚校验（与发布器同 digest 判据，不符即拒不回落）->
 解包取二进制 -> 原子自替换（同目录暂存防跨文件系统 rename，pid 后缀

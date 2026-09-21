@@ -1,5 +1,5 @@
 <!-- browse_cli/index.md -->
-# browse-cli 0.12.2
+# browse-cli 0.13.0
 
 browse CLI 的可测半边：daemon 客户端（HTTP 调用 + 自动拉起）。
 
@@ -115,7 +115,7 @@ ledger.ohmygh.com（替代 issues.ohmygh.com 客户端面；旧服务只读保�
 
 
 <!-- browse_core/index.md -->
-# browse-core 0.12.2
+# browse-core 0.13.0
 
 browse CLI 的核心库：方言宿主、引擎策略、daemon HTTP API。
 
@@ -363,7 +363,7 @@ browser-harness-js 片段方言的语法分析器（纯函数）。
 # browse-core::self_update
 
 browse 自更新（用户令 2026-09-18；对齐 build-release 公共契约第六节
-双通道）：GitHub Releases latest 判新（semver 只升不降）-> 下载本平台
+双通道）：镜像 stable/latest 判新（GitHub 回落）（semver 只升不降）-> 下载本平台
 资产（自家镜像 stable 滚动段优先，GitHub 回落，资产与边车恒同源）->
 `.sha256` 边车锚校验（与发布器同 digest 判据，不符即拒不回落）->
 解包取二进制 -> 原子自替换（同目录暂存防跨文件系统 rename，pid 后缀
@@ -571,7 +571,7 @@ list/site/page）。git 维护走 shell-out `git`（不引 git crate）：instal
 
 
 <!-- cdp/index.md -->
-# cdp 0.12.2
+# cdp 0.13.0
 
 Chrome DevTools Protocol（CDP）连接层：一条常驻 browser-level WebSocket 会话。
 
