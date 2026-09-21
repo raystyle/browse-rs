@@ -169,7 +169,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Cli,
         signature: "browse update",
         args: &[],
-        description: "自更新 browse 二进制（镜像 stable 段优先：判新读 LATEST 标记、下载取资产，缺或坏回落 GitHub，sha256 锚校验，自证回滚；ark 管理安装拦走 ark）。",
+        description: "自更新 browse 二进制（镜像 stable 段优先：判新读 latest 标记、下载取资产，缺或坏回落 GitHub，sha256 锚校验，自证回滚；ark 管理安装拦走 ark）。",
         example: "browse update",
     },
     CmdSpec {

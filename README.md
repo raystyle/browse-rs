@@ -45,9 +45,9 @@ clean-chrome（自编 Chromium），常驻 daemon 让会话、变量、活动 ta
 
 4. 源码：`cargo install --path crates/browse-cli --force`
 
-自更新：`browse update`（GitHub latest 判新、semver 只升不降；下载走
-镜像 stable 段优先、GitHub 回落，`.sha256` 锚校验后自替换并自证回滚；
-ark 管理的安装拦走 ark）。**0.6.1 及更早没有此子命令**（会被当片段求
+自更新：`browse update`（判新与下载双腿镜像 stable 段优先（判新读
+latest 标记）、GitHub 回落，semver 只升不降；`.sha256` 锚校验后自替换
+并自证回滚；ark 管理的安装拦走 ark）。**0.6.1 及更早没有此子命令**（会被当片段求
 值），先用下列任一通道手动升一次。
 
 五端注意：Windows（win-gnu 交叉构建，CRT 静态零 DLL 依赖）；Linux 最小

@@ -740,14 +740,27 @@ mod tests {
         format!("http://{addr}")
     }
 
-    /// 判新镜像优先（#54，仓内锁）：latest 命中即零 GitHub 依赖；缺标
-    /// 记回落 GitHub（钉死拒连）必报其源错。GitHub 腿经 HTTPS_PROXY 指
-    /// 向拒连环回隔离网络（同 fetch_asset 测试先设后建口径）。
+    /// env 写面互斥锁（#54 评审 G）：HTTPS_PROXY 与 BROWSE_RELEASE_
+    /// MIRROR 双写测试的 env 敏感窗互斥，防并发测试线程互相插队打到对
+    /// 方 mock（SECRETS_TEST_LOCK 同形先例）。
+    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+        static L: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
+        L.get_or_init(|| std::sync::Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// 判新镜像优先（#54）：latest 命中即零 GitHub 依赖；缺标记回落
+    /// GitHub（钉死拒连）必报其源错。GitHub 腿经 HTTPS_PROXY 指向拒连
+    /// 环回隔离网络（同 fetch_asset 测试先设后建口径）。
     #[test]
     #[cfg(unix)]
     fn latest_version_mirror_first_and_fallback() {
-        // SAFETY: 测试进程短窗覆写并保存原值，测试后还原；并发测试无代理读者
+        let _env = env_lock();
+        // SAFETY: 锁内短窗覆写并保存原值，测试后还原；env_lock 保证同
+        // 进程无并发 env 写读者
         let saved_proxy = std::env::var("HTTPS_PROXY").ok();
+        let saved_mirror = std::env::var("BROWSE_RELEASE_MIRROR").ok();
         unsafe {
             std::env::set_var("HTTPS_PROXY", "http://127.0.0.1:9");
         }
@@ -771,6 +784,10 @@ mod tests {
                 Some(v) => std::env::set_var("HTTPS_PROXY", v),
                 None => std::env::remove_var("HTTPS_PROXY"),
             }
+            match saved_mirror.as_ref() {
+                Some(v) => std::env::set_var("BROWSE_RELEASE_MIRROR", v),
+                None => std::env::remove_var("BROWSE_RELEASE_MIRROR"),
+            }
         }
     }
 
@@ -791,11 +808,13 @@ mod tests {
         );
     }
 
-    /// 双通道三态（仓内锁）：镜像整对优先、镜像缺回落错带双源指引、
-    /// 哈希不符硬拒不回落。GitHub 腿钉死不可达（127.0.0.1:9）隔离网络。
+    /// 双通道三态：镜像整对优先、镜像缺回落错带双源指引、哈希不符硬拒
+    /// 不回落。GitHub 腿钉死不可达（127.0.0.1:9）隔离网络；env 写面走
+    /// env_lock 互斥（#54 评审 G）。
     #[test]
     #[cfg(unix)]
     fn fetch_asset_dual_channel_three_states() {
+        let _env = env_lock();
         let dir = std::env::temp_dir().join("browse-selfupd-test-fetch");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
@@ -804,8 +823,10 @@ mod tests {
         let asset = asset_name("9.9.9").unwrap();
         // 隔离网络：GitHub 回落腿硬编码基址不可钉，走 HTTPS_PROXY 指向拒连
         // 环回（reqwest 在 client build 时解析代理 env，故必须先设后建）
-        // SAFETY: 测试进程短窗覆写并保存原值，测试后还原；并发测试无代理读者
+        // SAFETY: 锁内短窗覆写并保存原值，测试后还原；env_lock 保证同
+        // 进程无并发 env 写读者
         let saved_proxy = std::env::var("HTTPS_PROXY").ok();
+        let saved_mirror = std::env::var("BROWSE_RELEASE_MIRROR").ok();
         unsafe {
             std::env::set_var("HTTPS_PROXY", "http://127.0.0.1:9");
         }
@@ -858,6 +879,10 @@ mod tests {
             match saved_proxy.as_ref() {
                 Some(v) => std::env::set_var("HTTPS_PROXY", v),
                 None => std::env::remove_var("HTTPS_PROXY"),
+            }
+            match saved_mirror.as_ref() {
+                Some(v) => std::env::set_var("BROWSE_RELEASE_MIRROR", v),
+                None => std::env::remove_var("BROWSE_RELEASE_MIRROR"),
             }
         }
         let _ = std::fs::remove_dir_all(&dir);
