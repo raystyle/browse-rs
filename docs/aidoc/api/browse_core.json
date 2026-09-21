@@ -698,6 +698,11 @@
       "docs": "全量命令目录，CLI/方言/session 三面的单一真相源。"
     },
     {
+      "path": "browse_core::surface::COMPANION_FLAGS",
+      "kind": "constant",
+      "docs": "帮助面 Options 节的伴生旗标表：不入命令目录的维护/伴生旗标与一句\n说明，与 [`COMMANDS`] 旗标条目合并渲染（字典序）。"
+    },
+    {
       "path": "browse_core::surface::CmdKind",
       "kind": "enum",
       "docs": "命令在目录中的种类：CLI 子命令、方言全局函数或 session 方法。"

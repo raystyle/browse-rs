@@ -877,7 +877,7 @@
       "type": "object"
     },
     "clickAt": {
-      "description": "clickAt(x, y, opts?) 视口坐标 trusted 点击（点当前可见物，不做遮挡检查）；optsbutton 换键、clickCount 双击。",
+      "description": "clickAt(x, y, opts?) 视口坐标 trusted 点击（点当前可见物，不做遮挡检查）；opts.button 换键、clickCount 双击。",
       "example": "await clickAt(120, 40)",
       "input": {
         "properties": {
@@ -908,7 +908,7 @@
       "type": "object"
     },
     "clickRef": {
-      "description": "clickRef(ref, opts?) 按 snapshot 短 ref 点击：滚动可见、量中心、遮挡命中测试（被盖即拒绝并报遮挡物）、trusted 派发；optsbutton/clickCount 与 waitNav 可同给；opts.waitNav 链接型点击后走有界提交等待：grace 窗（2 秒或 timeout 较小者）内探到导航即等加载收尾（waitLoad.settled=nav），无导航迹象即返回（waitLoad.settled=no-nav，同文档锚点与 JS 按钮不再误等全窗），timeout 秒口径；同源 iframe 内节点坐标沿 frameElement 链提升到顶层视口系，OOPIF（跨域 iframe）内节点在子 session 量中心后用父页 iframe rect 提升（嵌套 OOPIF 只提升一层）。",
+      "description": "clickRef(ref, opts?) 按 snapshot 短 ref 点击：滚动可见、量中心、遮挡命中测试（被盖即拒绝并报遮挡物）、trusted 派发；opts.button/clickCount 与 waitNav 可同给；opts.waitNav 链接型点击后走有界提交等待：grace 窗（2 秒或 timeout 较小者）内探到导航即等加载收尾（waitLoad.settled=nav），无导航迹象即返回（waitLoad.settled=no-nav，同文档锚点与 JS 按钮不再误等全窗），timeout 秒口径；同源 iframe 内节点坐标沿 frameElement 链提升到顶层视口系，OOPIF（跨域 iframe）内节点在子 session 量中心后用父页 iframe rect 提升（嵌套 OOPIF 只提升一层）。",
       "example": "await clickRef(\"e3\", {waitNav: true})",
       "input": {
         "properties": {
@@ -1961,7 +1961,7 @@
       "type": "object"
     },
     "recordStart": {
-      "description": "recordStart(opts?) 开始录屏（Screencast 帧流落盘；everyNthFrame 源端抽帧、maxWidth/maxHeight 限宽高）；optscursor 画跟随光标元素加 showActions 点击处闪圈（screencast 帧可见，回放可读；stop 自动清）。",
+      "description": "recordStart(opts?) 开始录屏（Screencast 帧流落盘；everyNthFrame 源端抽帧、maxWidth/maxHeight 限宽高）；opts.cursor 画跟随光标元素加 showActions 点击处闪圈（screencast 帧可见，回放可读；stop 自动清）。",
       "example": "return await recordStart({everyNthFrame: 2})",
       "input": {
         "properties": {

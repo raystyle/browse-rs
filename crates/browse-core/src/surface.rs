@@ -1012,7 +1012,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             ),
             arg!("clickCount", "number", false, "1（2 即双击语义）"),
         ],
-        description: "视口坐标 trusted 点击（点当前可见物，不做遮挡检查）；optsbutton 换键、clickCount 双击。",
+        description: "视口坐标 trusted 点击（点当前可见物，不做遮挡检查）；opts.button 换键、clickCount 双击。",
         example: "await clickAt(120, 40)",
     },
     CmdSpec {
@@ -1045,7 +1045,7 @@ pub const COMMANDS: &[CmdSpec] = &[
                 "{button:left,clickCount:1,waitNav:false,timeout:10}"
             ),
         ],
-        description: "按 snapshot 短 ref 点击：滚动可见、量中心、遮挡命中测试（被盖即拒绝并报遮挡物）、trusted 派发；optsbutton/clickCount 与 waitNav 可同给；opts.waitNav 链接型点击后走有界提交等待：grace 窗（2 秒或 timeout 较小者）内探到导航即等加载收尾（waitLoad.settled=nav），无导航迹象即返回（waitLoad.settled=no-nav，同文档锚点与 JS 按钮不再误等全窗），timeout 秒口径；同源 iframe 内节点坐标沿 frameElement 链提升到顶层视口系，OOPIF（跨域 iframe）内节点在子 session 量中心后用父页 iframe rect 提升（嵌套 OOPIF 只提升一层）。",
+        description: "按 snapshot 短 ref 点击：滚动可见、量中心、遮挡命中测试（被盖即拒绝并报遮挡物）、trusted 派发；opts.button/clickCount 与 waitNav 可同给；opts.waitNav 链接型点击后走有界提交等待：grace 窗（2 秒或 timeout 较小者）内探到导航即等加载收尾（waitLoad.settled=nav），无导航迹象即返回（waitLoad.settled=no-nav，同文档锚点与 JS 按钮不再误等全窗），timeout 秒口径；同源 iframe 内节点坐标沿 frameElement 链提升到顶层视口系，OOPIF（跨域 iframe）内节点在子 session 量中心后用父页 iframe rect 提升（嵌套 OOPIF 只提升一层）。",
         example: "await clickRef(\"e3\", {waitNav: true})",
     },
     CmdSpec {
@@ -1320,7 +1320,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "recordStart(opts?)",
         args: &[arg!("opts", "object", false, "{everyNthFrame:1}")],
-        description: "开始录屏（Screencast 帧流落盘；everyNthFrame 源端抽帧、maxWidth/maxHeight 限宽高）；optscursor 画跟随光标元素加 showActions 点击处闪圈（screencast 帧可见，回放可读；stop 自动清）。",
+        description: "开始录屏（Screencast 帧流落盘；everyNthFrame 源端抽帧、maxWidth/maxHeight 限宽高）；opts.cursor 画跟随光标元素加 showActions 点击处闪圈（screencast 帧可见，回放可读；stop 自动清）。",
         example: "return await recordStart({everyNthFrame: 2})",
     },
     CmdSpec {
@@ -1628,7 +1628,9 @@ pub fn render_manual() -> String {
 
 // Options 节的伴生旗标：不单独成目录条目（up 与求值前置共用），与目录旗标
 // 合并按字典序渲染；描述与 [`COMMANDS`] 条目无重复。
-const COMPANION_FLAGS: &[(&str, &str)] = &[
+/// 帮助面 Options 节的伴生旗标表：不入命令目录的维护/伴生旗标与一句
+/// 说明，与 [`COMMANDS`] 旗标条目合并渲染（字典序）。
+pub const COMPANION_FLAGS: &[(&str, &str)] = &[
     (
         "--bind <host:port>",
         "--serve 监听地址（default: 127.0.0.1:9880）",
@@ -1668,7 +1670,7 @@ const COMPANION_FLAGS: &[(&str, &str)] = &[
     ),
     (
         "--secrets <file>",
-        "dotenv 密钥文件（#25.4）：片段经 secrets.<NAME> 取值，stdout 与回显脱敏为 ***（防整值外泄，不防片段；落盘工件与网络响应体不脱敏）；键容 export 前缀与行内 # 注释（shell 可直用同文件）；取值看 daemon 启动时仓、展示看本次 CLI 旗标；改密钥重启 daemon",
+        "dotenv 密钥文件：片段经 secrets.<NAME> 取值，stdout 与回显脱敏为 ***（防整值外泄，不防片段；落盘工件与网络响应体不脱敏）；键容 export 前缀与行内 # 注释（shell 可直用同文件）；取值看 daemon 启动时仓、展示看本次 CLI 旗标；改密钥重启 daemon",
     ),
     ("--port <p>", "显式调试端口（伴附着与 up）"),
     (

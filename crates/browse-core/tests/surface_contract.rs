@@ -171,14 +171,50 @@ fn help_groups_cover_catalog() {
     assert_eq!(grouped.len(), names.len(), "分组表存在目录外名或重复名");
 }
 
-/// 帮助面零内部编号守卫：台账编号（#NN、REQ、ADR、评审、裁定日期）的
-/// 溯源属 CHANGELOG 与 diary，不进二进制帮助面。
+/// 帮助面与三投影零内部编号守卫：台账编号（#NN、REQ、ADR、评审、裁定
+/// 日期）的溯源属 CHANGELOG 与 diary，不进二进制对外任何一面。扫源目录
+/// （description、arg 缺省、伴生旗标）与三个渲染产物全量（防「编号在
+/// 第二子句被短述截掉」的假绿），判据含裸 #NN 与半角形。
 #[test]
-fn help_face_free_of_internal_ids() {
-    let help = surface::render_help();
-    for pat in ["（#", "REQ-0", "ADR-0", "评审 ", "用户令 ", "修正令 "] {
-        assert!(!help.contains(pat), "帮助面出现内部编号痕迹：{pat}");
+fn faces_free_of_internal_ids() {
+    let mut corpus = String::new();
+    for c in surface::COMMANDS {
+        corpus.push_str(c.description);
+        corpus.push('\n');
+        corpus.push_str(c.example);
+        corpus.push('\n');
+        for a in c.args {
+            if let Some(d) = a.default {
+                corpus.push_str(d);
+                corpus.push('\n');
+            }
+        }
     }
+    for (_, d) in surface::COMPANION_FLAGS {
+        corpus.push_str(d);
+        corpus.push('\n');
+    }
+    corpus.push_str(&surface::render_help());
+    corpus.push('\n');
+    corpus.push_str(&surface::render_llms());
+    corpus.push('\n');
+    corpus.push_str(&surface::render_llms_full());
+    corpus.push('\n');
+    corpus.push_str(&surface::render_schema().to_string());
+    for pat in ["（#", "(#", "REQ-0", "ADR-0", "评审 ", "用户令 ", "修正令 "] {
+        assert!(
+            !corpus.contains(pat),
+            "对外面出现内部编号痕迹：{pat}（溯源改记 CHANGELOG/diary）"
+        );
+    }
+    assert!(
+        !corpus.contains("#2")
+            && !corpus.contains("#3")
+            && !corpus.contains("#4")
+            && !corpus.contains("#5")
+            && !corpus.contains("#6"),
+        "对外面出现裸 #NN 台账编号"
+    );
 }
 
 /// 反查守卫：main.rs 解析面认识的全部长旗标必须出现在帮助面（维护件与

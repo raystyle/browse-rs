@@ -31,5 +31,6 @@ session 方法**只在这一处登记为数据**，JSON Schema 与 LLM 清单
 ## Constants
 
 - `COMMANDS` — 全量命令目录，CLI/方言/session 三面的单一真相源。
+- `COMPANION_FLAGS` — 帮助面 Options 节的伴生旗标表：不入命令目录的维护/伴生旗标与一句
 - `HELP_GROUPS` — 帮助面 Commands 分组表：组标题到目录显示名（[`help_display_name`]
 
