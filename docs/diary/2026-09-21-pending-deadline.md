@@ -16,6 +16,6 @@ cookie getter 死循环页（`Object.defineProperty(document,'cookie',{get(){whi
 
 server.rs 求值 300 秒外层超时 drop 复合求值（host.eval 内含多条 call）属同型的粗粒度边角：迟到的响应会被 route 的 take 清掉，只有真挂死才积尸，且单飞槽语义下求值超时本身罕见；不在本批扩面。用法错 exit 2 直出四处（next 闭包缺值、--port 非数字、workspace site/page 缺参），bail_arg 族口径统一。[实证: fmt、clippy -D warnings、test --workspace 全绿、doc、aidoc strict、E2E 3 测 74.83s（含挂死探测与复活链）、PEVO]
 
-## 封版 v0.12.1
+## 封版 v0.12.1 与关单
 
-修复批取 patch（REQ-004 判据行）；#52 关单走 omc 委托道。
+修复批取 patch（REQ-004 判据行）。评审快核 0 必修 CONFIRM（G1 挂死块移尾部免疫 tabs 段 t1 按序挑选、G2 call_with_deadline 记账边界句、G3 REQ 注记时态全采纳随 3683dc3）；推送 c608567..3683dc3 两笔，CI ci 35581293684 与 docs 35581293610 双绿；#52 经 omc 集中道关毕（ledger done seq 170），open 集回落 = {1}（常驻冒烟单），browse 台账实质清零。评审员基线号更正（c608567 非 60469ec）与 74.5s 计时自洽推算两记收下。
