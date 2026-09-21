@@ -2209,6 +2209,7 @@ async fn spawn_port_channel_roundtrip() {
             proxy: None,
             proxy_bypass: None,
             isolated: false,
+            engine_args: Vec::new(),
         })
         .await
         .expect("端口态引擎起不来（BROWSE_CHROME 指到 clean-chrome 的 chrome.exe？）");
@@ -2236,6 +2237,7 @@ async fn spawn_pipe_channel_roundtrip() {
             proxy: None,
             proxy_bypass: None,
             isolated: false,
+            engine_args: Vec::new(),
         })
         .await
         .expect("管道态引擎起不来（需 clean-chrome 2026-09-14 后的 47 锚产物）");
@@ -2264,6 +2266,7 @@ async fn isolated_profile_removed_on_shutdown() {
             proxy: None,
             proxy_bypass: None,
             isolated: true,
+            engine_args: Vec::new(),
         })
         .await
         .expect("隔离态引擎");

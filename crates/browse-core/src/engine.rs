@@ -56,12 +56,17 @@ pub enum EngineSpec {
         /// 隔离态 profile（#25.3 拆出）：引擎退出即删 profile 目录，
         /// 不留站点痕迹；目录由引擎自管。
         isolated: bool,
+        /// 引擎附加旗标（#48）：`--engine-arg` / `BROWSE_ENGINE_ARGS`
+        /// 而来，spawn 时按 argv 元素原样直通（如
+        /// `--enable-features=CleanChromeBrowseDomain` 开 clean-chrome
+        /// 扩展域）。
+        engine_args: Vec<String>,
     },
 }
 
 impl EngineSpec {
-    /// 从 spec 派生 chrome 附加旗标（#25.5/#25.3）：代理与旁路直通
-    /// chrome 语义；单测锁形。
+    /// 从 spec 派生 chrome 附加旗标（#25.5/#25.3/#48）：代理与旁路直通
+    /// chrome 语义，引擎附加旗标原样透传；单测锁形。
     ///
     /// 纪律：值按单 flag 直通、不做转义或拆分（`cmd.args` 每项是一个
     /// argv 元素，无 shell 无空白拆分，无注入面）；新增字段一律经本函数
@@ -70,6 +75,7 @@ impl EngineSpec {
         let EngineSpec::Auto {
             proxy,
             proxy_bypass,
+            engine_args,
             ..
         } = self
         else {
@@ -82,6 +88,7 @@ impl EngineSpec {
         if let Some(b) = proxy_bypass {
             args.push(format!("--proxy-bypass-list={b}"));
         }
+        args.extend(engine_args.iter().cloned());
         args
     }
 }
@@ -112,6 +119,9 @@ impl EngineSpec {
             proxy: std::env::var("BROWSE_PROXY").ok(),
             proxy_bypass: std::env::var("BROWSE_PROXY_BYPASS").ok(),
             isolated: false,
+            engine_args: std::env::var("BROWSE_ENGINE_ARGS")
+                .map(|s| s.split_whitespace().map(str::to_string).collect())
+                .unwrap_or_default(),
         }
     }
 }
@@ -270,6 +280,7 @@ impl Engine {
                 proxy: _,
                 proxy_bypass: _,
                 isolated,
+                engine_args: _,
             } => {
                 let extra = spec.spawn_extra_args();
                 // 隔离态（#25.3 拆出）：spawn 才落 isolated-* 目录（附着探测
@@ -541,7 +552,8 @@ impl Engine {
 mod tests {
     use super::*;
 
-    /// 代理旗标派生（#25.5）：双开与单开形、非 Auto 面为空。
+    /// 代理与引擎附加旗标派生（#25.5/#48）：双开与单开形、附加旗标
+    /// 原样透传、非 Auto 面为空。
     #[test]
     fn spawn_extra_args_shape() {
         let spec = EngineSpec::Auto {
@@ -552,12 +564,14 @@ mod tests {
             proxy: Some("http://127.0.0.1:7890".into()),
             proxy_bypass: Some("localhost,*.corp".into()),
             isolated: false,
+            engine_args: vec!["--enable-features=CleanChromeBrowseDomain".into()],
         };
         assert_eq!(
             spec.spawn_extra_args(),
             vec![
                 "--proxy-server=http://127.0.0.1:7890".to_string(),
                 "--proxy-bypass-list=localhost,*.corp".to_string(),
+                "--enable-features=CleanChromeBrowseDomain".to_string(),
             ]
         );
         let none = EngineSpec::Auto {
@@ -568,6 +582,7 @@ mod tests {
             proxy: None,
             proxy_bypass: None,
             isolated: true,
+            engine_args: Vec::new(),
         };
         assert!(none.spawn_extra_args().is_empty());
         assert!(

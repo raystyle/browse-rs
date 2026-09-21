@@ -13,7 +13,7 @@
 | `browse --b64 '<base64>'` | base64 通道（#22）：片段实参（或 --js 的 JS 实参）按 base64 解码后再派发；空实参加管道 = 整段 stdin base64 解码（--js 管道版即 cat x.js.b64 | browse --js --b64）。PowerShell 引号与编码面一并绕开；bash 生成 base64 -w0 <文件>，PowerShell 用 [Convert]::ToBase64String。无短参（-b 是 issue new --body 的既有契约）。 |
 | `browse --new-tab '<片段>'` | 求值前先开 about:blank 新 tab。 |
 | `browse --connect <ws|端口> '<片段>'` | 显式附着给定 ws URL 或调试端口。 |
-| `browse up [--headless] [--pipe] [--chrome <path>] [--profile <dir>] [--ws <url>] [--port <p>] [--proxy <url>] [--proxy-bypass <list>] [--isolated] [--idle-timeout <ms>] [--cookies <域csv>]` | 显式起引擎（附着优先，缺则 spawn clean-chrome 隔离实例；--profile 自定义 user-data-dir，默认固定 profile 持久保存站点会话；--proxy/--proxy-bypass 直通 chrome 代理旗标；--isolated 隔离态 profile 引擎退出即删（给了 --profile 时 isolated 优先）；--idle-timeout 闲置回收毫秒只对新拉起的 daemon 生效）；--cookies 域 csv（#48）起引擎后从附着浏览器只读热迁指定域登录态（源零写回，无附着源即报错指 storageState 整包往返）。 |
+| `browse up [--headless] [--pipe] [--chrome <path>] [--profile <dir>] [--ws <url>] [--port <p>] [--proxy <url>] [--proxy-bypass <list>] [--engine-arg <a>] [--isolated] [--idle-timeout <ms>] [--cookies <域csv>]` | 显式起引擎（附着优先，缺则 spawn clean-chrome 隔离实例；--profile 自定义 user-data-dir，默认固定 profile 持久保存站点会话；--proxy/--proxy-bypass 直通 chrome 代理旗标；--engine-arg 引擎附加旗标（#48，可叠加，spawn 时 argv 原样直通，BROWSE_ENGINE_ARGS 同道；与 browse 自身 spawn 旗标撞车时后值胜，慎叠）；--isolated 隔离态 profile 引擎退出即删（给了 --profile 时 isolated 优先）；--idle-timeout 闲置回收毫秒只对新拉起的 daemon 生效）；--cookies 域 csv（#48）起引擎后从附着浏览器只读热迁指定域登录态（源零写回，无附着源即报错指 storageState 整包往返）。 |
 | `browse update` | 自更新 browse 二进制（镜像 stable 段优先加 GitHub Releases 回退，sha256 锚校验，自证回滚；ark 管理安装拦走 ark）。 |
 | `browse down` | 退 daemon；只终结自己 spawn 的引擎，附着来源不动。 |
 | `browse status [--json]` | daemon/引擎/实例名/活动 tab 概览。 |

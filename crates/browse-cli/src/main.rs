@@ -127,6 +127,7 @@ async fn main() -> Result<()> {
     let mut repl = false;
     let mut proxy: Option<String> = None;
     let mut proxy_bypass: Option<String> = None;
+    let mut engine_args: Vec<String> = Vec::new();
     let mut isolated = false;
     let mut idle_timeout: Option<String> = None;
     let mut cookies_csv: Option<String> = None;
@@ -160,6 +161,8 @@ async fn main() -> Result<()> {
             "--pipe" => pipe = true,
             "--proxy" => proxy = Some(next("--proxy")?),
             "--proxy-bypass" => proxy_bypass = Some(next("--proxy-bypass")?),
+            // #48：引擎附加旗标直通 spawn（可叠加），值以 -- 开头也原样收
+            "--engine-arg" => engine_args.push(next("--engine-arg")?),
             "--isolated" => isolated = true,
             "--idle-timeout" => idle_timeout = Some(next("--idle-timeout")?),
             // #48：无头起引擎时从附着浏览器按域克隆 cookie（逗号分隔多域）
@@ -492,6 +495,11 @@ async fn main() -> Result<()> {
             if let Some(b) = &proxy_bypass {
                 envs.push(("BROWSE_PROXY_BYPASS", b.clone()));
             }
+            // #48：附加旗标空格连接注入 daemon env（值含空格即失真，本
+            // 通道只服务无空格 chrome 旗标；含空格场景走 /engine/up 直传）
+            if !engine_args.is_empty() {
+                envs.push(("BROWSE_ENGINE_ARGS", engine_args.join(" ")));
+            }
             if let Some(f) = secrets
                 .clone()
                 .or_else(|| std::env::var("BROWSE_SECRETS").ok())
@@ -513,6 +521,7 @@ async fn main() -> Result<()> {
                 proxy,
                 proxy_bypass,
                 isolated,
+                engine_args,
             })
             .await?;
             // #48：--cookies 从附着浏览器按域热迁登录态到新引擎（只读源）
@@ -896,6 +905,7 @@ async fn main() -> Result<()> {
                 proxy_bypass,
                 isolated,
                 secrets,
+                engine_args,
             )
             .await
         }
@@ -928,6 +938,7 @@ async fn run_eval(
     proxy_bypass: Option<String>,
     isolated: bool,
     secrets: Option<String>,
+    engine_args: Vec<String>,
 ) -> Result<()> {
     // --secrets 随新 daemon 环境注入（#25.4；已在跑 daemon 以启动时口径为准）；
     // CLI 进程自己也载一份（评审 F1）：return 出口的渲染发生在 CLI 侧，
@@ -955,6 +966,7 @@ async fn run_eval(
         || proxy.is_some()
         || proxy_bypass.is_some()
         || isolated
+        || !engine_args.is_empty()
     {
         client::engine_up(client::UpParams {
             headless,
@@ -966,6 +978,7 @@ async fn run_eval(
             proxy,
             proxy_bypass,
             isolated,
+            engine_args,
         })
         .await?;
     }

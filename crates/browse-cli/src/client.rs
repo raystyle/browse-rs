@@ -251,6 +251,8 @@ pub struct UpParams {
     pub proxy_bypass: Option<String>,
     /// 隔离态 profile（#25.3 拆出）。
     pub isolated: bool,
+    /// 引擎附加旗标（#48，可叠加）。
+    pub engine_args: Vec<String>,
 }
 
 /// POST /engine/up 显式起引擎，走 ensure 全链（附着优先缺则 spawn）。
@@ -272,6 +274,7 @@ pub async fn engine_up(p: UpParams) -> Result<Value> {
             "proxy": p.proxy,
             "proxy_bypass": p.proxy_bypass,
             "isolated": p.isolated,
+            "engine_args": p.engine_args,
         }))
         .send()
         .await

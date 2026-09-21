@@ -2028,7 +2028,7 @@ impl JsHost {
                         let msg = format!("{e:#}");
                         if msg.contains("-32601") {
                             bail!(
-                                "引擎不支持 Browse.semanticSnapshot（需 clean-chrome 扩展域版，起引擎加 --enable-features=CleanChromeBrowseDomain；#27 批 1 引擎侧已落地）；下一步：browse up --chrome <扩展域版路径>，或用 snapshot({{pierce: true}}) JS 侧替代"
+                                "引擎不支持 Browse.semanticSnapshot（需 clean-chrome 扩展域版，起引擎加 --enable-features=CleanChromeBrowseDomain；#27 批 1 引擎侧已落地）；下一步：browse up --engine-arg --enable-features=CleanChromeBrowseDomain（#48 直通道；或 --chrome 指包装器），或用 snapshot({{pierce: true}}) JS 侧替代"
                             )
                         } else {
                             Err(e)
@@ -2062,7 +2062,7 @@ impl JsHost {
                         let msg = format!("{e:#}");
                         if msg.contains("-32601") {
                             bail!(
-                                "引擎不支持 Browse.subscribeChanges（需 clean-chrome 扩展域版，起引擎加 --enable-features=CleanChromeBrowseDomain；#27 批 2 引擎侧已落地）；下一步：browse up --chrome <扩展域版路径>，或用 session.waitJs 轮询替代"
+                                "引擎不支持 Browse.subscribeChanges（需 clean-chrome 扩展域版，起引擎加 --enable-features=CleanChromeBrowseDomain；#27 批 2 引擎侧已落地）；下一步：browse up --engine-arg --enable-features=CleanChromeBrowseDomain（#48 直通道；或 --chrome 指包装器），或用 session.waitJs 轮询替代"
                             )
                         } else {
                             Err(e)
@@ -2085,7 +2085,7 @@ impl JsHost {
                         let msg = format!("{e:#}");
                         if msg.contains("-32601") {
                             bail!(
-                                "引擎不支持 Browse.unsubscribeChanges（同 subscribeChanges 口径）；下一步：browse up --chrome <扩展域版路径>"
+                                "引擎不支持 Browse.unsubscribeChanges（同 subscribeChanges 口径）；下一步：browse up --engine-arg --enable-features=CleanChromeBrowseDomain（#48 直通道；或 --chrome 指包装器）"
                             )
                         } else {
                             Err(e)
@@ -2113,7 +2113,7 @@ impl JsHost {
                         let msg = format!("{e:#}");
                         if msg.contains("-32601") {
                             bail!(
-                                "引擎不支持 Browse.waitForResponse（需 clean-chrome 扩展域版，起引擎加 --enable-features=CleanChromeBrowseDomain；#27 批 3 引擎侧命令骨架已绿事件面在途）；下一步：browse up --chrome <扩展域版路径>，或用 waitForResponse(pattern) JS 侧事件缓冲过滤替代"
+                                "引擎不支持 Browse.waitForResponse（需 clean-chrome 扩展域版，起引擎加 --enable-features=CleanChromeBrowseDomain；#27 批 3 引擎侧命令骨架已绿事件面在途）；下一步：browse up --engine-arg --enable-features=CleanChromeBrowseDomain（#48 直通道；或 --chrome 指包装器），或用 waitForResponse(pattern) JS 侧事件缓冲过滤替代"
                             )
                         } else {
                             Err(e)
@@ -2133,7 +2133,7 @@ impl JsHost {
                         let msg = format!("{e:#}");
                         if msg.contains("-32601") {
                             bail!(
-                                "引擎不支持 Browse.cancelWait（同 engineWaitForResponse 口径）；下一步：browse up --chrome <扩展域版路径>"
+                                "引擎不支持 Browse.cancelWait（同 engineWaitForResponse 口径）；下一步：browse up --engine-arg --enable-features=CleanChromeBrowseDomain（#48 直通道；或 --chrome 指包装器）"
                             )
                         } else {
                             Err(e)
@@ -2160,7 +2160,7 @@ impl JsHost {
                         let msg = format!("{e:#}");
                         if msg.contains("-32601") {
                             bail!(
-                                "引擎不支持 Browse.screenshotDiff（需 clean-chrome 扩展域版，起引擎加 --enable-features=CleanChromeBrowseDomain；#27 批 4 引擎侧已落地）；下一步：browse up --chrome <扩展域版路径>，或用 screenshot({{ifChanged: true}}) 字节相等口径替代"
+                                "引擎不支持 Browse.screenshotDiff（需 clean-chrome 扩展域版，起引擎加 --enable-features=CleanChromeBrowseDomain；#27 批 4 引擎侧已落地）；下一步：browse up --engine-arg --enable-features=CleanChromeBrowseDomain（#48 直通道；或 --chrome 指包装器），或用 screenshot({{ifChanged: true}}) 字节相等口径替代"
                             )
                         } else {
                             Err(e)

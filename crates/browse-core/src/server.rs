@@ -58,6 +58,9 @@ pub struct EngineUpRequest {
     /// 隔离态 profile：引擎退出即删（#25.3 拆出）。
     #[serde(default)]
     pub isolated: bool,
+    /// 引擎附加旗标（#48）：spawn 时 argv 元素原样直通。
+    #[serde(default)]
+    pub engine_args: Vec<String>,
 }
 
 /// HTTP daemon 的运行面聚合：宿主、引擎、缺省引擎意图、单飞槽与退出旗标。
@@ -405,19 +408,29 @@ async fn engine_up_handler(
         // 时请求必未显式给 ws/port：env 钉了 BROWSE_CDP_WS（Attach）则
         // 钉死意图直通（不 panic，那是手册在册配置，二轮快核雷）
         let env_spec = EngineSpec::from_env(None, false, false);
-        let (env_profile, env_proxy, env_bypass, env_ws) = match env_spec {
-            EngineSpec::Attach { ws_url } => (None, None, None, Some(ws_url)),
+        let (env_profile, env_proxy, env_bypass, env_engine_args, env_ws) = match env_spec {
+            EngineSpec::Attach { ws_url } => (None, None, None, Vec::new(), Some(ws_url)),
             EngineSpec::Auto {
                 profile,
                 proxy,
                 proxy_bypass,
+                engine_args,
                 ..
-            } => (profile, proxy, proxy_bypass, None),
-            EngineSpec::Port(_) => (None, None, None, None),
+            } => (profile, proxy, proxy_bypass, engine_args, None),
+            EngineSpec::Port(_) => (None, None, None, Vec::new(), None),
         };
         if let Some(ws_url) = env_ws {
             EngineSpec::Attach { ws_url }
         } else {
+            // #48：env 段先行、显式 --engine-arg 随后（chrome 重复旗标
+            // 后值胜，显式意图压过 daemon 启动残留 env；同值去重消
+            // up 道 env+请求双份投递）
+            let mut engine_args = env_engine_args;
+            for a in &req.engine_args {
+                if !engine_args.contains(a) {
+                    engine_args.push(a.clone());
+                }
+            }
             EngineSpec::Auto {
                 chrome: req.chrome.map(Into::into),
                 headless: req.headless,
@@ -426,6 +439,7 @@ async fn engine_up_handler(
                 proxy: req.proxy.clone().or(env_proxy),
                 proxy_bypass: req.proxy_bypass.clone().or(env_bypass),
                 isolated: req.isolated,
+                engine_args,
             }
         }
     };
