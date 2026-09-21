@@ -135,7 +135,9 @@ pub async fn fetch(url: &str, _markdown: bool, timeout_s: u64) -> Result<Value> 
                 expr = serde_json::to_string(extract)?,
             );
             // G1：复用 CLI 求值面的 daemon 发现（含 BROWSE_NAME 派生端口），
-            // 不只认 BROWSE_PORT 缺省
+            // 不只认 BROWSE_PORT 缺省；懒拉起同构（#49）：daemon 不在则
+            // 自动拉起，冷启动 fetch 不再要求先手工 browse up
+            crate::client::ensure_daemon().await?;
             let bind = crate::client::daemon_bind();
             let resp = client
                 .post(format!("http://{bind}/eval"))
