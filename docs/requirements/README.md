@@ -17,6 +17,7 @@
 | REQ-011 | implemented | should | 看板与应用生态批（issue #54/#55） | #54 实弹加 XSS/CSP 修复；#55 样例应用实弹三验 |
 | REQ-012 | implemented | should | 引擎层扩展域批（issue #27/#61，clean-chrome 联动） | 批 1 至 4 引擎加 browse 侧全落（diary 批 27 至 30） |
 | REQ-013 | implemented | must | 账本面（ohmycloud REQ-063 客户端集成与总台修正令收口） | v0.8.0 实弹三绿（6b055cd）加收口批 v0.1.1 GET 实弹与移除面三拒（104f37d） |
+| REQ-014 | implemented | should | 引擎附加旗标直通道（issue #48，clean-chrome 扩展域启用面） | 实弹四绿加 spawn_extra_args_shape 锁形；评审两轮 CONFIRM（61d0297） |
 
 ## Roadmap（issue 台账批次规划）
 
