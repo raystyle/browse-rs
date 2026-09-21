@@ -201,20 +201,31 @@ fn faces_free_of_internal_ids() {
     corpus.push_str(&surface::render_llms_full());
     corpus.push('\n');
     corpus.push_str(&surface::render_schema().to_string());
+    corpus.push('\n');
+    corpus.push_str(&surface::render_manual());
     for pat in ["（#", "(#", "REQ-0", "ADR-0", "评审 ", "用户令 ", "修正令 "] {
         assert!(
             !corpus.contains(pat),
             "对外面出现内部编号痕迹：{pat}（溯源改记 CHANGELOG/diary）"
         );
     }
-    assert!(
-        !corpus.contains("#2")
-            && !corpus.contains("#3")
-            && !corpus.contains("#4")
-            && !corpus.contains("#5")
-            && !corpus.contains("#6"),
-        "对外面出现裸 #NN 台账编号"
-    );
+    // 裸 #NN 锚定判据：井号后一至三位数字且不紧跟字母数字（避开 #22aaff
+    // 色值、#main2 选择器 id 等合法井号用法；数字后是字母即放行）。URL
+    // fragment 形如 ...#5 会被拦，真有合法用例时加显式放行表，别删判据。
+    let b = corpus.as_bytes();
+    for i in 0..b.len() {
+        if b[i] != b'#' {
+            continue;
+        }
+        let digits = b[i + 1..].iter().take_while(|x| x.is_ascii_digit()).count();
+        let followed_alnum = b
+            .get(i + 1 + digits)
+            .is_some_and(|x| x.is_ascii_alphanumeric());
+        if (1..=3).contains(&digits) && !followed_alnum {
+            let peek = &corpus[i..corpus.len().min(i + 24)];
+            panic!("对外面出现裸 #NN 台账号：{peek}");
+        }
+    }
 }
 
 /// 反查守卫：main.rs 解析面认识的全部长旗标必须出现在帮助面（维护件与
