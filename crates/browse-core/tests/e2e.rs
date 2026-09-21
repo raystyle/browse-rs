@@ -379,7 +379,8 @@ l`.length === 3].join(\"|\")", returnByValue:true})).result.value"#;
 
     // ---- #50 技能触发层（domain）：命中点名 + 未命中零新增键 + 可关 ----
     // 临时 workspace 注入：e2e 进程内逐调用读 env（skills.rs 不缓存），
-    // SEQ 串行窗内窄改、测毕还原
+    // SEQ 串行窗内窄改、按原值还原（评审 G3：save/restore 面，断言 panic
+    // 也不把临时值漏给后续；surface_contract.rs 同款先例）
     let ws = std::env::temp_dir().join(format!("browse-ws-e2e-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&ws);
     let seg_dir = ws.join("domain-skills").join("skill");
@@ -390,6 +391,25 @@ l`.length === 3].join(\"|\")", returnByValue:true})).result.value"#;
     )
     .unwrap();
     // SAFETY: SEQ 互斥下本块独占改 env，其余 e2e 测试不读这三个变量
+    let saved_env: Vec<(&str, Option<std::ffi::OsString>)> = [
+        "BROWSE_WORKSPACE",
+        "BROWSE_DOMAIN_SKILLS",
+        "BROWSE_PAGE_SKILLS",
+    ]
+    .iter()
+    .map(|k| (*k, std::env::var_os(k)))
+    .collect();
+    let restore_env = |saved: &[(&str, Option<std::ffi::OsString>)]| {
+        for (k, orig) in saved {
+            // SAFETY: 与改值同一窄窗（SEQ 串行），无并发读者
+            unsafe {
+                match orig {
+                    Some(v) => std::env::set_var(k, v),
+                    None => std::env::remove_var(k),
+                }
+            }
+        }
+    };
     unsafe { std::env::set_var("BROWSE_WORKSPACE", &ws) };
     host.eval_snippet(
         r#"await routeMock("http://skill.test/*", "<title>skill</title><h1>s</h1>", {contentType: "text/html"})"#,
@@ -517,9 +537,8 @@ l`.length === 3].join(\"|\")", returnByValue:true})).result.value"#;
     host.eval_snippet("await routeClear()")
         .await
         .expect("routeClear 技能块");
-    // SAFETY: 还原环境并清临时仓
-    unsafe { std::env::remove_var("BROWSE_DOMAIN_SKILLS") };
-    unsafe { std::env::remove_var("BROWSE_WORKSPACE") };
+    // 按原值还原（评审 G3：中途 panic 之外的确定性还原口）并清临时仓
+    restore_env(&saved_env);
     let _ = std::fs::remove_dir_all(&ws);
     // 秒口径（#51）：直写秒与旧毫秒习惯值等价，混用守卫带 timeoutWarning
     let wl_s = host
@@ -1942,10 +1961,12 @@ return await responseBody(evs[0].params.requestId)"#,
     )
     .await
     .expect("导航 dedup");
-    // 窗口取最旧 N 条：技能层块（#50）等前序导航会推高事件水位，50
-    // 装不下时 dedup 落窗外假失败；断言意图是「恰一份」非「前 50 内」
+    // 窗口取最旧 N 条：技能层块（#50）等前序导航会推高事件水位，窗口
+    // 低于缓冲水位即把 dedup 挤出窗外假失败（评审 G2：50 与 200 都会被
+    // 后续批推穿）；取满环形缓冲（1000）让窗口只受缓冲上限约束，过滤
+    // 条件（url 含 dedup）已保证不会假阳
     let dup = host
-        .eval_snippet(r#"return await session.peekEvents("Network.responseReceived", 200)"#)
+        .eval_snippet(r#"return await session.peekEvents("Network.responseReceived", 1000)"#)
         .await
         .expect("peek dedup");
     let dedup_events: Vec<&Value> = dup

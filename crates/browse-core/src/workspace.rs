@@ -16,9 +16,22 @@ pub const SEED_REMOTE: &str = "https://github.com/raystyle/browse_workspace.git"
 /// 域名层点名清单的封顶（#50 验收：回执文件列表封顶 10；list 同口径）。
 pub const DOMAIN_FILES_CAP: usize = 10;
 
-/// git 子进程收口：`git --version` 或 `git -C <root> <args...>`，取 stdout
-/// trim。内部函数，错误串自带下一步指令。
+/// git 子进程收口（`&str` 实参版）：见 [`git_os`]。
 fn git(root: Option<&Path>, args: &[&str]) -> Result<String> {
+    git_os(
+        root,
+        &args
+            .iter()
+            .map(|s| std::ffi::OsStr::new(*s))
+            .collect::<Vec<_>>(),
+    )
+}
+
+/// git 子进程收口（`&OsStr` 实参版，评审 G7）：`git --version` 或
+/// `git -C <root> <args...>`（current_dir 代 -C，全程 argv 直传无 shell），
+/// 取 stdout trim。内部函数，错误串自带下一步指令。root 与实参走
+/// `OsStr` 保非 UTF-8 路径不经 lossy 替换（clone 目标错位的注入面）。
+fn git_os(root: Option<&Path>, args: &[&std::ffi::OsStr]) -> Result<String> {
     let mut cmd = std::process::Command::new("git");
     if let Some(r) = root {
         cmd.current_dir(r);
@@ -36,10 +49,13 @@ fn git(root: Option<&Path>, args: &[&str]) -> Result<String> {
     if !out.status.success() {
         let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
         let detail = if stderr.is_empty() { stdout } else { stderr };
-        bail!(
-            "git {} 失败（{detail}）；下一步：在仓根手工跑同一命令看完整输出",
-            args.join(" ")
-        );
+        // 展示面拼接（非执行面）：OsStr 逐个 lossy 再连接
+        let argv = args
+            .iter()
+            .map(|a| a.to_string_lossy())
+            .collect::<Vec<_>>()
+            .join(" ");
+        bail!("git {argv} 失败（{detail}）；下一步：在仓根手工跑同一命令看完整输出");
     }
     Ok(stdout)
 }
@@ -69,7 +85,14 @@ pub fn install(root: &Path) -> Result<serde_json::Value> {
         std::fs::create_dir_all(parent)
             .with_context(|| format!("建父目录 {}", parent.display()))?;
     }
-    git(None, &["clone", SEED_REMOTE, &root.to_string_lossy()])?;
+    git_os(
+        None,
+        &[
+            std::ffi::OsStr::new("clone"),
+            std::ffi::OsStr::new(SEED_REMOTE),
+            root.as_os_str(),
+        ],
+    )?;
     let head = git(Some(root), &["rev-parse", "--short", "HEAD"]).unwrap_or_default();
     Ok(json!({
         "root": root.to_string_lossy(),
@@ -158,11 +181,16 @@ pub fn list_json(root: &Path) -> serde_json::Value {
             .collect();
         segs.sort();
         for seg in segs {
-            let files = domain_segment_files(root, &seg);
+            // capped 判据是「截断发生过」而非「恰好到帽」（评审 G6）：
+            // 恰好 10 个文件不是「可能还有更多」
+            let all = all_segment_files(&root.join("domain-skills").join(&seg));
+            let capped = all.len() > DOMAIN_FILES_CAP;
+            let mut files = all;
+            files.truncate(DOMAIN_FILES_CAP);
             domains.push(json!({
                 "segment": seg,
                 "files": files,
-                "capped": files.len() == DOMAIN_FILES_CAP,
+                "capped": capped,
             }));
         }
     }
@@ -423,14 +451,64 @@ mod tests {
         let _ = std::fs::remove_dir_all(&outside);
     }
 
-    /// read_page：命中读全文，未命中报错。
+    /// read_page：命中读全文，未命中报错；仓内 `../` 语义（评审 G13 假绿
+    /// 修正）：守卫只拦「出仓」，`page-skills/../README.md` 仍在仓内故放行
+    /// （C8 定谳的设计语义，本测用存在目标锁边界，不再锁「文件不存在」）。
     #[test]
     fn read_page_paths() {
         let root = temp_root("page");
         seed(&root);
         assert!(read_page(&root, "captcha").unwrap().contains("验证码"));
         assert!(read_page(&root, "nope").is_err());
-        assert!(read_page(&root, "../README").is_err(), "越界拒绝");
+        std::fs::write(root.join("README.md"), "# 仓根 README\n").unwrap();
+        assert!(
+            read_page(&root, "../README")
+                .unwrap()
+                .contains("仓根 README"),
+            "仓内 ../ 放行（只拦出仓）"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// status_json：git init 临时仓（离线）锁 installed 形——branch 有值、
+    /// 无 origin 时 remote 为 null（不报错），计数正确（评审 G8 补单测）。
+    #[test]
+    fn status_git_repo_shape() {
+        let root = temp_root("gitrepo");
+        seed(&root);
+        // init 加一条空 commit（裸 init 的 HEAD 未生，branch 查询恒失败）
+        let ok = git(Some(&root), &["init", "-q", "-b", "main"]).is_ok()
+            && git(
+                Some(&root),
+                &[
+                    "-c",
+                    "user.name=t",
+                    "-c",
+                    "user.email=t@t",
+                    "commit",
+                    "--allow-empty",
+                    "-q",
+                    "-m",
+                    "init",
+                ],
+            )
+            .is_ok();
+        if !ok {
+            // git 缺失环境（理论仅极端 CI）：本测依赖 git，跳过而非假红
+            let _ = std::fs::remove_dir_all(&root);
+            return;
+        }
+        let s = status_json(&root).unwrap();
+        assert_eq!(s["installed"], json!(true));
+        assert_eq!(s["gitPresent"], json!(true));
+        assert!(
+            s["remote"].is_null(),
+            "无 origin 时 remote 降级 null 非报错: {s}"
+        );
+        assert_eq!(s["branch"], json!("main"), "git 仓 branch 有值: {s}");
+        assert!(s["head"].as_str().is_some(), "commit 后 head 有值: {s}");
+        assert_eq!(s["domainSites"], json!(1));
+        assert_eq!(s["pageSlugs"], json!(1));
         let _ = std::fs::remove_dir_all(&root);
     }
 

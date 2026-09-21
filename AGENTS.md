@@ -46,7 +46,7 @@ Rust workspace（crates/cdp、browse-core、browse-cli）。公开契约以 `///
 ## 环境
 
 - daemon 端口默认 9880（BROWSE_PORT）；BROWSE_NAME 命名实例（状态目录 + 派生端口 9900-9999，ADR-0006）；chrome 发现序：BROWSE_CHROME -> cwd/exe 祖先的 `chromium-*/chrome.exe` -> 常规路径；BROWSE_NO_ATTACH=1 跳过附着探测强制 spawn
-- workspace 技能仓（ADR-0008，#50/#51 配套）：知识外置单仓 github.com/raystyle/browse_workspace，部署 `~/.browse-rs/workspace`（BROWSE_WORKSPACE 覆盖，跨实例共享不分 BROWSE_NAME）；`browse workspace status/install/update/list/site/page` 六件（git shell-out，本地修改可 push 回推）；goto 回执按域名段与页面特征自动点名（BROWSE_DOMAIN_SKILLS=0 / BROWSE_PAGE_SKILLS=0 分层关，env 透传给新 daemon，改配置重启 daemon）；机制配方与站点知识的增改在 workspace 仓做，不回本仓 docs/skills/（已留指路碑）
+- workspace 技能仓（ADR-0008，#50/#51 配套）：知识外置单仓 github.com/raystyle/browse_workspace，部署 `~/.browse-rs/workspace`（BROWSE_WORKSPACE 覆盖，跨实例共享不分 BROWSE_NAME）；`browse workspace status/install/update/list/site/page` 六件（git shell-out，本地修改可 push 回推）；goto 回执按域名段与页面特征自动点名（BROWSE_DOMAIN_SKILLS=0 / BROWSE_PAGE_SKILLS=0 分层关；env 显式透传属防御性，现状与继承等效，改配置重启 daemon）；机制配方与站点知识的增改在 workspace 仓做，不回本仓 docs/skills/（已留指路碑）
 - 域策略：BROWSE_DENY_DOMAINS / BROWSE_ALLOW_DOMAINS（后缀匹配，deny 优先），拦 Page.navigate 与 Target.createTarget
 - 652 命令清单 crates/cdp/src/methods.txt 是生成物（tools/gen-cdp-methods.py，源头 refs/ 不入库）；改协议版本重跑生成再提交
 - daemon 日志：`%USERPROFILE%\.browse-rs\daemon.log`；引擎 chrome 诊断：同目录 `engine.log`（不继承调用方句柄）

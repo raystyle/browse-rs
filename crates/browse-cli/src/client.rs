@@ -152,8 +152,11 @@ pub async fn ensure_daemon_with_env(envs: &[(&str, String)]) -> Result<()> {
 }
 
 /// 技能层透传环境（#50/#51）：拉起新 daemon 时把 CLI 进程里的 workspace
-/// 根与两个触发开关带过去（`BROWSE_SECRETS` 同款语义：只影响新拉起的
-/// daemon，已在跑的以启动时口径为准，改这些配置要重启 daemon）。
+/// 根与两个触发开关显式带给子进程。评审 G4 注记：daemon 由本 crate 的
+/// `Command` spawn、环境默认整体继承（全仓无 env_clear），三变量只走 env
+/// 不像 `BROWSE_SECRETS` 有 argv 来源，故本透传在现状下与继承等价——保留
+/// 是防御（未来 env_clear 或非 CLI 拉起路径）。「只影响新拉起的 daemon，
+/// 已在跑的以启动时口径为准，改这些配置要重启 daemon」语义不变。
 ///
 /// # Examples
 ///

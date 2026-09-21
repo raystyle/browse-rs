@@ -19,7 +19,7 @@ superseded_by: null
 ## Consequences
 
 - 好：agent 按需拉全文不占上下文；知识更新零工具发版；未命中行为零变化；两层（domain/page）各自 env 开关独立降级
-- 坏：goto 每次多一次有界 pageEval（约几十毫秒，8 秒超时兜底，`BROWSE_PAGE_SKILLS=0` 关）；回执契约从恒三键变条件键集，下游严格 schema 消费方要按可选键建模；git 成为 install/update 的外部依赖（缺失给 CTA 不内嵌降级实现）；`BROWSE_NAME=workspace` 实例状态目录与仓根同路径（状态文件名不撞 domain-skills/page-skills，共存可接受）；域名首段规则对 co.uk 类多标签 TLD 不特判（bbc.co.uk 的段是 bbc，够用口径）
+- 坏：goto 每次多一次有界 pageEval（约几十毫秒，8 秒超时兜底，`BROWSE_PAGE_SKILLS=0` 关）；回执契约从恒三键变条件键集，下游严格 schema 消费方要按可选键建模；git 成为 install/update 的外部依赖（缺失给 CTA 不内嵌降级实现）；`BROWSE_NAME=workspace` 实例状态目录与仓根同路径（状态文件名不撞 domain-skills/page-skills，共存可接受）；域名首段规则对 co.uk 类多标签 TLD 不特判（bbc.co.uk 的段是 bbc，够用口径）；`browse fetch` 引擎腿内部走 goto 也吃一次探测（回执键被丢弃，仅时延，两开关可关）；探测串由页内 JSON.stringify 产出、页面可覆写伪造，回执侧以冻结名单白名单校验收口（评审 F3）
 
 ## Alternatives
 

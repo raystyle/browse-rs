@@ -973,7 +973,7 @@ async fn main() -> Result<()> {
         }
         Mode::WorkspaceSite(seg) => {
             if seg.is_empty() {
-                bail!("workspace site 缺段；用法：browse workspace site <段>[/<文件>]（退出 2）");
+                bail!("workspace site 缺段；用法：browse workspace site <段>[/<文件>]");
             }
             let root = browse_core::paths::workspace_dir();
             let text =
@@ -985,7 +985,7 @@ async fn main() -> Result<()> {
         }
         Mode::WorkspacePage(slug) => {
             if slug.is_empty() {
-                bail!("workspace page 缺 slug；用法：browse workspace page <slug>（退出 2）");
+                bail!("workspace page 缺 slug；用法：browse workspace page <slug>");
             }
             let root = browse_core::paths::workspace_dir();
             let text = tokio::task::spawn_blocking(move || {
@@ -1339,10 +1339,10 @@ fn print_help() {
     println!("{}", browse_core::surface::render_help());
 }
 
-/// 递归走访片段库（#44）：目录形 <site>/<task>.js 天然分层；每文件取首行
-/// 注释头当摘要。只读，不建目录不写文件。
-/// workspace status 的人读面（--json 走机器面直出）：安装态、git 概览
-/// 与技能计数一行收束，未安装给 install 下一步。
+/// workspace status 的人读面（`--json` 走机器面直出）：何时用：
+/// `browse workspace status` 未带 --json 时的渲染；安装态、git 概览
+/// 与技能计数一行收束，未安装给 install 下一步，非 git 仓给托管
+/// 面提示。边界：st 形不对时字段落 `?`/0 不 panic。
 fn print_workspace_status(st: &serde_json::Value) {
     let root = st["root"].as_str().unwrap_or("?");
     if st["installed"] != serde_json::json!(true) {
@@ -1353,7 +1353,7 @@ fn print_workspace_status(st: &serde_json::Value) {
         println!("下一步：browse workspace install");
         return;
     }
-    let remote = st["remote"].as_str().unwrap_or("?");
+    let remote = st["remote"].as_str();
     let branch = st["branch"].as_str().unwrap_or("?");
     let head = st["head"].as_str().unwrap_or("?");
     let dirty = st["dirtyChanges"].as_u64().unwrap_or(0);
@@ -1362,7 +1362,9 @@ fn print_workspace_status(st: &serde_json::Value) {
     } else {
         String::new()
     };
-    println!("workspace: {root}（origin {remote}，{branch}@{head}{dirty_s}）");
+    // 非 git 仓（目录在但无 .git 或 origin 未登记）给可读提示（评审 G8）
+    let remote_s = remote.unwrap_or("未登记（非 git 仓或无 origin）");
+    println!("workspace: {root}（origin {remote_s}，{branch}@{head}{dirty_s}）");
     println!(
         "domain-skills: {} 站 {} 文件；page-skills: {} slug",
         st["domainSites"].as_u64().unwrap_or(0),
@@ -1371,6 +1373,8 @@ fn print_workspace_status(st: &serde_json::Value) {
     );
 }
 
+/// 递归走访片段库（#44）：目录形 `<site>/<task>.js` 天然分层；每文件取首行
+/// `//` 注释头当摘要。只读，不建目录不写文件。
 fn visit_snippets(
     root: &std::path::Path,
     dir: &std::path::Path,

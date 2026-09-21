@@ -78,8 +78,9 @@ pub fn domain_hint(segment: &str) -> String {
 /// 路径都返 `{framework:null,slugs:[]}` 骨架，Rust 侧静默降级零键）。
 /// 何时用：仅 goto 后的技能附加入口发一次（Runtime.evaluate
 /// returnByValue，8 秒超时兜底）。边界：TreeWalker 前 800 元素封顶、
-/// iframe 判定源封顶 50、不用 getComputedStyle（大页防卡顿）；正文
-/// 单引号字串（嵌 `r##` 原始串，避免 `"#` 序列提前终结）。
+/// iframe 判定源封顶 50、不用 getComputedStyle（大页防卡顿）；正文单引号
+/// 字串，`r##` 是防御性嵌法（评审 G9：现正文无 `"#` 序列，将来引入
+/// 双引号字串也不会提前终结 `r#`）。
 ///
 /// slug 与置信档（#51 冻结清单，检出序恒定）：spa（框架容器键或全局，
 /// CONFIRMED）、hydration（`__next_f`/`__NUXT_DATA__`/astro-island/
@@ -97,12 +98,11 @@ pub const PAGE_PROBE_JS: &str = r##"(() => {
     const w = window, d = w.document;
     if (!d || !d.body) return JSON.stringify(out);
 
-    // ---- 全局与 hydration 标记（廉价先行）----
+    // ---- 全局与 hydration 标记（廉价先行；点名收进 slug 段保冻结序）----
     const nuxt = w.__NUXT_DATA__ || w.__NUXT__;
     const next = w.__NEXT_DATA__ || (Array.isArray(w.__next_f) ? w.__next_f : null);
     const astro = d.querySelector('astro-island');
     const qwik = d.querySelector('[q\\:container]');
-    if (next || nuxt || astro || qwik) add('hydration', 'CONFIRMED');
 
     // ---- framework（info 字段，不占 slug）----
     let fname = null, fver = null;
@@ -190,9 +190,10 @@ pub const PAGE_PROBE_JS: &str = r##"(() => {
     if (react) { fname = 'react'; fver = null; }
     else if (svelte && fname === null) { fname = 'svelte'; fver = null; }
 
-    // ---- slugs（固定序，保回执确定）----
+    // ---- slugs（固定序，保回执确定；序即文档冻结清单序）----
     if (react || svelte || fname === 'vue' || fname === 'angular' ||
         fname === 'ember' || fname === 'qwik') add('spa', 'CONFIRMED');
+    if (next || nuxt || astro || qwik) add('hydration', 'CONFIRMED');
     if (shadow) add('shadow-dom', 'CONFIRMED');
     if (ifn > 0) add('iframe', 'CONFIRMED');
     if (xo > 0) add('iframe-cross-origin', 'CONFIRMED');
@@ -208,9 +209,26 @@ pub const PAGE_PROBE_JS: &str = r##"(() => {
   return JSON.stringify(out);
 })()"##;
 
+/// #51 冻结 slug 名单（探测与回执的合法值域；页面可控串注入面的
+/// 白名单，评审 F3）。种子仓 page-skills/<slug>.md 与此同名同序。
+pub const FROZEN_PAGE_SLUGS: &[&str] = &[
+    "spa",
+    "hydration",
+    "shadow-dom",
+    "iframe",
+    "iframe-cross-origin",
+    "lazy-scroll",
+    "bot-shield",
+    "login-wall",
+    "captcha",
+    "service-worker",
+];
+
 /// 解析探测回执（#51，纯函数）：吃 Runtime.evaluate `/result/value` 的
 /// 字符串做 JSON.parse；非对象形态（数组、标量、坏 JSON）返回 `None`，
-/// 调用方静默降级。
+/// 调用方静默降级。边界：探测串由页内 `JSON.stringify` 产出而页面可
+/// 覆写该全局（评审 F3 实证），故值域信任不在本函数在
+/// [`page_fields`] 的白名单。
 ///
 /// # Examples
 ///
@@ -225,10 +243,14 @@ pub fn parse_probe(raw: &str) -> Option<Value> {
     Some(v)
 }
 
-/// 把探测结果变成回执附加键对（#51，纯函数）：framework 非 null 出
-/// `("framework", {name,version})`；slugs 非空出 `page_skills` 与
+/// 把探测结果变成回执附加键对（#51，纯函数）：framework 形合法出
+/// `("framework", {name,version})`；slugs 过滤后非空出 `page_skills` 与
 /// `page_skills_hint`（各 slug 的读全文命令用 `；` 连接）；全空返回
-/// 空 vec（调用方零插入）。
+/// 空 vec（调用方零插入）。**白名单是硬边界（评审 F3）**：探测串由页内
+/// `JSON.stringify` 产出、页面可覆写该全局伪造回执，故这里逐条校验
+/// slug 在 [`FROZEN_PAGE_SLUGS`]、confidence 是两档枚举、去重保序
+/// （天然封顶名单长），framework 的 name/version 形与长度也校验；
+/// 非法条目静默丢弃，全非法即零键。
 ///
 /// # Examples
 ///
@@ -238,27 +260,78 @@ pub fn parse_probe(raw: &str) -> Option<Value> {
 /// ).unwrap();
 /// let f = browse_core::skills::page_fields(&probe);
 /// assert_eq!(f.len(), 3, "framework 加 page_skills 加 hint: {f:?}");
+///
+/// // 页面伪造串：名单外 slug 与非法 confidence 全被滤掉（评审 F3）
+/// let forged = browse_core::skills::parse_probe(
+///     r#"{"framework":{"name":"pwn"},"slugs":[{"slug":"../../etc/passwd","confidence":"CONFIRMED"},{"slug":"spa","confidence":"MAYBE"},{"slug":"captcha","confidence":"CONFIRMED"}]}"#,
+/// ).unwrap();
+/// let f = browse_core::skills::page_fields(&forged);
+/// let skills = f.iter().find(|(k, _)| *k == "page_skills").unwrap();
+/// assert_eq!(skills.1, serde_json::json!([{"slug":"captcha","confidence":"CONFIRMED"}]));
 /// ```
 pub fn page_fields(probe: &Value) -> Vec<(&'static str, Value)> {
     let mut out = Vec::new();
-    if let Some(fw) = probe.get("framework").filter(|f| !f.is_null()) {
-        out.push(("framework", fw.clone()));
+    if let Some(fw) = valid_framework(probe.get("framework")) {
+        out.push(("framework", fw));
     }
-    let slugs = probe
+    let mut kept: Vec<Value> = Vec::new();
+    let mut seen: Vec<&str> = Vec::new();
+    for e in probe
         .get("slugs")
         .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    if !slugs.is_empty() {
-        let cmds: Vec<String> = slugs
+        .into_iter()
+        .flatten()
+    {
+        let (Some(slug), Some(conf)) = (
+            e.get("slug").and_then(Value::as_str),
+            e.get("confidence").and_then(Value::as_str),
+        ) else {
+            continue;
+        };
+        if !FROZEN_PAGE_SLUGS.contains(&slug)
+            || !matches!(conf, "CONFIRMED" | "PLAUSIBLE")
+            || seen.contains(&slug)
+        {
+            continue;
+        }
+        seen.push(slug);
+        kept.push(json!({ "slug": slug, "confidence": conf }));
+    }
+    if !kept.is_empty() {
+        let cmds: Vec<String> = seen
             .iter()
-            .filter_map(|s| s.get("slug").and_then(Value::as_str))
             .map(|s| format!("browse workspace page {s}"))
             .collect();
-        out.push(("page_skills", json!(slugs)));
+        out.push(("page_skills", json!(kept)));
         out.push(("page_skills_hint", json!(cmds.join("；"))));
     }
     out
+}
+
+/// framework 形校验（评审 F3 白名单的 framework 腿）：name 是非空短串
+///（字母数字与连字符，<= 24 字节），version 是串（<= 64 字节）或
+/// null/缺省；形不对返回 `None`（不附 framework 键）。
+fn valid_framework(v: Option<&Value>) -> Option<Value> {
+    let fw = v.filter(|f| !f.is_null())?;
+    let name = fw.get("name")?.as_str()?;
+    if name.is_empty()
+        || name.len() > 24
+        || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+    {
+        return None;
+    }
+    let version = match fw.get("version") {
+        None | Some(Value::Null) => Value::Null,
+        Some(s @ Value::String(_)) => {
+            let sv = s.as_str()?;
+            if sv.len() > 64 {
+                return None;
+            }
+            s.clone()
+        }
+        Some(_) => return None,
+    };
+    Some(json!({ "name": name, "version": version }))
 }
 
 /// goto 回执的技能附加入口（crate 内缝，#50/#51）：按开关分流各层；

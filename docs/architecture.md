@@ -97,8 +97,9 @@ goto 回执自动点名（domain_skills/page_skills 加 hint，`BROWSE_DOMAIN_SK
 /`BROWSE_PAGE_SKILLS=0` 分层关）-> `browse workspace site/page` 免浏览器读全文
 （CLI 直读文件，canonicalize 越界守卫）-> `browse workspace list` 意图反查。
 install/update 走 git shell-out（clone / pull --ff-only 脏树拒绝），本地修改
-手工 commit/push 回推。env 三变量经 `ensure_daemon_with_env` 透传给新拉起的
-daemon（改配置重启 daemon，BROWSE_SECRETS 同口径）。
+手工 commit/push 回推。env 三变量经 `ensure_daemon_with_env` 显式透传（防御性：
+现状与继承等效，防未来 env_clear 与非 CLI 拉起路径；改配置重启 daemon，
+BROWSE_SECRETS 同口径）。
 
 ## 守卫（cdp::Session::call 层，程序级强制）
 

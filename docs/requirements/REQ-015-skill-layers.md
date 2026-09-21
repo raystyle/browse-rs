@@ -26,4 +26,5 @@ goto 回执只有 url/title/elapsedMs，agent 每站重学避坑知识；站点�
 - 未命中逐字节一致的前提是 serde_json BTreeMap 键序：**禁为此开 preserve_order**（会翻转全部现存回执字节序）
 - env 与目录列举逐调用现读不缓存（paths.rs 先例；OnceLock 会把 e2e 的临时 BROWSE_WORKSPACE 注入冻死）
 - 种子仓只建骨架（page-skills 10 篇 + domain-skills 样例 + intent-skills 索引）；bh 94 站资产迁移后续批
+- 评审轮注记（2026-09-21）：F3 页面可控 JSON.stringify 注入面以 page_fields 白名单收口（slug 冻结名单、confidence 两档、framework 形校验、去重封顶）；fetch 引擎腿内部 goto 随层吃一次探测（回执键被丢弃，仅时延）；8 秒外层 timeout 丢 pending 登记与 semantic.rs 既有同型，cdp 侧窄接口后续批
 - 仓内 interaction 机制知识随本批迁 workspace（统一维护，用户令 2026-09-21）：navigation-race/file-download/mouse-input 三篇直迁 intent-skills/，frames-shadow 分流进 page-skills 三篇

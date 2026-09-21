@@ -638,9 +638,14 @@
       "docs": "技能触发层（#50/#51）：goto 导航回执的条件附加面。知识全文存\nworkspace 单仓（[`crate::workspace`]，github.com/raystyle/browse_workspace），\n本模块只做「点名」：命中附加清单与 hint（读全文命令），未命中或\n关闭时一键不加，回执与现状逐字节一致。"
     },
     {
+      "path": "browse_core::skills::FROZEN_PAGE_SLUGS",
+      "kind": "constant",
+      "docs": "#51 冻结 slug 名单（探测与回执的合法值域；页面可控串注入面的\n白名单，评审 F3）。种子仓 page-skills/<slug>.md 与此同名同序。"
+    },
+    {
       "path": "browse_core::skills::PAGE_PROBE_JS",
       "kind": "constant",
-      "docs": "#51 页面特征探测 JS：自包含 IIFE，恒返合法 JSON 字符串（连异常\n路径都返 `{framework:null,slugs:[]}` 骨架，Rust 侧静默降级零键）。\n何时用：仅 goto 后的技能附加入口发一次（Runtime.evaluate\nreturnByValue，8 秒超时兜底）。边界：TreeWalker 前 800 元素封顶、\niframe 判定源封顶 50、不用 getComputedStyle（大页防卡顿）；正文\n单引号字串（嵌 `r##` 原始串，避免 `\"#` 序列提前终结）。\n\nslug 与置信档（#51 冻结清单，检出序恒定）：spa（框架容器键或全局，\nCONFIRMED）、hydration（`__next_f`/`__NUXT_DATA__`/astro-island/\n`[q:container]`，CONFIRMED）、shadow-dom（前 800 节点 shadowRoot，\nCONFIRMED）、iframe（清单非空，CONFIRMED）、iframe-cross-origin\n（源比对，CONFIRMED）、lazy-scroll（页高 >= 8 倍视口加滚动容器，\nPLAUSIBLE）、bot-shield（cf-chl DOM CONFIRMED / CF cookie\nPLAUSIBLE）、login-wall（可见 password 框，PLAUSIBLE）、captcha\n（recaptcha/hcaptcha/turnstile 特征，CONFIRMED）、service-worker\n（controller 非空，CONFIRMED）。framework 是 info 字段不占 slug。"
+      "docs": "#51 页面特征探测 JS：自包含 IIFE，恒返合法 JSON 字符串（连异常\n路径都返 `{framework:null,slugs:[]}` 骨架，Rust 侧静默降级零键）。\n何时用：仅 goto 后的技能附加入口发一次（Runtime.evaluate\nreturnByValue，8 秒超时兜底）。边界：TreeWalker 前 800 元素封顶、\niframe 判定源封顶 50、不用 getComputedStyle（大页防卡顿）；正文单引号\n字串，`r##` 是防御性嵌法（评审 G9：现正文无 `\"#` 序列，将来引入\n双引号字串也不会提前终结 `r#`）。\n\nslug 与置信档（#51 冻结清单，检出序恒定）：spa（框架容器键或全局，\nCONFIRMED）、hydration（`__next_f`/`__NUXT_DATA__`/astro-island/\n`[q:container]`，CONFIRMED）、shadow-dom（前 800 节点 shadowRoot，\nCONFIRMED）、iframe（清单非空，CONFIRMED）、iframe-cross-origin\n（源比对，CONFIRMED）、lazy-scroll（页高 >= 8 倍视口加滚动容器，\nPLAUSIBLE）、bot-shield（cf-chl DOM CONFIRMED / CF cookie\nPLAUSIBLE）、login-wall（可见 password 框，PLAUSIBLE）、captcha\n（recaptcha/hcaptcha/turnstile 特征，CONFIRMED）、service-worker\n（controller 非空，CONFIRMED）。framework 是 info 字段不占 slug。"
     },
     {
       "path": "browse_core::skills::domain_hint",
@@ -665,7 +670,7 @@
     {
       "path": "browse_core::skills::page_fields",
       "kind": "function",
-      "docs": "把探测结果变成回执附加键对（#51，纯函数）：framework 非 null 出\n`(\"framework\", {name,version})`；slugs 非空出 `page_skills` 与\n`page_skills_hint`（各 slug 的读全文命令用 `；` 连接）；全空返回\n空 vec（调用方零插入）。\n\n# Examples\n\n```\nlet probe = browse_core::skills::parse_probe(\n    r#\"{\"framework\":{\"name\":\"vue\",\"version\":\"3.5\"},\"slugs\":[{\"slug\":\"spa\",\"confidence\":\"CONFIRMED\"}]}\"#,\n).unwrap();\nlet f = browse_core::skills::page_fields(&probe);\nassert_eq!(f.len(), 3, \"framework 加 page_skills 加 hint: {f:?}\");\n```"
+      "docs": "把探测结果变成回执附加键对（#51，纯函数）：framework 形合法出\n`(\"framework\", {name,version})`；slugs 过滤后非空出 `page_skills` 与\n`page_skills_hint`（各 slug 的读全文命令用 `；` 连接）；全空返回\n空 vec（调用方零插入）。**白名单是硬边界（评审 F3）**：探测串由页内\n`JSON.stringify` 产出、页面可覆写该全局伪造回执，故这里逐条校验\nslug 在 [`FROZEN_PAGE_SLUGS`]、confidence 是两档枚举、去重保序\n（天然封顶名单长），framework 的 name/version 形与长度也校验；\n非法条目静默丢弃，全非法即零键。\n\n# Examples\n\n```\nlet probe = browse_core::skills::parse_probe(\n    r#\"{\"framework\":{\"name\":\"vue\",\"version\":\"3.5\"},\"slugs\":[{\"slug\":\"spa\",\"confidence\":\"CONFIRMED\"}]}\"#,\n).unwrap();\nlet f = browse_core::skills::page_fields(&probe);\nassert_eq!(f.len(), 3, \"framework 加 page_skills 加 hint: {f:?}\");\n\n// 页面伪造串：名单外 slug 与非法 confidence 全被滤掉（评审 F3）\nlet forged = browse_core::skills::parse_probe(\n    r#\"{\"framework\":{\"name\":\"pwn\"},\"slugs\":[{\"slug\":\"../../etc/passwd\",\"confidence\":\"CONFIRMED\"},{\"slug\":\"spa\",\"confidence\":\"MAYBE\"},{\"slug\":\"captcha\",\"confidence\":\"CONFIRMED\"}]}\"#,\n).unwrap();\nlet f = browse_core::skills::page_fields(&forged);\nlet skills = f.iter().find(|(k, _)| *k == \"page_skills\").unwrap();\nassert_eq!(skills.1, serde_json::json!([{\"slug\":\"captcha\",\"confidence\":\"CONFIRMED\"}]));\n```"
     },
     {
       "path": "browse_core::skills::page_skills_enabled",
@@ -675,7 +680,7 @@
     {
       "path": "browse_core::skills::parse_probe",
       "kind": "function",
-      "docs": "解析探测回执（#51，纯函数）：吃 Runtime.evaluate `/result/value` 的\n字符串做 JSON.parse；非对象形态（数组、标量、坏 JSON）返回 `None`，\n调用方静默降级。\n\n# Examples\n\n```\nassert!(browse_core::skills::parse_probe(r#\"{\"framework\":null,\"slugs\":[]}\"#).is_some());\nassert!(browse_core::skills::parse_probe(\"not json\").is_none());\nassert!(browse_core::skills::parse_probe(\"[1,2]\").is_none());\n```"
+      "docs": "解析探测回执（#51，纯函数）：吃 Runtime.evaluate `/result/value` 的\n字符串做 JSON.parse；非对象形态（数组、标量、坏 JSON）返回 `None`，\n调用方静默降级。边界：探测串由页内 `JSON.stringify` 产出而页面可\n覆写该全局（评审 F3 实证），故值域信任不在本函数在\n[`page_fields`] 的白名单。\n\n# Examples\n\n```\nassert!(browse_core::skills::parse_probe(r#\"{\"framework\":null,\"slugs\":[]}\"#).is_some());\nassert!(browse_core::skills::parse_probe(\"not json\").is_none());\nassert!(browse_core::skills::parse_probe(\"[1,2]\").is_none());\n```"
     },
     {
       "path": "browse_core::surface",
