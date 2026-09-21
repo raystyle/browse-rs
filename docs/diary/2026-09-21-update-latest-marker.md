@@ -18,6 +18,10 @@ self_update 测试族加两测：latest_version_mirror_first_and_fallback（mock
 
 行为变化取 minor（REQ-004 判据行）；#54 先 --dry-run 预览再实发（issue 54 回执 ok）。
 
-## 评审与发版（待补账）
+## 评审与发版（同日续）
 
-评审闸门、推送与 CI、v0.13.0 发版（seed 写 latest 标记首跑）、端到端匿名 update 验收、#54 关单，随后补。
+- 评审三轮（browse-codex-review）：一轮 (a)(b)(d) CONFIRM（回落语义、rclone 步序与 dispatch 覆盖、minor 判据）加 (c) G（env 写测试缺互斥锁，评审方压测 65 轮零飘判潜伏面）加两条文档 G（surface 措辞残留大写、README 与 REQ-005 旧判新口径犯第二真相）；二轮三条 G 全收后 (毒锁口径、作废留档写法、三投影) CONFIRM 加一条新 G（env_lock 只被 unix 测试用，交叉面死代码警告，我漏了 G 修后重跑交叉闸）；三轮 bb4edee 一行门控修掉，交叉面零警告口径回位
+- 推送 687e084..bb4edee 三笔，CI 双绿（ci 35594054500 三岗 2m38s、docs 35594054274 2m57s）
+- 发版 v0.13.0：release.ps1 全链 exit 0（六件加边车、跨宿主冒烟）；seed run 35594443618 success 49s，stable/latest 标记首写落镜像（curl 实读 0.13.0）
+- 端到端验收全通：真升级道 GH_TOKEN browse update 0.12.2 升 0.13.0（updated，下载腿走镜像）；匿名（env -u GH_TOKEN -u GITHUB_TOKEN）browse update 判新走镜像 stable/latest（0.13.0）出 upToDate，零 GitHub 依赖，#54 验收判据实弹达成
+- #54 关单走 omc 集中道（回执随后补记 seq）
