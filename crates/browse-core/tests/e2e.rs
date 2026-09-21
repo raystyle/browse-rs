@@ -428,15 +428,92 @@ l`.length === 3].join(\"|\")", returnByValue:true})).result.value"#;
         vec!["elapsedMs", "title", "url"],
         "未命中零新增键: {plain}"
     );
-    // 分层关闭：BROWSE_DOMAIN_SKILLS=0 时命中页也不附键
-    // SAFETY: 同上，窄窗后还原
-    unsafe { std::env::set_var("BROWSE_DOMAIN_SKILLS", "0") };
-    let off = host
+    // ---- #51 技能触发层（page）：特征页命中与置信档 ----
+    // 特征页覆盖：跨源 iframe、可见 password、h-captcha DOM、9600px 页高
+    // 加 overflow:auto 容器、attachShadow 脚本；无框架全局（防 framework 误报）
+    host.eval_snippet(
+        r#"await routeMock("http://page.test/*", "<title>page-features</title><input type='password'><div class='h-captcha' data-sitekey='k'></div><div style='height:9600px'></div><div style='height:400px;overflow:auto'><div style='height:2000px'></div></div><iframe src='https://other.test/e'></iframe><div id='sh'></div><script>document.getElementById('sh').attachShadow({mode:'open'})</script>", {contentType: "text/html"})"#,
+    )
+    .await
+    .expect("routeMock 特征页");
+    let pf = host
+        .eval_snippet(r#"return await goto("http://page.test/f", {timeout: 10})"#)
+        .await
+        .expect("goto 特征页");
+    let slugs = |receipt: &Value, slug: &str| {
+        receipt
+            .get("page_skills")
+            .and_then(Value::as_array)
+            .is_some_and(|a| {
+                a.iter().any(|e| {
+                    e.get("slug") == Some(&json!(slug))
+                        && e.get("confidence") == Some(&json!("CONFIRMED"))
+                })
+            })
+    };
+    assert!(
+        slugs(&pf, "iframe")
+            && slugs(&pf, "iframe-cross-origin")
+            && slugs(&pf, "captcha")
+            && slugs(&pf, "shadow-dom"),
+        "特征页应命中 CONFIRMED 档: {pf}"
+    );
+    let plausible = |receipt: &Value, slug: &str| {
+        receipt
+            .get("page_skills")
+            .and_then(Value::as_array)
+            .is_some_and(|a| {
+                a.iter().any(|e| {
+                    e.get("slug") == Some(&json!(slug))
+                        && e.get("confidence") == Some(&json!("PLAUSIBLE"))
+                })
+            })
+    };
+    assert!(
+        plausible(&pf, "login-wall") && plausible(&pf, "lazy-scroll"),
+        "软信号应 PLAUSIBLE 档（login-wall 与 lazy-scroll）: {pf}"
+    );
+    assert!(
+        pf.get("page_skills_hint")
+            .and_then(Value::as_str)
+            .is_some_and(|h| h.contains("browse workspace page")),
+        "page hint 应给读全文命令: {pf}"
+    );
+    assert!(
+        pf.get("framework").is_none(),
+        "无框架页不应误报 framework: {pf}"
+    );
+
+    // ---- 分层关闭（#50/#51 各自独立）----
+    // SAFETY: 同上窄窗；每档测毕即还原再换下一档
+    unsafe { std::env::set_var("BROWSE_PAGE_SKILLS", "0") };
+    let pg_off = host
+        .eval_snippet(r#"return await goto("http://page.test/f", {timeout: 10})"#)
+        .await
+        .expect("goto page 关层面");
+    assert!(
+        pg_off.get("page_skills").is_none() && pg_off.get("framework").is_none(),
+        "page 层关闭后零 page 键: {pg_off}"
+    );
+    let dom_on = host
         .eval_snippet(r#"return await goto("http://skill.test/f", {timeout: 10})"#)
         .await
-        .expect("goto 关层面");
-    assert!(off.get("domain_skills").is_none(), "关闭后不点名: {off}");
-    // 清拦截规则再还原环境（不把 skill.test 规则漏给后续块）
+        .expect("goto domain 仍开面");
+    assert!(
+        dom_on.get("domain_skills").is_some(),
+        "page 关不影响 domain 层: {dom_on}"
+    );
+    unsafe { std::env::remove_var("BROWSE_PAGE_SKILLS") };
+    unsafe { std::env::set_var("BROWSE_DOMAIN_SKILLS", "0") };
+    let dom_off = host
+        .eval_snippet(r#"return await goto("http://page.test/f", {timeout: 10})"#)
+        .await
+        .expect("goto domain 关层面");
+    assert!(
+        dom_off.get("domain_skills").is_none() && dom_off.get("page_skills").is_some(),
+        "domain 关不影响 page 层: {dom_off}"
+    );
+    // 清拦截规则再还原环境（不把假域规则漏给后续块）
     host.eval_snippet("await routeClear()")
         .await
         .expect("routeClear 技能块");

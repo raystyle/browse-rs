@@ -638,6 +638,11 @@
       "docs": "技能触发层（#50/#51）：goto 导航回执的条件附加面。知识全文存\nworkspace 单仓（[`crate::workspace`]，github.com/raystyle/browse_workspace），\n本模块只做「点名」：命中附加清单与 hint（读全文命令），未命中或\n关闭时一键不加，回执与现状逐字节一致。"
     },
     {
+      "path": "browse_core::skills::PAGE_PROBE_JS",
+      "kind": "constant",
+      "docs": "#51 页面特征探测 JS：自包含 IIFE，恒返合法 JSON 字符串（连异常\n路径都返 `{framework:null,slugs:[]}` 骨架，Rust 侧静默降级零键）。\n何时用：仅 goto 后的技能附加入口发一次（Runtime.evaluate\nreturnByValue，8 秒超时兜底）。边界：TreeWalker 前 800 元素封顶、\niframe 判定源封顶 50、不用 getComputedStyle（大页防卡顿）；正文\n单引号字串（嵌 `r##` 原始串，避免 `\"#` 序列提前终结）。\n\nslug 与置信档（#51 冻结清单，检出序恒定）：spa（框架容器键或全局，\nCONFIRMED）、hydration（`__next_f`/`__NUXT_DATA__`/astro-island/\n`[q:container]`，CONFIRMED）、shadow-dom（前 800 节点 shadowRoot，\nCONFIRMED）、iframe（清单非空，CONFIRMED）、iframe-cross-origin\n（源比对，CONFIRMED）、lazy-scroll（页高 >= 8 倍视口加滚动容器，\nPLAUSIBLE）、bot-shield（cf-chl DOM CONFIRMED / CF cookie\nPLAUSIBLE）、login-wall（可见 password 框，PLAUSIBLE）、captcha\n（recaptcha/hcaptcha/turnstile 特征，CONFIRMED）、service-worker\n（controller 非空，CONFIRMED）。framework 是 info 字段不占 slug。"
+    },
+    {
       "path": "browse_core::skills::domain_hint",
       "kind": "function",
       "docs": "域名层 hint 字段值（#50）：读全文命令字串。"
@@ -656,6 +661,21 @@
       "path": "browse_core::skills::list_domain_skills",
       "kind": "function",
       "docs": "列 `<ws>/domain-skills/<段>/` 的技能文件名（#50，纯函数）：只收\n.md/.txt，排序保回执确定（read_dir 顺序不保证），封顶\n[`crate::workspace::DOMAIN_FILES_CAP`]；目录缺失返回空 vec。\n\n# Examples\n\n```\n// 缺目录返回空（不报错：未装仓是常态）\nlet v = browse_core::skills::list_domain_skills(\n    std::path::Path::new(\"/nonexistent-browse-ws\"), \"x\");\nassert!(v.is_empty());\n```"
+    },
+    {
+      "path": "browse_core::skills::page_fields",
+      "kind": "function",
+      "docs": "把探测结果变成回执附加键对（#51，纯函数）：framework 非 null 出\n`(\"framework\", {name,version})`；slugs 非空出 `page_skills` 与\n`page_skills_hint`（各 slug 的读全文命令用 `；` 连接）；全空返回\n空 vec（调用方零插入）。\n\n# Examples\n\n```\nlet probe = browse_core::skills::parse_probe(\n    r#\"{\"framework\":{\"name\":\"vue\",\"version\":\"3.5\"},\"slugs\":[{\"slug\":\"spa\",\"confidence\":\"CONFIRMED\"}]}\"#,\n).unwrap();\nlet f = browse_core::skills::page_fields(&probe);\nassert_eq!(f.len(), 3, \"framework 加 page_skills 加 hint: {f:?}\");\n```"
+    },
+    {
+      "path": "browse_core::skills::page_skills_enabled",
+      "kind": "function",
+      "docs": "#51 页面层是否开启：`BROWSE_PAGE_SKILLS` 未设或非 0/false 即开。"
+    },
+    {
+      "path": "browse_core::skills::parse_probe",
+      "kind": "function",
+      "docs": "解析探测回执（#51，纯函数）：吃 Runtime.evaluate `/result/value` 的\n字符串做 JSON.parse；非对象形态（数组、标量、坏 JSON）返回 `None`，\n调用方静默降级。\n\n# Examples\n\n```\nassert!(browse_core::skills::parse_probe(r#\"{\"framework\":null,\"slugs\":[]}\"#).is_some());\nassert!(browse_core::skills::parse_probe(\"not json\").is_none());\nassert!(browse_core::skills::parse_probe(\"[1,2]\").is_none());\n```"
     },
     {
       "path": "browse_core::surface",
