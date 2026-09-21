@@ -742,7 +742,9 @@ mod tests {
 
     /// env 写面互斥锁（#54 评审 G）：HTTPS_PROXY 与 BROWSE_RELEASE_
     /// MIRROR 双写测试的 env 敏感窗互斥，防并发测试线程互相插队打到对
-    /// 方 mock（SECRETS_TEST_LOCK 同形先例）。
+    /// 方 mock（SECRETS_TEST_LOCK 同形先例）。调用方全 unix 门控，同款
+    /// 门控防交叉面死代码警告（d553029 模式）。
+    #[cfg(unix)]
     fn env_lock() -> std::sync::MutexGuard<'static, ()> {
         static L: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
         L.get_or_init(|| std::sync::Mutex::new(()))
