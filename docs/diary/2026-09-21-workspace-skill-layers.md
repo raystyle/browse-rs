@@ -24,6 +24,14 @@
 
 wsv12 命名实例隔离全链：workspace install 真 clone GitHub（head 对上推送 c6908af）、list/site/page 三读、goto https://github.com/ 回执带 domain_skills:["scraping.md"] 加 hint、framework:react、spa/shadow-dom CONFIRMED、lazy-scroll PLAUSIBLE（真实站点两档置信如设计）、update 干净 ff 与脏树拒（exit 1 加回推 CTA）。e2e 双通道三测全绿（58 秒，含域名命中、特征页六 slug 含置信档、素页键集恰三键、两层独立关闭交叉验证）。[实证: fmt、clippy -D warnings、test --workspace 全绿、doc 干净（预存两条 snippets 文档 HTML 标签警告非本批）、aidoc 31 件 check --strict、surface 投影逐字节、E2E 3 测、PEVO PASS 10]
 
+## 评审闸门与关单（同日续）
+
+- 评审格 browse-codex-review 本批首建（工位 tab 右分 40%，codex YOLO）：三轮闭环。一轮 3F（注释错挂、冻结序分叉、页可控 JSON.stringify 注入面）13G 全处置；二轮快核抓修复自身两缺陷（F3 白名单 doc 新 rustdoc 警告、e2e 注释过度声明）加漂移锁等四 G；终审 CONFIRM 放行
+- 推送 2060063..60469ec 七笔（四主体加两评审修加一终审在册），CI 双流绿（ci 35569387902 三岗 1m27s、docs 35569387834 2m53s）
+- 评审期实弹新发现并当场拦：url_host data: 形返回 scheme 段（domain_segment 门禁收口）、F1 dedup 最旧窗假失败（窗抬到环形缓冲满额）、page-skills 清单 README 顶格（滤除）
+- #52 新开单（timeout 包 session.call 丢 pending 登记，与 semantic.rs 既有同型，cdp 窄接口后续批）；G-F exit 码映射统一与 #52 同账
+- 关单：#50/#51 经 omc 集中委托道双关（ledger done，seq 168/169，总台核证五笔祖先与 CI 双绿后收执）；open 集实测 = {52, 1}（1 为常驻冒烟单）
+
 ## 后续批候选
 
 - bh 94 站 domain-skills 精选迁移（workspace 仓自己的事，#50 注记在册）
