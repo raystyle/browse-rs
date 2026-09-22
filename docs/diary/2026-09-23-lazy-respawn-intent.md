@@ -18,3 +18,10 @@
 ## 评审一轮（browse-codex-review）
 
 F1 必修（核实为真，走披露道收）：回写是整份 spec 覆盖，请求未给字段带显式默认（headless=false 等）而非「不修改」，裸 browse up 会静默复位前次形态记忆，与「会被记住」措辞不符。语义裁定：up 本就是「按这些参数起引擎」，最近显式 up 定义重拉形态、裸 up 即重定义，覆盖是对的、措辞是错的：surface 改「最近一次 up 的意图生效（裸 up 即复位为有头缺省）；记忆是 daemon 进程态重启回环境缺省；附着意图不记忆重拉走发现序」，并把裸 up 复位复现记档：up --headless 后裸 up，再 kill 引擎，重拉回有头（最近显式意图是裸 up 的 false）。G1（附着面记忆缺角）与 G2（进程态非持久化）一并收进同句披露。合并道（三态化缺省不等于 false）记档不做：动 /engine/up 线上契约收益边际。
+
+## 发版关单与 r5 验收（同日续）
+
+- 推送 8fad6ba..6501cff（含评审三轮的披露收口：F1 披露道、getting-started 首次语义矛盾整句重写），CI 与播种绿；tag v0.19.1，五端拉平实弹毕；关单正典双事件（seq 221 result 加 222 status），台账再清零
+- 过程记档：本批自己踩尾管吞 PEVO 红坑（第三次），已改按退出码判（cmd > f; S=$? 形）；评审方同坑提醒在案
+- r5 验收（用户令「都做 验收」，随 clean-chrome r5 窗）：四件全绿。镜像装（1.9GB/567 文件锚校验）、绑定生效（BROWSE_ENGINE_ARGS 透传 --remote-debugging-address=0.0.0.0 后 ss 实证 LISTEN 0.0.0.0:42275，r4 同形 127.0.0.1）、mesh 直暴真驱动（lan-ubuntu 冷 daemon --connect ws://10.10.10.5:42275 驱动 wsl r5 引擎，goto 339ms，wsl 活动 tab 被远程改写坐实；#59 provenance 亮 attached 10.10.10.5）、缺省回归（无旗标仍 127.0.0.1）。验收回执已发 clean-chrome 工位闭环，omc 滚 chrome latest 指针随行
+- 附坑记档：--connect 对已有引擎的 daemon 是幂等静默（不切换附着目标），冷 daemon（down 后首调）才真附着：本日 mac 串台误判与本次 lan-ubuntu 首连假绿同根，候选入 issue 面
