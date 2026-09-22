@@ -199,6 +199,11 @@ pub async fn eval(code: &str, new_tab: bool, js: bool) -> Result<Value> {
         .context("POST /eval")?;
     let body: Value = resp.json().await.context("解析 /eval 响应")?;
     if body.get("ok").and_then(Value::as_bool) == Some(true) {
+        // #60 操作时刻引擎上下文：正常态安静；异常（指纹变化、跨宿主）
+        // 出 stderr 告警行；BROWSE_ENGINE_CONTEXT 非 0/false 显紧凑行
+        if let Some(ctx) = body.get("engineContext") {
+            render_engine_context(ctx);
+        }
         Ok(body.get("value").cloned().unwrap_or(Value::Null))
     } else {
         // 前缀由 daemon 侧统一加（防双重 browse:）
@@ -208,6 +213,76 @@ pub async fn eval(code: &str, new_tab: bool, js: bool) -> Result<Value> {
                 .and_then(Value::as_str)
                 .unwrap_or("未知错误")
         ))
+    }
+}
+
+/// #60 渲染操作信封的引擎上下文（crate 内缝，eval 与 fetch 引擎腿共用）：
+/// 指纹变化与跨宿主各出告警行（跨宿主每进程一次防刷屏），紧凑行按
+/// `BROWSE_ENGINE_CONTEXT` 开。正常态零输出（默认输出与现状兼容）。
+pub(crate) fn render_engine_context(ctx: &Value) {
+    let show = std::env::var_os("BROWSE_ENGINE_CONTEXT")
+        .map(|v| {
+            let v = v.to_string_lossy().to_ascii_lowercase();
+            !(v == "0" || v == "false")
+        })
+        .unwrap_or(false);
+    if show {
+        let prov = ctx.get("provenance");
+        let origin = prov
+            .and_then(|p| p.get("origin"))
+            .and_then(Value::as_str)
+            .unwrap_or("?");
+        let host = prov
+            .and_then(|p| p.get("hostContext"))
+            .and_then(Value::as_str)
+            .unwrap_or("?");
+        eprintln!("引擎：{origin} @ {host}");
+    }
+    for c in ctx
+        .get("changes")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+    {
+        eprintln!("⚠ 引擎变化：{c}");
+    }
+    // 跨宿主与同 OS 异机（#59 同口径；每进程一次防批处理刷屏）
+    use std::sync::OnceLock;
+    static HOST_CHECKED: OnceLock<bool> = OnceLock::new();
+    let first = HOST_CHECKED.get().is_none();
+    HOST_CHECKED.set(true).ok();
+    if first {
+        let d_os = ctx
+            .pointer("/daemon/os")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        let d_host = ctx
+            .pointer("/daemon/hostname")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        if d_os.is_empty() {
+            return;
+        }
+        let cli_os = std::env::consts::OS;
+        if d_os != cli_os {
+            eprintln!(
+                "⚠ 跨宿主：CLI({cli_os}) 与 daemon({d_os}/{d_host}) 不同机（localhost 转发场景）"
+            );
+        } else if d_host != "unknown" {
+            let cli_host = std::process::Command::new("hostname")
+                .output()
+                .ok()
+                .filter(|o| o.status.success())
+                .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+                .filter(|h| !h.is_empty())
+                .unwrap_or_default();
+            if !cli_host.is_empty() && cli_host != d_host {
+                eprintln!(
+                    "⚠ 同 OS 异机：CLI({cli_host}) 与 daemon({d_os}/{d_host}) 不是同一台（隧道或转发场景）"
+                );
+            }
+        }
     }
 }
 

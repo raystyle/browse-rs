@@ -18,6 +18,8 @@ clean-chrome 专为自动化而生（`--auto-allow-devtools-connections` 免确�
 
 ## Functions
 
+- `fingerprint_changes` — #60 指纹比对（纯函数）：两次操作的指纹差异列人读变化句；空 vec 即
+- `fingerprint_of` — #60 操作时刻引擎指纹（纯函数）：可比对的身份面——origin、pid、
 - `provenance` — #59 引擎来源与所有权语义面（纯函数）：[`EngineSource`] 语义化为
 
 ## Types

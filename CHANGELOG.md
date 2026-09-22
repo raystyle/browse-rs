@@ -2,6 +2,11 @@
 
 版本级里程碑；逐批过程见 docs/diary。semver 判据在册 docs/requirements/REQ-004。
 
+## 0.19.0 - 2026-09-23
+
+- **#60 操作回执的引擎上下文 CTA**：/eval 信封加 engineContext 键（provenance 与 daemon 自描述同源 #59，加 changes 数组；方言 value 不动，向后兼容）；变化检测在 daemon 侧（上次引擎指纹存 Mutex，逐操作比对，CLI 无状态）；指纹面是 origin/pid/有头无头/通道/profile 形态/附着 host；CLI 渲染纪律对齐技能触发层先例：正常态零输出，异常（引擎换新、有头无头翻转、形态翻转、来源变化）出 stderr 告警行，跨宿主与同 OS 异机告警每进程一次防批处理刷屏；BROWSE_ENGINE_CONTEXT 开紧凑行（引擎：origin @ hostContext）。fetch 引擎腿同款渲染。实弹：daemon 内存活期杀引擎逼重 spawn，次发操作精确告警「引擎换新 pid A -> B」加「有头无头翻转」，顺带照出懒重 spawn 丢 up --headless 意图的隐性翻转（告警面设计目的的当场实证，另立 issue）
+- semver 判据结论（0.19.0 裁定）：能力新增取 minor（REQ-004 判据行）
+
 ## 0.18.0 - 2026-09-23
 
 - **#59 引擎来源与所有权信息面**：status 与 /health 内嵌 daemon 自描述（`daemon` 键：os/hostname/pid/name/startedAt，hostname 走命令采值零新依赖）与引擎来源语义面（`engineProvenance` 键：origin 枚举 attached/managed-spawn/isolated-spawn、hostContext、spawnedBy、spawnedAt）；Spawned 快照加 `spawned_at` 时间锚（序列化加法向后兼容）；人读面补「daemon 宿主」行与引擎行的 `@ origin hostContext since` 段，CLI 与 daemon 跨宿主（Windows CLI 经 localhost 转发命中 WSL daemon）时显式告警标注；attached 态 loopback 宿主显式降级标注（本机或隧道不可辨，不冒充确定）。#60 操作回执告警面同源消费 provenance 结构（一份事实两处展示）

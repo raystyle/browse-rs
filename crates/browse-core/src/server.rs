@@ -131,6 +131,9 @@ pub struct Daemon {
     pub started: Instant,
     /// 自描述（#59）：status 与 /health 的 daemon 键。
     pub desc: DaemonDesc,
+    /// #60 上次操作的引擎指纹（变化检测在 daemon 侧，CLI 无状态）：
+    /// eval 信封的 changes 由与它的比对产生。
+    pub last_fp: std::sync::Mutex<Option<serde_json::Value>>,
     /// 最近活动时刻（#25.1 idle-timeout 判据）：eval/up 请求刷新。
     pub last_activity: std::sync::Mutex<Instant>,
 }
@@ -159,6 +162,7 @@ impl Daemon {
             quit: Arc::new(AtomicBool::new(false)),
             started: Instant::now(),
             desc: DaemonDesc::capture(),
+            last_fp: std::sync::Mutex::new(None),
             last_activity: std::sync::Mutex::new(Instant::now()),
         })
     }
@@ -331,10 +335,29 @@ async fn eval_handler(
             ));
         }
     };
-    (
-        axum::http::StatusCode::OK,
-        Json(json!({ "ok": true, "value": value })),
-    )
+    // #60 操作时刻引擎上下文（信封键，不进方言 value）：daemon 侧比对
+    // 上次指纹出 changes；provenance 与 daemon 自描述同源 #59
+    let ctx = d.engine.context_snapshot(&d.desc).await;
+    let changes = {
+        let fp = ctx
+            .get("fingerprint")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let mut guard = d.last_fp.lock().unwrap_or_else(|e| e.into_inner());
+        let changes = match guard.as_ref() {
+            Some(old) => crate::engine::fingerprint_changes(old, &fp),
+            None => Vec::new(),
+        };
+        *guard = Some(fp);
+        changes
+    };
+    let mut envelope = json!({ "ok": true, "value": value });
+    envelope["engineContext"] = json!({
+        "provenance": ctx.get("provenance").cloned().unwrap_or(serde_json::Value::Null),
+        "daemon": d.desc.to_json(),
+        "changes": changes,
+    });
+    (axum::http::StatusCode::OK, Json(envelope))
 }
 
 fn err_response(e: anyhow::Error) -> (axum::http::StatusCode, Json<Value>) {

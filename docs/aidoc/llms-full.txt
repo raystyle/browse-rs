@@ -1,5 +1,5 @@
 <!-- browse_cli/index.md -->
-# browse-cli 0.18.0
+# browse-cli 0.19.0
 
 browse CLI 的可测半边：daemon 客户端（HTTP 调用 + 自动拉起）。
 
@@ -118,7 +118,7 @@ ledger.ohmygh.com（替代 issues.ohmygh.com 客户端面；旧服务只读保�
 
 
 <!-- browse_core/index.md -->
-# browse-core 0.18.0
+# browse-core 0.19.0
 
 browse CLI 的核心库：方言宿主、引擎策略、daemon HTTP API。
 
@@ -255,6 +255,8 @@ clean-chrome 专为自动化而生（`--auto-allow-devtools-connections` 免确�
 
 ## Functions
 
+- `fingerprint_changes` — #60 指纹比对（纯函数）：两次操作的指纹差异列人读变化句；空 vec 即
+- `fingerprint_of` — #60 操作时刻引擎指纹（纯函数）：可比对的身份面——origin、pid、
 - `provenance` — #59 引擎来源与所有权语义面（纯函数）：[`EngineSource`] 语义化为
 
 ## Types
@@ -588,7 +590,7 @@ list/site/page）。git 维护走 shell-out `git`（不引 git crate）：instal
 
 
 <!-- cdp/index.md -->
-# cdp 0.18.0
+# cdp 0.19.0
 
 Chrome DevTools Protocol（CDP）连接层：一条常驻 browser-level WebSocket 会话。
 

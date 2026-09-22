@@ -161,6 +161,10 @@ pub async fn fetch(url: &str, _markdown: bool, timeout_s: u64) -> Result<Value> 
                     )
                 })?;
             let v: Value = resp.json().await?;
+            // #60：引擎腿信封的引擎上下文告警（与 eval 道同款渲染）
+            if let Some(ctx) = v.get("engineContext") {
+                crate::client::render_engine_context(ctx);
+            }
             if v.get("ok") != Some(&json!(true)) {
                 bail!(
                     "引擎腿失败：{}",

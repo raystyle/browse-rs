@@ -79,6 +79,7 @@ docs/diary/2026-09-16-doc-system.md），修复自起引擎被 Google 登录
 | `BROWSE_CDP_WS` | 钉死连接的 WS URL |
 | `BROWSE_NO_ATTACH=1` | 跳过附着探测，强制 spawn 隔离实例 |
 | `BROWSE_ENGINE_ARGS` | 引擎附加旗标，空格分隔直通 spawn argv；无显示会话（无 `DISPLAY`/`WAYLAND_DISPLAY`，如 ssh）下有头 spawn 自动补 `--headless`（#57，显式旗标优先） |
+| `BROWSE_ENGINE_CONTEXT` | 操作回执显引擎紧凑行（默认关；指纹变化与跨宿主告警恒开） |
 | `BROWSE_NO_AUTO_DIALOG=1` | 关掉 alert 自动接受 |
 | `BROWSE_EVAL_TIMEOUT` | 单次求值超时秒数（默认 300） |
 | `BROWSE_DENY_DOMAINS` / `BROWSE_ALLOW_DOMAINS` | 域策略（后缀匹配，deny 优先） |

@@ -233,6 +233,85 @@ pub fn provenance(
     }
 }
 
+/// #60 操作时刻引擎指纹（纯函数）：可比对的身份面——origin、pid、
+/// 有头无头、通道、profile 形态、附着 host 字面。hostContext 与实例名
+/// 在 daemon 生命周期内恒定不参与逐操作比对（跨宿主归 CLI 侧判）。
+pub fn fingerprint_of(source: &EngineSource, isolated: bool) -> serde_json::Value {
+    match source {
+        EngineSource::NotConnected => json!({ "origin": "none" }),
+        EngineSource::Attached { ws_url } => json!({
+            "origin": "attached",
+            "attachedHost": ws_authority_host(ws_url),
+        }),
+        EngineSource::Spawned {
+            pid,
+            headless,
+            channel,
+            ..
+        } => json!({
+            "origin": if isolated { "isolated-spawn" } else { "managed-spawn" },
+            "pid": pid,
+            "headless": headless,
+            "channel": channel,
+            "profileForm": if isolated { "isolated" } else { "persistent" },
+        }),
+    }
+}
+
+/// #60 指纹比对（纯函数）：两次操作的指纹差异列人读变化句；空 vec 即
+/// 无变化（正常态安静）。字段缺失（形态切换后键集不同）按「有 vs 无」
+/// 出变化句，不 panic。
+pub fn fingerprint_changes(old: &serde_json::Value, new: &serde_json::Value) -> Vec<String> {
+    let mut out = Vec::new();
+    let g = |v: &serde_json::Value, k: &str| v.get(k).cloned().unwrap_or(serde_json::Value::Null);
+    let oo = g(old, "origin").to_string();
+    let no = g(new, "origin").to_string();
+    if oo != no {
+        // G2：origin 也是字符串，走裸值不带 JSON 引号
+        fn bare(v: &str) -> &str {
+            v.trim_matches('"')
+        }
+        out.push(format!("来源变化：{} -> {}", bare(&oo), bare(&no)));
+    }
+    // G1（评审）：origin 变化时键集必不同（附着与 spawn 指纹键不一样），
+    // 存在性差异是形态切换副产物不是独立信号（附着态没有有头无头概念），
+    // 只出来源句不稀释真信号；同 origin 下逐键比对才出独立句
+    if oo != no {
+        return out;
+    }
+    for k in ["pid", "headless", "channel", "profileForm", "attachedHost"] {
+        let a = g(old, k);
+        let b = g(new, k);
+        if a != b && !(a.is_null() && b.is_null()) {
+            let label = match k {
+                "pid" => "引擎换新",
+                "headless" => "有头无头翻转",
+                "channel" => "通道变化",
+                "profileForm" => "形态翻转（持久/隔离）",
+                _ => "附着 host 变化",
+            };
+            // G2（评审）：字符串走 as_str 去引号与裸值风格一致；同 origin
+            // 下键集恒同，缺失态不进
+            let f = |v: serde_json::Value| {
+                if let Some(b) = v.as_bool() {
+                    // headless 语义：true 是无头
+                    if b {
+                        "无头".to_string()
+                    } else {
+                        "有头".to_string()
+                    }
+                } else if let Some(s) = v.as_str() {
+                    s.to_string()
+                } else {
+                    v.to_string()
+                }
+            };
+            out.push(format!("{label}：{} -> {}", f(a), f(b)));
+        }
+    }
+    out
+}
+
 /// ws(s) URL 的 authority host 字面（#59）：剥 scheme 后取 `/` 或 `:`
 /// 前段；带括号 IPv6 authority（`[::1]` 形）取首个 `]` 含括号整段
 /// （评审 F2：IPv6 字面自带 `:` 不能按 `:` 切）；畸形串原样返回
@@ -635,6 +714,19 @@ impl Engine {
     }
 
     /// 产出 `/health` 面的状态 JSON（实例名、引擎来源、连接与活动路由）。
+    /// #60 操作时刻上下文快照：provenance（#59 语义面）加 fingerprint
+    /// （比对用身份面）一次取出，eval 信封的 engineContext 键同源。
+    pub async fn context_snapshot(&self, daemon: &crate::server::DaemonDesc) -> serde_json::Value {
+        let source = self.source().await;
+        let isolated = self.inner.lock().await.isolated_dir.is_some();
+        json!({
+            "provenance": provenance(&source, isolated, daemon.os, &daemon.hostname),
+            "fingerprint": fingerprint_of(&source, isolated),
+        })
+    }
+
+    /// /health 与 status 的回执体（含 #59 的 daemon 自描述与
+    /// engineProvenance 两键；调用方透传 daemon 描述与 uptime）。
     pub async fn health_json(
         &self,
         uptime: Duration,
@@ -678,6 +770,45 @@ mod tests {
         for k in ["ok", "name", "uptime", "connected", "engine"] {
             assert!(v.get(k).is_some(), "旧键 {k} 不得被移除");
         }
+    }
+
+    /// #60 指纹比对：无变化空 vec；pid 换新、有头无头翻转、形态翻转
+    /// （持久对隔离）、来源变化（附着对 spawn 键集不同按有无出句）。
+    #[test]
+    fn fingerprint_diff_shapes() {
+        let fp = |origin: &str, pid: Option<u32>, headless: bool, form: &str| {
+            serde_json::json!({
+                "origin": origin, "pid": pid, "headless": headless,
+                "channel": "port", "profileForm": form,
+            })
+        };
+        // 无变化
+        let a = fp("managed-spawn", Some(7), true, "persistent");
+        assert!(fingerprint_changes(&a, &a).is_empty(), "同指纹零变化");
+        // pid 换新（引擎重启）
+        let b = fp("managed-spawn", Some(9), true, "persistent");
+        assert_eq!(
+            fingerprint_changes(&a, &b),
+            vec!["引擎换新：7 -> 9".to_string()]
+        );
+        // 有头无头翻转
+        let c = fp("managed-spawn", Some(7), false, "persistent");
+        assert_eq!(
+            fingerprint_changes(&a, &c),
+            vec!["有头无头翻转：无头 -> 有头".to_string()]
+        );
+        // 形态翻转（持久对隔离，origin 同随）：G1 新语义只出来源句
+        let d = fp("isolated-spawn", Some(7), true, "isolated");
+        assert_eq!(
+            fingerprint_changes(&a, &d),
+            vec!["来源变化：managed-spawn -> isolated-spawn".to_string()]
+        );
+        // 来源切换（附着对 spawn：键集不同只出来源句，无假翻转噪声）
+        let att = serde_json::json!({ "origin": "attached", "attachedHost": "127.0.0.1" });
+        assert_eq!(
+            fingerprint_changes(&a, &att),
+            vec!["来源变化：managed-spawn -> attached".to_string()]
+        );
     }
 
     /// #59 provenance 四态：托管 spawn（权威宿主）、隔离 spawn（origin

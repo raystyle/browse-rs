@@ -46,8 +46,14 @@
 响应（成功，HTTP 200）：
 
 ```json
-{ "ok": true, "value": { "targetId": "A1B2…", "title": "Example", "url": "https://example.com/" } }
+{ "ok": true, "value": { "targetId": "A1B2…", "title": "Example", "url": "https://example.com/" },
+  "engineContext": { "provenance": { "origin": "managed-spawn", "hostContext": "linux/AI-LAB",
+      "spawnedBy": "daemon", "spawnedAt": 1790097761849 },
+    "daemon": { "os": "linux", "hostname": "AI-LAB", "pid": 2085366, "name": "default", "startedAt": 1790097700000 },
+    "changes": [] } }
 ```
+
+`engineContext` 是机器面信封键（方言 `value` 不受扰）：provenance 与 daemon 同 /health 的语义面（来源枚举、宿主上下文、spawn 时刻），changes 是 daemon 侧与上次操作引擎指纹比对出的变化句（引擎换新、有头无头翻转、形态翻转、来源变化；正常态空数组）。CLI 据此在 stderr 出告警行（正常态零输出），`BROWSE_ENGINE_CONTEXT=1` 显紧凑行。
 
 响应（失败，HTTP 500 带错误形；判 `ok` 字段仍是推荐姿势，但客户端要允许从非 2xx 响应读出 body，别用 curl -f 一类「非 2xx 即抛」姿势把 CTA 吞掉）：
 
