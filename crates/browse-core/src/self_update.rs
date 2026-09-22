@@ -137,6 +137,26 @@ fn version_newer(candidate: &str, current: &str) -> bool {
     asuf > bsuf
 }
 
+/// 自更新 HTTP 客户端（镜像域恒 HTTP/1.1，总台令 2026-09-23）：镜像前置链
+/// （openwrt 透明代理）对 HTTP/2 存在约 1,720,320B 的字节悬崖（h2 精确断流；
+/// 强制 h1 同路径 1.7MB/s 全通），故判新腿与下载腿统一钉死 h1。本仓 reqwest
+/// 现为 http1-only 编译面（workspace 关 `default-features`、未开 `http2`
+/// feature，`h2` 不在依赖图），显式 `.http1_only()` 是防漂移口径：日后任一
+/// 依赖经 feature 统一化打开 `reqwest/http2` 时，镜像腿仍钉在 h1，不随全局
+/// 协商漂回 h2。
+///
+/// # Errors
+///
+/// client 构建失败（TLS 后端初始化等）。
+fn update_http_client(timeout: std::time::Duration) -> Result<reqwest::blocking::Client> {
+    reqwest::blocking::Client::builder()
+        .http1_only()
+        .connect_timeout(std::time::Duration::from_secs(30))
+        .timeout(timeout)
+        .build()
+        .map_err(|e| anyhow::anyhow!("构建 http client 失败：{e}"))
+}
+
 /// 发现最新版本号。
 ///
 /// 镜像 stable 段的 `latest` 标记优先（播种流水写的单行纯版本号），
@@ -151,11 +171,7 @@ fn version_newer(candidate: &str, current: &str) -> bool {
 /// 双源皆失败（含 GitHub 限流 403/429 带 token 指引）或都未给出成形
 /// 版本号。
 pub fn latest_browse_version() -> Result<String> {
-    let client = reqwest::blocking::Client::builder()
-        .connect_timeout(std::time::Duration::from_secs(30))
-        .timeout(std::time::Duration::from_secs(60))
-        .build()
-        .map_err(|e| anyhow::anyhow!("构建 http client 失败：{e}"))?;
+    let client = update_http_client(std::time::Duration::from_secs(60))?;
     // 镜像 latest 优先：任何不成形（404、超时、垃圾文本）静默回落
     // GitHub，镜像故障不放大成更新失败
     let latest_url = format!("{}/stable/latest", mirror_base());
@@ -566,11 +582,7 @@ fn update_locked(exe: &Path, dir: &Path) -> Result<Value> {
             "note": "本地版本更新（可能是测试构建），不降级；下一步：如确要回退走 GitHub Releases 手动装"
         }));
     }
-    let client = reqwest::blocking::Client::builder()
-        .connect_timeout(std::time::Duration::from_secs(30))
-        .timeout(std::time::Duration::from_secs(300))
-        .build()
-        .map_err(|e| anyhow::anyhow!("构建 http client 失败：{e}"))?;
+    let client = update_http_client(std::time::Duration::from_secs(300))?;
     let bytes = fetch_asset(&client, &latest)?;
     // 暂存落 exe 同目录（跨文件系统 rename 必炸，temp 目录不可用）
     let staging = dir.join(format!(".browse-selfupd-{}", std::process::id()));
@@ -740,6 +752,42 @@ mod tests {
         format!("http://{addr}")
     }
 
+    /// mock 镜像（记录每个连接的首行请求行，供协议断言）：路由表加日志
+    /// 槽，返回 base 与首行日志（`Arc<Mutex<Vec<String>>>`）。
+    #[cfg(unix)]
+    fn mock_mirror_logged(
+        routes: Vec<(String, Vec<u8>)>,
+    ) -> (String, std::sync::Arc<std::sync::Mutex<Vec<String>>>) {
+        let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let sink = log.clone();
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            use std::io::{Read, Write};
+            for stream in listener.incoming() {
+                let Ok(mut s) = stream else { continue };
+                let mut buf = [0u8; 4096];
+                let Ok(n) = s.read(&mut buf) else { continue };
+                let req = String::from_utf8_lossy(&buf[..n]).to_string();
+                sink.lock()
+                    .unwrap()
+                    .push(req.lines().next().unwrap_or("").to_string());
+                let path = req.split_whitespace().nth(1).unwrap_or("").to_string();
+                let (code, body) = match routes.iter().find(|(p, _)| *p == path) {
+                    Some((_, b)) => ("200 OK", b.clone()),
+                    None => ("404 Not Found", b"gone".to_vec()),
+                };
+                let head = format!(
+                    "HTTP/1.1 {code}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                let _ = s.write_all(head.as_bytes());
+                let _ = s.write_all(&body);
+            }
+        });
+        (format!("http://{addr}"), log)
+    }
+
     /// env 写面互斥锁（#54 评审 G）：HTTPS_PROXY 与 BROWSE_RELEASE_
     /// MIRROR 双写测试的 env 敏感窗互斥，防并发测试线程互相插队打到对
     /// 方 mock（SECRETS_TEST_LOCK 同形先例）。调用方全 unix 门控，同款
@@ -888,5 +936,51 @@ mod tests {
             }
         }
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// 总台令 2026-09-23（随 #58 链）：镜像下载腿恒 HTTP/1.1——对 mock
+    /// 镜像取 >2MB（>1,720,320B 悬崖）资产，观测镜像域请求首行全为
+    /// `HTTP/1.1` 且全量送达过 sha 锚。这是「不落 h2」的回归锁：任何 h2c
+    /// 客户端首行是 `PRI * HTTP/2.0`，会当场破坏该断言（reqwest 日后被
+    /// feature 统一化打开 http2 而漂回协商时本测即红）。
+    #[test]
+    #[cfg(unix)]
+    fn mirror_download_leg_forces_http1_above_cliff() {
+        let _env = env_lock();
+        const BIG: usize = 2_500_000; // 过 2MB 线与 1,720,320B 悬崖
+        let asset = asset_name("9.9.9").unwrap();
+        let pkg = vec![b'A'; BIG];
+        let sha = format!("{:x}", Sha256::digest(&pkg));
+        let (mirror, log) = mock_mirror_logged(vec![
+            (
+                format!("/stable/{asset}.sha256"),
+                format!("{sha}  x\n").into_bytes(),
+            ),
+            (format!("/stable/{asset}"), pkg.clone()),
+        ]);
+        let saved_mirror = std::env::var("BROWSE_RELEASE_MIRROR").ok();
+        // SAFETY: env_lock 窗内独占改 env，块尾按原值还原
+        unsafe { std::env::set_var("BROWSE_RELEASE_MIRROR", &mirror) };
+        let client = update_http_client(std::time::Duration::from_secs(30)).unwrap();
+        let got = fetch_asset(&client, "9.9.9").expect("镜像腿应取到 >2MB 资产");
+        assert_eq!(got.len(), BIG, ">2MB 资产应全量送达（悬崖腿修复前断流）");
+        let lines = log.lock().unwrap().clone();
+        assert!(
+            lines
+                .iter()
+                .any(|l| *l == format!("GET /stable/{asset} HTTP/1.1")),
+            "镜像资产请求应为 HTTP/1.1：{lines:?}"
+        );
+        assert!(
+            !lines.is_empty() && lines.iter().all(|l| l.ends_with("HTTP/1.1")),
+            "镜像域请求不得走 h2（首行非 h1）：{lines:?}"
+        );
+        // SAFETY: 同一锁窗内按原值还原
+        unsafe {
+            match saved_mirror.as_ref() {
+                Some(v) => std::env::set_var("BROWSE_RELEASE_MIRROR", v),
+                None => std::env::remove_var("BROWSE_RELEASE_MIRROR"),
+            }
+        }
     }
 }

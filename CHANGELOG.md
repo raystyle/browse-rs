@@ -2,6 +2,12 @@
 
 版本级里程碑；逐批过程见 docs/diary。semver 判据在册 docs/requirements/REQ-004。
 
+## 0.15.2 - 2026-09-23
+
+- **下载腿钉死 HTTP/1.1（镜像域字节悬崖，总台令 2026-09-23）**：`browse update` 判新与下载腿统一走 `update_http_client`（`.http1_only()`），因 browse.ohmygh.com 前置链（openwrt 透明代理）对 HTTP/2 有约 1,720,320B 字节悬崖，h2 精确断流、强制 h1 同路径全通。注记：本仓 reqwest 现为 http1-only 编译面（workspace 关 `default-features` 且未开 `http2` feature，`h2` 不在依赖图），故本批是防漂移口径（锁住镜像腿不随依赖统一化漂回 h2）而非即时修速；对照测例 `mirror_download_leg_forces_http1_above_cliff` 以 mock 镜像取 2.5MB 资产断言镜像域请求首行恒 `HTTP/1.1`
+- **播种腿 stable 段缓存头（总台令 2026-09-23）**：`release.yml` 播种 stable 滚动段 rclone 上传头由 `max-age=60` 改 `Cache-Control: public, max-age=3600, stale-while-revalidate=86400`（边缘免同步回源）；版本段保持 immutable 长缓存、latest 判新标记保持 `max-age=60`（判新新鲜度）
+- semver 判据结论（0.15.2 裁定）：加固与流水线披露批取 patch（REQ-004 判据行）
+
 ## 0.15.1 - 2026-09-22
 
 - **#57 无显示会话 headless 自动回退**：spawn 引擎（端口态与管道态两实现三落点）在有头意图且环境无 `DISPLAY`/`WAYLAND_DISPLAY`（典型 ssh 会话）且未显式给 headless 旗标时自动补 `--headless`（修复该场景 ozone 初始化失败即退、DevToolsActivePort 永不落盘的必挂）；有显示环境行为不变；`BROWSE_ENGINE_ARGS` 显式旗标优先不叠补；Windows 会话制与 macOS（Cocoa 非 X11，环境恒无这两变量但有桌面）恒不触发（ADR-0003 口径不动，macOS 有头默认不回退，评审 F1）；README/getting-started/surface 披露生效口径

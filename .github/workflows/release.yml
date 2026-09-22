@@ -73,7 +73,7 @@ jobs:
           rclone sync dist/ "r2:${R2_BUCKET}/browse/stable/" \
             --include "*.zip" --include "*.tar.gz" --include "*.sha256" \
             --delete-excluded \
-            --header-upload "Cache-Control: public, max-age=60" \
+            --header-upload "Cache-Control: public, max-age=3600, stale-while-revalidate=86400" \
             --checksum -v --stats-one-line
       # 判新标记（#54，文件名小写 latest）：sync --delete-excluded 会洗掉非资产文件，标记
       # 恒在 sync 后重写；单行纯版本号，回读红灯锚定
