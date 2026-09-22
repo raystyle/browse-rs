@@ -300,13 +300,11 @@ async fn main() -> Result<()> {
                         }
                         // 自由字段本地预检（评审 G1，与 digest/kind/name 同款
                         // 免配额损耗）：summary 非空限长，git_sha 十六进制形
-                        if let Some(s) = summary.as_deref() {
-                            if s.trim().is_empty() || s.chars().count() > 1000 {
-                                eprintln!(
-                                    "browse: --summary 要非空且至多 1000 字符（用法错，退出 2）"
-                                );
-                                std::process::exit(2);
-                            }
+                        if let Some(s) = summary.as_deref()
+                            && (s.trim().is_empty() || s.chars().count() > 1000)
+                        {
+                            eprintln!("browse: --summary 要非空且至多 1000 字符（用法错，退出 2）");
+                            std::process::exit(2);
                         }
                         if let Some(g) = git_sha.as_deref()
                             && (!(7..=40).contains(&g.len())
