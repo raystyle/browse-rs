@@ -77,7 +77,7 @@ enum Mode {
     /// `browse fetch <url> [--markdown] [--timeout <s>]`：一次性只读抓取（#50）。
     Fetch { url: String, timeout_s: u64 },
     /// `browse issue close` 面已移除（总台修正令 2026-09-20 收口：关闭与删除唯一道 = omc 工位经 herdr 委托）。
-    /// `browse artifact publish --name <n> --kind <k> --digest <d>`：产物共享库发布（REQ-063；--dep 可重复记依赖出处；参数面随标准 crate ledger-client 收窄）。
+    /// `browse artifact publish --name <n> --kind <k> --digest <d>`：产物共享库发布（REQ-063；--dep 可重复记依赖出处；--summary/--outcome/--git-sha 结构化字段网页详情直出，参数面随 ledger-client v0.1.3）。
     ArtifactPublish {
         name: String,
         kind: String,
@@ -85,6 +85,9 @@ enum Mode {
         version: Option<String>,
         git_range: Option<String>,
         note: Option<String>,
+        summary: Option<String>,
+        outcome: Option<String>,
+        git_sha: Option<String>,
         deps: Vec<String>,
     },
     /// `browse artifact attest <id> --type <t>`：产物验证事件（attest_dev/attest_prod/verification_failed 三型；promote/demote/supersede 归 omc）。
@@ -249,6 +252,9 @@ async fn main() -> Result<()> {
                         let mut version = None;
                         let mut git_range = None;
                         let mut note = None;
+                        let mut summary = None;
+                        let mut outcome = None;
+                        let mut git_sha = None;
                         let mut deps: Vec<String> = Vec::new();
                         loop {
                             match args.next_opt() {
@@ -263,6 +269,17 @@ async fn main() -> Result<()> {
                                 }
                                 Some(f) if f == "--note" => note = Some(args.next("--note")),
                                 Some(f) if f == "--dep" => deps.push(args.next("--dep")),
+                                // 结构化字段（ledger-client v0.1.3 面）：summary
+                                // 一行技术摘要与 outcome 结果倾向，网页详情直出
+                                Some(f) if f == "--summary" => {
+                                    summary = Some(args.next("--summary"))
+                                }
+                                Some(f) if f == "--outcome" => {
+                                    outcome = Some(args.next("--outcome"))
+                                }
+                                Some(f) if f == "--git-sha" => {
+                                    git_sha = Some(args.next("--git-sha"))
+                                }
                                 Some(f) => bail_arg(&f),
                                 None => break,
                             }
@@ -273,6 +290,14 @@ async fn main() -> Result<()> {
                             );
                             std::process::exit(2);
                         }
+                        if let Some(o) = outcome.as_deref()
+                            && !matches!(o, "success" | "failure")
+                        {
+                            eprintln!(
+                                "browse: --outcome 只认 success|failure，得 {o}（用法错，退出 2）"
+                            );
+                            std::process::exit(2);
+                        }
                         mode = Mode::ArtifactPublish {
                             name,
                             kind,
@@ -280,6 +305,9 @@ async fn main() -> Result<()> {
                             version,
                             git_range,
                             note,
+                            summary,
+                            outcome,
+                            git_sha,
                             deps,
                         };
                     }
@@ -755,6 +783,9 @@ async fn main() -> Result<()> {
             version,
             git_range,
             note,
+            summary,
+            outcome,
+            git_sha,
             deps,
         } => {
             // 值域/形错统一用法错 exit 2（评审 G5，与退出码契约「2=用法错」对齐）
@@ -774,7 +805,7 @@ async fn main() -> Result<()> {
             }
             let id = ledger_call(move || {
                 let id = browse_cli::ledger::client()?
-                    .artifact_publish(
+                    .artifact_publish_full(
                         &name,
                         &kind,
                         &digest,
@@ -782,6 +813,9 @@ async fn main() -> Result<()> {
                         git_range.as_deref(),
                         &deps,
                         note.as_deref(),
+                        summary.as_deref(),
+                        outcome.as_deref(),
+                        git_sha.as_deref(),
                     )
                     .map_err(|e| e.to_string())?;
                 // crate 静默默认守卫（评审 G4）：回执缺 artifact_id 时落空串

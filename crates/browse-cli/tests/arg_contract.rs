@@ -90,6 +90,25 @@ fn flag_collection_loops_terminate() {
     let (code, _, err) = run(&["issue", "list", "--limit", "abc"], &[]);
     assert_eq!(code, 2, "{err}");
     assert!(err.contains("--limit 要数字"), "{err}");
+
+    // artifact publish 的 outcome 枚举（结构化字段，网络前拦截）
+    let (code, _, err) = run(
+        &[
+            "artifact",
+            "publish",
+            "--name",
+            "x",
+            "--kind",
+            "lesson",
+            "--digest",
+            "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+            "--outcome",
+            "bogus",
+        ],
+        &[],
+    );
+    assert_eq!(code, 2, "{err}");
+    assert!(err.contains("--outcome 只认 success|failure"), "{err}");
 }
 
 /// 必值口（Args::next）缺值仍直出 exit 2——分面只救收集口，不放松守卫。

@@ -121,7 +121,7 @@ dependencies = [
 
 [[package]]
 name = "browse-cli"
-version = "0.13.1"
+version = "0.14.0"
 dependencies = [
  "anyhow",
  "base64",
@@ -141,7 +141,7 @@ dependencies = [
 
 [[package]]
 name = "browse-core"
-version = "0.13.1"
+version = "0.14.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -187,7 +187,7 @@ dependencies = [
 
 [[package]]
 name = "cdp"
-version = "0.13.1"
+version = "0.14.0"
 dependencies = [
  "anyhow",
  "futures",
@@ -852,8 +852,8 @@ dependencies = [
 
 [[package]]
 name = "ledger-client"
-version = "0.1.1"
-source = "git+https://github.com/raystyle/ledger-rs?tag=v0.1.1#0c9fc085776c9507de7e4453f2493491b86166d1"
+version = "0.1.3"
+source = "git+https://github.com/raystyle/ledger-rs?tag=v0.1.3#8d0a599c35947dfc5a0ef3877955184b86884a9b"
 dependencies = [
  "base64",
  "ed25519-dalek",

@@ -2,7 +2,7 @@
 
 > browse CLI 的可测半边：daemon 客户端（HTTP 调用 + 自动拉起）。
 
-## browse-cli 0.13.1
+## browse-cli 0.14.0
 
 - [browse-cli overview](browse_cli/index.md): browse CLI 的可测半边：daemon 客户端（HTTP 调用 + 自动拉起）。
 - [browse-cli::client](browse_cli/client.md): daemon 客户端：本地 HTTP 调用 + 首次使用自动拉起 detached daemon。
@@ -10,7 +10,7 @@
 - [browse-cli::ledger](browse_cli/ledger.md): 账本薄适配层（REQ-063；总台修正令 2026-09-20 收口）：签名道与只增面
 - [browse-cli::render](browse_cli/render.md): 求值结果的打印面：大值自动落盘（artifact/checkpoint 的降级形态，
 
-## browse-core 0.13.1
+## browse-core 0.14.0
 
 - [browse-core overview](browse_core/index.md): browse CLI 的核心库：方言宿主、引擎策略、daemon HTTP API。
 - [browse-core::chrome_mgr](browse_core/chrome_mgr.md): 内嵌 Chromium 版本管理器（ADR-0007）：各版本 clean-chrome 在本仓应用
@@ -27,7 +27,7 @@
 - [browse-core::surface](browse_core/surface.md): 命令面目录（incur-rs 原则的方言版适配）：CLI 子命令、方言全局函数、
 - [browse-core::workspace](browse_core/workspace.md): workspace 单仓管理（#50/#51 配套）：站点与机制知识仓
 
-## cdp 0.13.1
+## cdp 0.14.0
 
 - [cdp overview](cdp/index.md): Chrome DevTools Protocol（CDP）连接层：一条常驻 browser-level WebSocket 会话。
 - [cdp::discovery](cdp/discovery.md): 连接线索到 WebSocket URL 的解析：`wsUrl` / `port` / `profileDir` 三条路。

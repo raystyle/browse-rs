@@ -225,8 +225,8 @@
       "type": "object"
     },
     "cli.artifact-publish": {
-      "description": "browse artifact publish --name <n> --kind <k> --digest <d> [--dep <d>]… 产物共享库发布（参数面随标准 crate ledger-client 收口）：kind 十五枚举必填（binary/experience/lesson/research/prototype/…），digest=正文或记录哈希（sha256:<64hex>），回 {ok,artifact_id}。",
-      "example": "browse artifact publish --name browse-0.8 --kind prototype --digest sha256:... --version 0.8.0 --dep github.com/raystyle/hst_rs",
+      "description": "browse artifact publish --name <n> --kind <k> --digest <d> [--summary <s>] [--outcome <success|failure>] [--git-sha <sha>] [--dep <d>]… 产物共享库发布（参数面随标准 crate ledger-client v0.1.3）：kind 十五枚举必填（binary/experience/lesson/research/prototype/…），digest=正文或记录哈希（sha256:<64hex>），summary 与 outcome 是结构化字段（非正文拼接，账本人类网页按字段渲染），回 {ok,artifact_id}。",
+      "example": "browse artifact publish --name browse-0.8 --kind prototype --digest sha256:... --summary '集成实战摘' --outcome success --dep github.com/raystyle/hst_rs",
       "input": {
         "properties": {
           "dep": {
@@ -241,6 +241,10 @@
             "description": "",
             "type": "string"
           },
+          "git-sha": {
+            "description": "缺省 提交锚，服务端落表",
+            "type": "string"
+          },
           "kind": {
             "description": "",
             "type": "string"
@@ -251,6 +255,14 @@
           },
           "note": {
             "description": "",
+            "type": "string"
+          },
+          "outcome": {
+            "description": "缺省 success|failure 结果倾向",
+            "type": "string"
+          },
+          "summary": {
+            "description": "缺省 一行技术摘要，网页详情直出",
             "type": "string"
           },
           "version": {
