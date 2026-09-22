@@ -733,7 +733,7 @@
       "type": "object"
     },
     "cli.up": {
-      "description": "browse up [--headless] [--pipe] [--chrome <path>] [--profile <dir>] [--ws <url>] [--port <p>] [--proxy <url>] [--proxy-bypass <list>] [--engine-arg <a>] [--isolated] [--idle-timeout <ms>] [--cookies <域csv>] 显式起引擎（附着优先，缺则 spawn clean-chrome 隔离实例；--profile 自定义 user-data-dir，默认固定 profile 持久保存站点会话；--proxy/--proxy-bypass 直通 chrome 代理旗标；--engine-arg 引擎附加旗标（可叠加，spawn 时 argv 原样直通，BROWSE_ENGINE_ARGS 同道；与 browse 自身 spawn 旗标撞车时后值胜，慎叠；无显示会话如 ssh 未给 headless 时 spawn 自动补 --headless，显式旗标优先）；--isolated 隔离态 profile 引擎退出即删（给了 --profile 时 isolated 优先）；--idle-timeout 闲置回收毫秒只对新拉起的 daemon 生效）；--cookies 域 csv 起引擎后从附着浏览器只读热迁指定域登录态（源零写回，无附着源即报错指 storageState 整包往返）。",
+      "description": "browse up [--headless] [--pipe] [--chrome <path>] [--profile <dir>] [--ws <url>] [--port <p>] [--proxy <url>] [--proxy-bypass <list>] [--engine-arg <a>] [--isolated] [--idle-timeout <ms>] [--cookies <域csv>] 显式起引擎（附着优先，缺则 spawn clean-chrome 隔离实例；--profile 自定义 user-data-dir，默认固定 profile 持久保存站点会话；--proxy/--proxy-bypass 直通 chrome 代理旗标；--engine-arg 引擎附加旗标（可叠加，spawn 时 argv 原样直通，BROWSE_ENGINE_ARGS 同道；与 browse 自身 spawn 旗标撞车时后值胜，慎叠；无显示会话如 ssh 未给 headless 时 spawn 自动补 --headless，显式旗标优先）；--isolated 隔离态 profile 引擎退出即删（给了 --profile 时 isolated 优先；显式 up 定义引擎意外退出后自动重拉的形态：最近一次 up 的意图生效（裸 up 即复位为有头缺省）；形态记忆是 daemon 进程态，重启回环境缺省；附着意图不记忆，重拉走发现序）；--idle-timeout 闲置回收毫秒只对新拉起的 daemon 生效）；--cookies 域 csv 起引擎后从附着浏览器只读热迁指定域登录态（源零写回，无附着源即报错指 storageState 整包往返）。",
       "example": "browse up --headless --profile ~/profiles/proj-a",
       "input": {
         "properties": {

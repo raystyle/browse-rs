@@ -121,8 +121,10 @@ pub struct Daemon {
     pub host: Arc<JsHost>,
     /// 引擎状态机。
     pub engine: Arc<Engine>,
-    /// 没有显式意图时的引擎策略（来自 CLI 旗标 / 环境）。
-    pub spec: EngineSpec,
+    /// 没有显式意图时的引擎策略（来自 CLI 旗标 / 环境；#61 后成功
+    /// 的显式 spawn up 会回写它，懒重 spawn 沿用最近形态）。锁形因
+    /// Daemon 在 Arc 后共享。
+    pub spec: std::sync::Mutex<EngineSpec>,
     /// 单飞槽：同一时刻一条片段。
     pub eval_lock: tokio::sync::Mutex<()>,
     /// 退出旗标（POST /quit 置位）。
@@ -157,11 +159,11 @@ impl Daemon {
         Arc::new(Self {
             host,
             engine,
-            spec,
             eval_lock: tokio::sync::Mutex::new(()),
             quit: Arc::new(AtomicBool::new(false)),
             started: Instant::now(),
             desc: DaemonDesc::capture(),
+            spec: std::sync::Mutex::new(spec),
             last_fp: std::sync::Mutex::new(None),
             last_activity: std::sync::Mutex::new(Instant::now()),
         })
@@ -302,12 +304,13 @@ async fn eval_handler(
     {
         return err_response(e);
     }
-    // 懒引擎：未连接且片段没打算自己连，才预连
-    if !d.host.session().is_connected()
-        && !req.code.contains("connect")
-        && let Err(e) = d.engine.ensure(&d.spec).await
-    {
-        return err_response(e);
+    // 懒引擎：未连接且片段没打算自己连，才预连（#61：spec 锁形，
+    // 读侧克隆快照防长持锁）
+    if !d.host.session().is_connected() && !req.code.contains("connect") {
+        let spec = d.spec.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        if let Err(e) = d.engine.ensure(&spec).await {
+            return err_response(e);
+        }
     }
     // 分流（#22）：js 旗标走全量 JS 旁路，缺省走方言
     let outcome =
@@ -317,7 +320,8 @@ async fn eval_handler(
         Ok(Err(e)) => {
             // 撞上「还没连」的片段：兜底拉引擎重试一次
             if format!("{e:#}").contains("Not connected") {
-                match d.engine.ensure(&d.spec).await {
+                let spec = d.spec.lock().unwrap_or_else(|e| e.into_inner()).clone();
+                match d.engine.ensure(&spec).await {
                     Ok(_) => match run_eval_code(&d.host, &req.code, req.js).await {
                         Ok(v) => v,
                         Err(e2) => return err_response(e2),
@@ -525,15 +529,24 @@ async fn engine_up_handler(
         }
     };
     match st.daemon.engine.ensure(&spec).await {
-        Ok(_) => (
-            axum::http::StatusCode::OK,
-            Json(
-                st.daemon
-                    .engine
-                    .health_json(st.daemon.started.elapsed(), &st.daemon.desc)
-                    .await,
-            ),
-        ),
+        Ok(_) => {
+            // #61：显式 spawn 意图回写缺省 spec——引擎意外死掉后的懒重
+            // spawn 沿用最近一次 up 的形态（headless 等），不再回退 daemon
+            // 启动时的 from_env 缺省（有头）。只记 Auto（spawn）意图；
+            // Attach 是连接意图不是重生意图，不回写
+            if let EngineSpec::Auto { .. } = &spec {
+                *st.daemon.spec.lock().unwrap_or_else(|e| e.into_inner()) = spec.clone();
+            }
+            (
+                axum::http::StatusCode::OK,
+                Json(
+                    st.daemon
+                        .engine
+                        .health_json(st.daemon.started.elapsed(), &st.daemon.desc)
+                        .await,
+                ),
+            )
+        }
         Err(e) => err_response(e),
     }
 }

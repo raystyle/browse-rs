@@ -2,6 +2,11 @@
 
 版本级里程碑；逐批过程见 docs/diary。semver 判据在册 docs/requirements/REQ-004。
 
+## 0.19.1 - 2026-09-23
+
+- **#61 引擎懒重 spawn 丢 up --headless 意图**：/engine/up 成功且是 Auto（spawn）意图时回写 daemon 缺省 spec（Mutex 形，eval 读侧克隆快照），引擎意外退出后的自动重拉沿用最近一次显式 up 的形态（headless 等），不再回退 daemon 启动时的 from_env 有头缺省；Attach 是连接意图不是重生意图不回写。实弹验收：up --headless 后 kill -9 引擎，重拉后 headless True 对 True，#60 告警面仅「引擎换新」一句零翻转（修复前同场景双句含翻转）。surface up 述补形态记忆口径
+- semver 判据结论（0.19.1 裁定）：修复批取 patch（REQ-004 判据行）
+
 ## 0.19.0 - 2026-09-23
 
 - **#60 操作回执的引擎上下文 CTA**：/eval 信封加 engineContext 键（provenance 与 daemon 自描述同源 #59，加 changes 数组；方言 value 不动，向后兼容）；变化检测在 daemon 侧（上次引擎指纹存 Mutex，逐操作比对，CLI 无状态）；指纹面是 origin/pid/有头无头/通道/profile 形态/附着 host；CLI 渲染纪律对齐技能触发层先例：正常态零输出，异常（引擎换新、有头无头翻转、形态翻转、来源变化）出 stderr 告警行，跨宿主与同 OS 异机告警每进程一次防批处理刷屏；BROWSE_ENGINE_CONTEXT 开紧凑行（引擎：origin @ hostContext）。fetch 引擎腿同款渲染。实弹：daemon 内存活期杀引擎逼重 spawn，次发操作精确告警「引擎换新 pid A -> B」加「有头无头翻转」，顺带照出懒重 spawn 丢 up --headless 意图的隐性翻转（告警面设计目的的当场实证，另立 issue）
