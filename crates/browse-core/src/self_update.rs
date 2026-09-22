@@ -224,6 +224,7 @@ fn fetch_pair(
     base: &str,
     asset: &str,
     api: bool,
+    progress: &mut dyn FnMut(u64, Option<u64>),
 ) -> Result<(Vec<u8>, String)> {
     let sidecar_url = format!("{base}/{asset}.sha256");
     let sidecar = http_get(client, &sidecar_url, api)?
@@ -233,11 +234,81 @@ fn fetch_pair(
     if want.len() != 64 || !want.chars().all(|c| c.is_ascii_hexdigit()) {
         bail!("边车 {sidecar_url} 内容非法（要 64 位十六进制）");
     }
-    let bytes = http_get(client, &format!("{base}/{asset}"), api)?
-        .bytes()
-        .map_err(|e| anyhow::anyhow!("读资产 body 失败：{e}"))?
-        .to_vec();
+    let resp = http_get(client, &format!("{base}/{asset}"), api)?;
+    let bytes = read_body_with_progress(
+        resp,
+        asset,
+        PROGRESS_MIN_BYTES,
+        PROGRESS_MIN_INTERVAL,
+        progress,
+    )?;
     Ok((bytes, want.to_string()))
+}
+
+/// CLI 面的下载心跳节流（#58）：收满此字节数或距上次满此时长即打一行，
+/// 慢源下「在下」与「死」可辨。快源被字节闸限到每 512KB 一行（4MB 包
+/// 约八行），慢源被时长闸托底到每秒一行。
+const PROGRESS_MIN_BYTES: u64 = 512 * 1024;
+const PROGRESS_MIN_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// 流式读 body 加进度回调（#58，crate 内缝）：逐块读（64KB 块），过
+/// 节流闸（`min_bytes` 或 `min_interval` 任一满足）且未到总量时回调
+/// `on_progress(已收, Option<总量>)`；读失败（超时、断流）的错误带
+/// 进度上下文（已收/总量/耗时），超时行为可预期。何时用：下载腿的
+/// 资产体（边车与判新标记是单行小件不走此道）。边界：Content-Length
+/// 缺失时总量为 `None`（两闸仍都参与，完成前最后一块可能多拍一拍
+/// 「下载中」，现网镜像恒带 CL 无实害）；完成态在有 CL 时不回调
+/// （收尾行归调用方）；预分配对声明的 CL 封顶（G3：BROWSE_RELEASE_
+/// MIRROR 可指向任意源，坏源巨型声明不得触发巨量分配）。
+fn read_body_with_progress(
+    resp: reqwest::blocking::Response,
+    asset: &str,
+    min_bytes: u64,
+    min_interval: std::time::Duration,
+    on_progress: &mut dyn FnMut(u64, Option<u64>),
+) -> Result<Vec<u8>> {
+    use std::io::Read;
+    let total = resp
+        .headers()
+        .get(reqwest::header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<u64>().ok());
+    // G3：预分配封顶（资产实为 MB 级，256MB 帽只挡恶意声明）
+    const ALLOC_CAP: u64 = 256 * 1024 * 1024;
+    let mut body = Vec::with_capacity(total.unwrap_or(0).min(ALLOC_CAP) as usize);
+    let mut resp = resp;
+    let started = std::time::Instant::now();
+    let mut last_emit = std::time::Instant::now();
+    let mut last_bytes: u64 = 0;
+    let mut buf = [0u8; 64 * 1024];
+    loop {
+        let n = match resp.read(&mut buf) {
+            Ok(n) => n,
+            Err(e) => {
+                let elapsed = started.elapsed().as_secs();
+                bail!(
+                    "读资产 body 失败（{e}）：{asset} 已收 {}/{}，耗时 {elapsed}s；\
+                     下一步：重试一次，仍失败 BROWSE_RELEASE_MIRROR 换源",
+                    body.len(),
+                    total
+                        .map(|t| t.to_string())
+                        .unwrap_or_else(|| "未知".into())
+                );
+            }
+        };
+        if n == 0 {
+            break;
+        }
+        body.extend_from_slice(&buf[..n]);
+        let got = body.len() as u64;
+        let unread = total.is_none_or(|t| got < t);
+        if unread && (got - last_bytes >= min_bytes || last_emit.elapsed() >= min_interval) {
+            on_progress(got, total);
+            last_emit = std::time::Instant::now();
+            last_bytes = got;
+        }
+    }
+    Ok(body)
 }
 
 /// 双通道下载加锚校验：镜像 stable 段整对优先（资产或边车任一 404/失败
@@ -246,19 +317,35 @@ fn fetch_asset(client: &reqwest::blocking::Client, version: &str) -> Result<Vec<
     let asset = asset_name(version)?;
     let mirror = format!("{}/stable", mirror_base());
     eprintln!("browse update：镜像 stable 段取 {asset}");
-    if let Ok((bytes, want)) = fetch_pair(client, &mirror, &asset, false) {
-        verify_sha(&bytes, &want, &asset)?;
-        return Ok(bytes);
+    // #58 心跳面：慢源下体感「完全卡死」的对策，节流闸见
+    // PROGRESS_MIN_BYTES/INTERVAL
+    let mut heartbeat = |got: u64, total: Option<u64>| match total {
+        Some(t) => eprintln!(
+            "browse update：下载中 {got}/{t}（{}%）",
+            got * 100 / t.max(1)
+        ),
+        None => eprintln!("browse update：下载中 {got} 字节（总量未知）"),
+    };
+    // G2（评审）：镜像腿失败诊断透出——断流错误带已收/总量/耗时上下文，
+    // 不再被回落吞掉；措辞区分「未命中」与「命中了但中途断」
+    match fetch_pair(client, &mirror, &asset, false, &mut heartbeat) {
+        Ok((bytes, want)) => {
+            verify_sha(&bytes, &want, &asset)?;
+            eprintln!("browse update：资产取毕 {} 字节", bytes.len());
+            return Ok(bytes);
+        }
+        Err(e) => eprintln!("browse update：镜像腿失败（{e}），回落 GitHub Releases"),
     }
     let github = format!("https://github.com/{GITHUB_REPO}/releases/download/v{version}");
-    eprintln!("browse update：镜像未命中，回落 GitHub Releases");
-    let (bytes, want) = fetch_pair(client, &github, &asset, false).map_err(|e| {
-        anyhow::anyhow!(
-            "{e}；双源皆未取到 {asset}；下一步：手动升级走 GitHub Releases，\
-             或 BROWSE_RELEASE_MIRROR 换镜像源"
-        )
-    })?;
+    let (bytes, want) =
+        fetch_pair(client, &github, &asset, false, &mut heartbeat).map_err(|e| {
+            anyhow::anyhow!(
+                "{e}；双源皆未取到 {asset}；下一步：手动升级走 GitHub Releases，\
+                 或 BROWSE_RELEASE_MIRROR 换镜像源"
+            )
+        })?;
     verify_sha(&bytes, &want, &asset)?;
+    eprintln!("browse update：资产取毕 {} 字节", bytes.len());
     Ok(bytes)
 }
 
@@ -982,5 +1069,110 @@ mod tests {
                 None => std::env::remove_var("BROWSE_RELEASE_MIRROR"),
             }
         }
+    }
+
+    /// 慢源 mock（#58）：body 按 chunk 分片写、片间 sleep，模拟限速源
+    /// （服务端节流等价限速代理）；截断形由 truncate_to 控制声明长度
+    /// 后只写部分即关（模拟断流）。
+    fn mock_mirror_slow(
+        route_path: &str,
+        body: Vec<u8>,
+        chunk: usize,
+        delay_ms: u64,
+        truncate_to: Option<usize>,
+    ) -> String {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let path = route_path.to_string();
+        std::thread::spawn(move || {
+            use std::io::{Read, Write};
+            for stream in listener.incoming() {
+                let Ok(mut s) = stream else { continue };
+                let mut buf = [0u8; 4096];
+                let Ok(n) = s.read(&mut buf) else { continue };
+                let req = String::from_utf8_lossy(&buf[..n]).to_string();
+                if req.split_whitespace().nth(1).unwrap_or("") != path {
+                    let _ = s.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 5\r\n\r\ngone");
+                    continue;
+                }
+                // 声明全长（截断形也全长，制造 Content-Length 与实发不符）
+                let head = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                let _ = s.write_all(head.as_bytes());
+                let send = &body[..truncate_to.unwrap_or(body.len()).min(body.len())];
+                for piece in send.chunks(chunk.max(1)) {
+                    let _ = s.write_all(piece);
+                    let _ = s.flush();
+                    if delay_ms > 0 {
+                        std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+                    }
+                }
+                let _ = s.shutdown(std::net::Shutdown::Write);
+            }
+        });
+        format!("http://{addr}")
+    }
+
+    /// #58 心跳面（验收 1/4）：限速源（服务端节流）下进度回调按节流闸
+    /// 周期出现、字节单调、不全量（完成态不回调）、终值完整送达。
+    #[test]
+    fn download_progress_heartbeat_on_slow_source() {
+        const TOTAL: usize = 300 * 1024;
+        let base = mock_mirror_slow("/a", vec![b'B'; TOTAL], 8 * 1024, 5, None);
+        let url = format!("{base}/a");
+        let client = update_http_client(std::time::Duration::from_secs(30)).unwrap();
+        let resp = client.get(&url).send().unwrap().error_for_status().unwrap();
+        let mut events: Vec<(u64, Option<u64>)> = Vec::new();
+        let bytes = read_body_with_progress(
+            resp,
+            "a",
+            8 * 1024,
+            std::time::Duration::from_millis(30),
+            &mut |got, total| events.push((got, total)),
+        )
+        .expect("慢源全量送达");
+        assert_eq!(bytes.len(), TOTAL, "全量完整");
+        assert!(
+            events.len() >= 3,
+            "限速源应多拍心跳（300KB/8KB 片加 30ms 闸）: {events:?}"
+        );
+        assert!(
+            events
+                .iter()
+                .all(|(g, t)| *t == Some(TOTAL as u64) && *g < TOTAL as u64),
+            "心跳带总量且未到完成态: {events:?}"
+        );
+        assert!(
+            events.windows(2).all(|w| w[0].0 <= w[1].0),
+            "字节序单调: {events:?}"
+        );
+    }
+
+    /// #58 超时/断流可预期（验收 2）：声明长度后中途断流，错误信息带
+    /// 已收/总量/耗时上下文。
+    #[test]
+    fn download_error_carries_progress_context() {
+        const TOTAL: usize = 128 * 1024;
+        let base = mock_mirror_slow("/a", vec![b'C'; TOTAL], 8 * 1024, 0, Some(TOTAL / 2));
+        let url = format!("{base}/a");
+        let client = update_http_client(std::time::Duration::from_secs(30)).unwrap();
+        let resp = client.get(&url).send().unwrap().error_for_status().unwrap();
+        let err = read_body_with_progress(
+            resp,
+            "the-asset",
+            8 * 1024,
+            std::time::Duration::from_millis(30),
+            &mut |_, _| {},
+        )
+        .expect_err("半途断流应错");
+        let msg = format!("{err:#}");
+        assert!(msg.contains("the-asset"), "带资产名: {msg}");
+        assert!(
+            msg.contains(&format!("{}/{}", TOTAL / 2, TOTAL)),
+            "带已收/总量上下文: {msg}"
+        );
+        assert!(msg.contains("耗时"), "带耗时: {msg}");
     }
 }

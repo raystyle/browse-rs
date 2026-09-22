@@ -2,6 +2,11 @@
 
 版本级里程碑；逐批过程见 docs/diary。semver 判据在册 docs/requirements/REQ-004。
 
+## 0.16.0 - 2026-09-23
+
+- **#58 update 下载腿进度面**：资产体改流式读（64KB 块）加心跳回显：收满 512KB 或满 1 秒打一行 `下载中 N/总量（%）`（总量缺失降级字节式），快源被字节闸限到每 512KB 一行、慢源被时长闸托底到每秒一行，慢源下「在下」与「死」可辨；取毕补一行收尾。读失败（超时、断流）错误带已收/总量/耗时上下文，超时行为可预期。零新依赖（reqwest blocking 的 std Read 流式）；判新腿与镜像选序不动；边车与判新标记是单行小件不走此道。测试：限速源 mock（服务端节流等价限速代理）多拍心跳与字节单调锁、断流错误上下文锁
+- semver 判据结论（0.16.0 裁定）：能力新增取 minor（REQ-004 判据行）；随批发 0.15.2 的 h1 钉死与播种缓存头（未单独发版）
+
 ## 0.15.2 - 2026-09-23
 
 - **下载腿钉死 HTTP/1.1（镜像域字节悬崖，总台令 2026-09-23）**：`browse update` 判新与下载腿统一走 `update_http_client`（`.http1_only()`），因 browse.ohmygh.com 前置链（openwrt 透明代理）对 HTTP/2 有约 1,720,320B 字节悬崖，h2 精确断流、强制 h1 同路径全通。注记：本仓 reqwest 现为 http1-only 编译面（workspace 关 `default-features` 且未开 `http2` feature，`h2` 不在依赖图），故本批是防漂移口径（锁住镜像腿不随依赖统一化漂回 h2）而非即时修速；对照测例 `mirror_download_leg_forces_http1_above_cliff` 以 mock 镜像取 2.5MB 资产断言镜像域请求首行恒 `HTTP/1.1`
