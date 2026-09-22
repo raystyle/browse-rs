@@ -8,6 +8,11 @@ superseded_by: null
 
 # ADR-0008：goto 回执技能触发层与 workspace 单仓外置知识
 
+> 事件面扩展注记（2026-09-22，#56）：触发事件源由 goto 扩至 fetch（两腿，CLI 侧
+> 同口径点名不依赖引擎）与 detect()（判读映射 page-skill）。决策本体不变：仍是
+> 回执条件附加键、未命中零新增键硬不变量、单仓外置；「goto 回执是唯一天然汇聚
+> 处」的语境系当时单事件源的在册事实，fetch/detect 回执是同型汇聚点。
+
 ## Context
 
 账本 #50/#51（2026-09-21）要给 agent 三级发现面：goto 回执自动点名 -> hint 读全文命令 -> 知识仓全文。知识资产（94 站 domain-skills、17 篇 interaction-skills）在前代 browser-harness 里，更新节奏与工具二进制解耦。daemon 无按名路由（方言统一 POST /eval），goto 回执是导航完成点唯一天然汇聚处。用户裁定：单仓 github.com/raystyle/browse_workspace、三平台用户目录部署、git 维护、goto 回执自动点名（issue 原案）。

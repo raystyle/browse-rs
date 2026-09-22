@@ -20,4 +20,11 @@ e2e 补 detect 判读点名（challenged/login-wall）、无映射判读键集�
 
 ## 封版 v0.15.0
 
-能力新增取 minor（REQ-004 判据行）；二轮快核与放行随后补记。
+能力新增取 minor（REQ-004 判据行）。
+
+## 二轮放行与 G5（同日续）
+
+- 二轮快核（browse-codex-review）：F1 与 G1-G4 全 CONFIRM（评审方独立重跑 aidoc strict clean、browse-cli lib 11 passed、browse-core lib 73 passed、surface_contract 8 passed；3f65a49..037fdb1 的投影 diff 只有版本头行无内容漂移），四边界维持 CONFIRM，放行推 main
+- 推送 46defd0..037fdb1 单笔；CI 三岗随后核
+- 二轮新增 G5（非阻断，随批收）：ADR-0008 标题/Context 的「goto 回执是唯一天然汇聚处」与 docs/skills/README.md 指路碑仍单事件口径。已收：ADR-0008 冠事件面扩展注记（决策本体不变：条件附加键、零键不变量、单仓外置），指路碑改 goto/fetch/detect（#56），本 docs 提交落在已推 037fdb1 之后不动已核 sha
+- 发版 v0.15.0 与五端拉平随后批（update 镜像判新腿 stable/latest 在位，走 browse update 面）
