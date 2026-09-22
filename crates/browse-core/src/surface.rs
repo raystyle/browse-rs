@@ -223,7 +223,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("version", "string", true),
             arg!("fromDir", "string", false, "缺省走 R2 镜像下载"),
         ],
-        description: "安装 Chromium 版本并 pin：缺省从镜像下载（版本段路由加 .sha256 锚校验原子落位），给部署目录则本地导入；Windows 落位自动补 AppContainer ACE（纯形带沙箱可起），回执 appContainerAce。",
+        description: "安装 Chromium 版本并 pin：缺省从镜像下载（版本段路由加 .sha256 锚校验原子落位，下载带进度心跳与 stall 告警），给部署目录则本地导入；Windows 落位自动补 AppContainer ACE（纯形带沙箱可起），回执 appContainerAce。",
         example: "browse chrome install 152.0.7977.84",
     },
     CmdSpec {
@@ -471,7 +471,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "chromeInstall(opts?)",
         args: &[arg!("opts", "object", false, "{fromDir}|{version}")],
-        description: "安装 Chromium 版本并 pin：fromDir 本地导入（version 缺省取目录名），version 单给走 R2 镜像下载（sha256 锚校验后原子落位）。",
+        description: "安装 Chromium 版本并 pin：fromDir 本地导入（version 缺省取目录名），version 单给走 R2 镜像下载（sha256 锚校验后原子落位，下载带进度心跳与 stall 告警）。",
         example: "await chromeInstall({version: \"152.0.7977.84\"})",
     },
     CmdSpec {

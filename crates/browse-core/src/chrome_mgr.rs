@@ -14,7 +14,6 @@ use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use std::io::Read;
 use std::path::{Path, PathBuf};
 
 /// 一条已安装版本的登记项。
@@ -424,25 +423,43 @@ fn install_from_mirror_inner(root: &Path, job: MirrorJob) -> Result<Value> {
     } = job;
     let zip_path = staging.join(asset);
     let dst = version_dir(root, version);
-    let mut resp = client
+    let resp = client
         .get(base)
         .send()
         .and_then(|r| r.error_for_status())
         .map_err(|e| mirror_cta(base, e))?;
     let mut file = std::fs::File::create(&zip_path)?;
     let mut hasher = Sha256::new();
-    let mut buf = [0u8; 64 * 1024];
-    loop {
-        let n = resp
-            .read(&mut buf)
-            .map_err(|e| anyhow::anyhow!("下载 {base} 中断：{e}"))?;
-        if n == 0 {
-            break;
-        }
-        std::io::Write::write_all(&mut file, &buf[..n])?;
-        hasher.update(&buf[..n]);
-    }
+    // #58 加 G1 进度面（用户令 2026-09-23：chrome 下载同享）：与 update
+    // 腿共用 stream_with_progress 核心（心跳/看门狗/断流上下文同口径），
+    // 大件字节闸放宽到 4MB（150MB 级包约 40 行，不刷屏）
+    let label = format!("browse chrome install {version}");
+    let label2 = label.clone();
+    let mut hooks = crate::self_update::ProgressHooks {
+        min_bytes: 4 * 1024 * 1024,
+        min_interval: std::time::Duration::from_secs(1),
+        stall_interval: crate::self_update::STALL_WARN_INTERVAL,
+        tick: crate::self_update::STALL_WATCH_TICK,
+        on_progress: &mut |got, total| {
+            eprintln!("{}", crate::self_update::heartbeat_line(&label, got, total))
+        },
+        on_stall: std::sync::Arc::new(std::sync::Mutex::new(move |got, stalled| {
+            eprintln!("{}", crate::self_update::stall_line(&label2, got, stalled))
+        })),
+    };
+    let received = crate::self_update::stream_with_progress(
+        resp,
+        asset,
+        "重试；仍失败检查镜像资产完整性（chrome remove 清 staging 后重装）",
+        &mut hooks,
+        &mut |chunk| {
+            std::io::Write::write_all(&mut file, chunk)?;
+            hasher.update(chunk);
+            Ok(())
+        },
+    )?;
     drop(file);
+    eprintln!("browse chrome install {version}：资产取毕 {received} 字节");
     let got = format!("{:02x}", hasher.finalize());
     if got != want {
         bail!(

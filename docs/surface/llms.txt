@@ -20,7 +20,7 @@
 | `browse --llms [--full|--json]` | agent 手册直出（裸形 markdown 紧凑手册；--full 完整目录，--json 机器形 Schema；不拉 daemon）。 |
 | `browse --repl` | 显式进入交互 REPL（裸调用只出本仓帮助体，不弹交互）。 |
 | `browse --version` | 打印版本号（资产解包冒烟与安装核对用）。 |
-| `browse chrome install <版本> [部署目录]` | 安装 Chromium 版本并 pin：缺省从镜像下载（版本段路由加 .sha256 锚校验原子落位），给部署目录则本地导入；Windows 落位自动补 AppContainer ACE（纯形带沙箱可起），回执 appContainerAce。 |
+| `browse chrome install <版本> [部署目录]` | 安装 Chromium 版本并 pin：缺省从镜像下载（版本段路由加 .sha256 锚校验原子落位，下载带进度心跳与 stall 告警），给部署目录则本地导入；Windows 落位自动补 AppContainer ACE（纯形带沙箱可起），回执 appContainerAce。 |
 | `browse chrome list` | 列已装 Chromium 版本与当前 pin。 |
 | `browse chrome use <版本>` | 把托管引擎 pin 切到已装版本（旧版保留可回退）。 |
 | `browse chrome update` | 升级到镜像最新版并默认切用（发现源 latest，BROWSE_CHROME_LATEST 可钉）。 |
@@ -51,7 +51,7 @@
 | `listPageTargets()` | 列可附着 page targets（带 own 标：只有 own=true 可 closeTab）。 |
 | `resolveWsUrl(opts?)` | 把 wsUrl/port/profileDir 线索解析成 WS URL（不连接）。 |
 | `detectBrowsers()` | 探测本机已开的调试浏览器（profile/端口/wsUrl）。 |
-| `chromeInstall(opts?)` | 安装 Chromium 版本并 pin：fromDir 本地导入（version 缺省取目录名），version 单给走 R2 镜像下载（sha256 锚校验后原子落位）。 |
+| `chromeInstall(opts?)` | 安装 Chromium 版本并 pin：fromDir 本地导入（version 缺省取目录名），version 单给走 R2 镜像下载（sha256 锚校验后原子落位，下载带进度心跳与 stall 告警）。 |
 | `chromeList()` | 列已装 Chromium 版本与当前 pin。 |
 | `chromeUse(version)` | pin 切到已装版本（引擎发现序的托管位）。 |
 | `chromeUpdate()` | 升级到镜像最新版并 pin 切过去（发现源 latest，BROWSE_CHROME_LATEST 可钉）。 |

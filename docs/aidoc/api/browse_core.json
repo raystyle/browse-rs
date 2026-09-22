@@ -1,6 +1,6 @@
 {
   "crate": "browse-core",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "items": [
     {
       "path": "browse_core::chrome_mgr",
@@ -318,9 +318,19 @@
       "docs": "从发布包解出 browse 二进制到暂存目录。\n\n包形是单顶层目录（win zip，unix tar.gz）；收齐候选后要求**唯一**\n普通文件命中\n（`browse`/`browse.exe`，非零字节），多命中或零命中都报错。\n\n# Errors\n\n包损坏；候选零或多于一个；写盘失败。"
     },
     {
+      "path": "browse_core::self_update::heartbeat_line",
+      "kind": "function",
+      "docs": "心跳行文案（#58，纯函数供单测锁形）：`label` 是调用方语境（如\n`browse update`、`browse chrome install <版本>`）；总量已知给\n`N/总量（%）`，未知降级字节式。\n\n# Examples\n\n```\nassert_eq!(\n    browse_core::self_update::heartbeat_line(\"browse update\", 1024, Some(4096)),\n    \"browse update：下载中 1024/4096（25%）\"\n);\nassert_eq!(\n    browse_core::self_update::heartbeat_line(\"browse chrome install 152\", 7, None),\n    \"browse chrome install 152：下载中 7 字节（总量未知）\"\n);\n```"
+    },
+    {
       "path": "browse_core::self_update::latest_browse_version",
       "kind": "function",
       "docs": "发现最新版本号。\n\n镜像 stable 段的 `latest` 标记优先（播种流水写的单行纯版本号），\n镜像不可达、标记缺失或不成形才回落 GitHub Releases latest API\n（tag 去 `v` 前缀）；GitHub 匿名 60/h 机队易撞（#54），镜像面让日\n常判新与下载腿同源，update 全程默认零 GitHub 依赖。\n\n阻塞 http，调用方收 `spawn_blocking`。\n\n# Errors\n\n双源皆失败（含 GitHub 限流 403/429 带 token 指引）或都未给出成形\n版本号。"
+    },
+    {
+      "path": "browse_core::self_update::stall_line",
+      "kind": "function",
+      "docs": "stall 告警行文案（G1，纯函数供单测锁形）：`label` 同 [`heartbeat_line`]。\n\n# Examples\n\n```\nassert_eq!(\n    browse_core::self_update::stall_line(\"browse update\", 2048, 20),\n    \"browse update：仍在等数据（已收 2048 字节，20 秒无进展）\"\n);\n```"
     },
     {
       "path": "browse_core::self_update::swap_binary",

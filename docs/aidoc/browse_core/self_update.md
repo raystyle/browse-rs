@@ -15,7 +15,9 @@ ark 管理的安装拦自更新走 ark 单通道（判据：exe 同目录 `ark-m
 
 - `asset_name` — 某版本的本平台资产名（`v` 前缀形，与 release 六件命名一致）。
 - `extract_binary` — 从发布包解出 browse 二进制到暂存目录。
+- `heartbeat_line` — 心跳行文案（#58，纯函数供单测锁形）：`label` 是调用方语境（如
 - `latest_browse_version` — 发现最新版本号。
+- `stall_line` — stall 告警行文案（G1，纯函数供单测锁形）：`label` 同 [`heartbeat_line`]。
 - `swap_binary` — 自替换二进制并自证回滚。
 - `update_self` — `browse update` 的自更新全链入口。
 

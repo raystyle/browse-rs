@@ -225,6 +225,7 @@ fn fetch_pair(
     asset: &str,
     api: bool,
     progress: &mut dyn FnMut(u64, Option<u64>),
+    on_stall: std::sync::Arc<std::sync::Mutex<dyn FnMut(u64, u64) + Send>>,
 ) -> Result<(Vec<u8>, String)> {
     let sidecar_url = format!("{base}/{asset}.sha256");
     let sidecar = http_get(client, &sidecar_url, api)?
@@ -238,9 +239,14 @@ fn fetch_pair(
     let bytes = read_body_with_progress(
         resp,
         asset,
-        PROGRESS_MIN_BYTES,
-        PROGRESS_MIN_INTERVAL,
-        progress,
+        &mut ProgressHooks {
+            min_bytes: PROGRESS_MIN_BYTES,
+            min_interval: PROGRESS_MIN_INTERVAL,
+            stall_interval: STALL_WARN_INTERVAL,
+            tick: STALL_WATCH_TICK,
+            on_progress: progress,
+            on_stall,
+        },
     )?;
     Ok((bytes, want.to_string()))
 }
@@ -251,64 +257,207 @@ fn fetch_pair(
 const PROGRESS_MIN_BYTES: u64 = 512 * 1024;
 const PROGRESS_MIN_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
 
-/// 流式读 body 加进度回调（#58，crate 内缝）：逐块读（64KB 块），过
-/// 节流闸（`min_bytes` 或 `min_interval` 任一满足）且未到总量时回调
+/// 流式读 body 加进度回调（#58 加 G1，crate 内缝）：逐块读（64KB 块），
+/// 过节流闸（`min_bytes` 或 `min_interval` 任一满足）且未到总量时回调
 /// `on_progress(已收, Option<总量>)`；读失败（超时、断流）的错误带
-/// 进度上下文（已收/总量/耗时），超时行为可预期。何时用：下载腿的
-/// 资产体（边车与判新标记是单行小件不走此道）。边界：Content-Length
-/// 缺失时总量为 `None`（两闸仍都参与，完成前最后一块可能多拍一拍
-/// 「下载中」，现网镜像恒带 CL 无实害）；完成态在有 CL 时不回调
-/// （收尾行归调用方）；预分配对声明的 CL 封顶（G3：BROWSE_RELEASE_
-/// MIRROR 可指向任意源，坏源巨型声明不得触发巨量分配）。
+/// 进度上下文（已收/总量/耗时），超时行为可预期；零字节停顿每满
+/// `stall_interval` 经独立看门狗线程回调 `on_stall(已收, 停顿秒)`（节拍
+/// `tick`，读结束后看门狗最多再活一个节拍即退，不 join 不阻塞收尾）。
+/// 何时用：下载腿的资产体（边车与判新标记是单行小件不走此道）。
+/// 边界：Content-Length 缺失时总量为 `None`（两闸仍都参与，完成前最后
+/// 一块可能多拍一拍「下载中」，现网镜像恒带 CL 无实害）；完成态在有
+/// CL 时不回调（收尾行归调用方）；预分配对声明的 CL 封顶 64MB（G3：
+/// BROWSE_RELEASE_MIRROR 可指向任意源，坏源巨型声明不得触发巨量分配）。
+/// 进度与 stall 回显的参数束（#58 加 G1，crate 内缝）：节流闸、看门狗
+/// 闸与节拍、两路回调收进一束，防 [`read_body_with_progress`] 参数面
+/// 膨胀（评审 clippy too_many_arguments）。
+pub(crate) struct ProgressHooks<'a> {
+    /// 心跳字节闸：距上次回调增量满此值即拍。
+    pub(crate) min_bytes: u64,
+    /// 心跳时长闸：距上次回调满此时长即拍。
+    pub(crate) min_interval: std::time::Duration,
+    /// stall 告警闸：零字节停顿满此时长告警一次。
+    pub(crate) stall_interval: std::time::Duration,
+    /// 看门狗轮询节拍。
+    pub(crate) tick: std::time::Duration,
+    /// 心跳回调（已收，Option<总量>）。
+    pub(crate) on_progress: &'a mut dyn FnMut(u64, Option<u64>),
+    /// stall 告警回调（已收，停顿秒；看门狗线程侧调，故 Arc<Mutex>）。
+    pub(crate) on_stall: std::sync::Arc<std::sync::Mutex<dyn FnMut(u64, u64) + Send>>,
+}
+
 fn read_body_with_progress(
     resp: reqwest::blocking::Response,
     asset: &str,
-    min_bytes: u64,
-    min_interval: std::time::Duration,
-    on_progress: &mut dyn FnMut(u64, Option<u64>),
+    hooks: &mut ProgressHooks<'_>,
 ) -> Result<Vec<u8>> {
-    use std::io::Read;
     let total = resp
         .headers()
         .get(reqwest::header::CONTENT_LENGTH)
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.parse::<u64>().ok());
-    // G3：预分配封顶（资产实为 MB 级，256MB 帽只挡恶意声明）
-    const ALLOC_CAP: u64 = 256 * 1024 * 1024;
+    // G3：预分配封顶（资产实为 MB 级，64MB 帽只挡恶意声明；评审附言
+    // 从 256MB 收紧）
+    const ALLOC_CAP: u64 = 64 * 1024 * 1024;
     let mut body = Vec::with_capacity(total.unwrap_or(0).min(ALLOC_CAP) as usize);
+    stream_with_progress(
+        resp,
+        asset,
+        "重试一次，仍失败 BROWSE_RELEASE_MIRROR 换源",
+        hooks,
+        &mut |chunk| {
+            body.extend_from_slice(chunk);
+            Ok(())
+        },
+    )?;
+    Ok(body)
+}
+
+/// 通用流式读加进度与看门狗（crate 内缝，#58 加 G1）：逐块读（64KB 块）
+/// 过 `sink` 消费（update 腿收 Vec、chrome 腿写文件加哈希，共用同一
+/// 心跳/看门狗/错误上下文口径），返回总字节数。读失败（超时、断流）
+/// 的错误带 `label`（资产名）、已收/总量/耗时加 `next_step`（调用方
+/// CTA）。G1 看门狗：零字节停顿每满 `hooks.stall_interval` 经独立线程
+/// 回调（节拍 `hooks.tick`，读结束后最多再活一个节拍即退，不 join 不
+/// 阻塞收尾）。边界：Content-Length 缺失时总量为 `None`（两闸仍都参
+/// 与，完成前最后一块可能多拍一拍心跳，诚实源恒带 CL 无实害）；完成
+/// 态在有 CL 时不回调（收尾行归调用方）；推进时刻在 read 返回后即刷，
+/// sink 落盘耗时不算停顿（评审 G3）。
+pub(crate) fn stream_with_progress(
+    resp: reqwest::blocking::Response,
+    label: &str,
+    next_step: &str,
+    hooks: &mut ProgressHooks<'_>,
+    sink: &mut dyn FnMut(&[u8]) -> std::io::Result<()>,
+) -> Result<u64> {
+    use std::io::Read;
+    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+    let total = resp
+        .headers()
+        .get(reqwest::header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<u64>().ok());
     let mut resp = resp;
     let started = std::time::Instant::now();
     let mut last_emit = std::time::Instant::now();
     let mut last_bytes: u64 = 0;
+    let mut received: u64 = 0;
     let mut buf = [0u8; 64 * 1024];
-    loop {
-        let n = match resp.read(&mut buf) {
+    // G1 看门狗共享态：字节计数与最近推进时刻（读侧 n>0 即刷）；看门狗
+    // 分离线程按 tick 轮询，零字节停顿满 stall_interval 回调 on_stall，
+    // 读结束置 done 后最多再活一个 tick 即退（不 join 不阻塞收尾）
+    let bytes = std::sync::Arc::new(AtomicU64::new(0));
+    let advanced_at = std::sync::Arc::new(std::sync::Mutex::new(std::time::Instant::now()));
+    let done = std::sync::Arc::new(AtomicBool::new(false));
+    {
+        let bytes = bytes.clone();
+        let advanced_at = advanced_at.clone();
+        let done = done.clone();
+        let tick = hooks.tick;
+        let stall_interval = hooks.stall_interval;
+        let on_stall = hooks.on_stall.clone();
+        std::thread::spawn(move || {
+            let mut last_warn: Option<std::time::Instant> = None;
+            loop {
+                std::thread::sleep(tick);
+                if done.load(Ordering::Relaxed) {
+                    return;
+                }
+                let stalled = advanced_at.lock().map(|t| t.elapsed()).ok();
+                if let Some(s) = stalled
+                    && s >= stall_interval
+                    && last_warn.is_none_or(|w| w.elapsed() >= stall_interval)
+                {
+                    on_stall
+                        .lock()
+                        .map(|mut f| f(bytes.load(Ordering::Relaxed), s.as_secs()))
+                        .ok();
+                    last_warn = Some(std::time::Instant::now());
+                }
+            }
+        });
+    }
+    let result = loop {
+        let step = match resp.read(&mut buf) {
             Ok(n) => n,
             Err(e) => {
                 let elapsed = started.elapsed().as_secs();
-                bail!(
-                    "读资产 body 失败（{e}）：{asset} 已收 {}/{}，耗时 {elapsed}s；\
-                     下一步：重试一次，仍失败 BROWSE_RELEASE_MIRROR 换源",
-                    body.len(),
+                break Err(anyhow::anyhow!(
+                    "读 {label} 失败（{e}）：已收 {}/{}，耗时 {elapsed}s；下一步：{next_step}",
+                    received,
                     total
                         .map(|t| t.to_string())
                         .unwrap_or_else(|| "未知".into())
-                );
+                ));
             }
         };
-        if n == 0 {
-            break;
+        if step == 0 {
+            break Ok(());
         }
-        body.extend_from_slice(&buf[..n]);
-        let got = body.len() as u64;
+        // G3：推进时刻在 read 返回后即刷（sink 落盘耗时不算停顿，「等
+        // 数据」文案只对网络零字节负责）
+        received += step as u64;
+        bytes.store(received, Ordering::Relaxed);
+        if let Ok(mut t) = advanced_at.lock() {
+            *t = std::time::Instant::now();
+        }
+        if let Err(e) = sink(&buf[..step]) {
+            break Err(anyhow::anyhow!("落盘 {label} 失败：{e}"));
+        }
+        let got = received;
         let unread = total.is_none_or(|t| got < t);
-        if unread && (got - last_bytes >= min_bytes || last_emit.elapsed() >= min_interval) {
-            on_progress(got, total);
+        if unread
+            && (got - last_bytes >= hooks.min_bytes || last_emit.elapsed() >= hooks.min_interval)
+        {
+            (hooks.on_progress)(got, total);
             last_emit = std::time::Instant::now();
             last_bytes = got;
         }
+    };
+    done.store(true, Ordering::Relaxed);
+    result.map(|_| received)
+}
+
+/// stall 看门狗的告警间隔与轮询节拍（G1，CLI 面）：零字节停顿每满
+/// 10 秒告警一次，看门狗每秒看一眼进度态。
+pub(crate) const STALL_WARN_INTERVAL: std::time::Duration = std::time::Duration::from_secs(10);
+pub(crate) const STALL_WATCH_TICK: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// 心跳行文案（#58，纯函数供单测锁形）：`label` 是调用方语境（如
+/// `browse update`、`browse chrome install <版本>`）；总量已知给
+/// `N/总量（%）`，未知降级字节式。
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(
+///     browse_core::self_update::heartbeat_line("browse update", 1024, Some(4096)),
+///     "browse update：下载中 1024/4096（25%）"
+/// );
+/// assert_eq!(
+///     browse_core::self_update::heartbeat_line("browse chrome install 152", 7, None),
+///     "browse chrome install 152：下载中 7 字节（总量未知）"
+/// );
+/// ```
+pub fn heartbeat_line(label: &str, got: u64, total: Option<u64>) -> String {
+    match total {
+        Some(t) => format!("{label}：下载中 {got}/{t}（{}%）", got * 100 / t.max(1)),
+        None => format!("{label}：下载中 {got} 字节（总量未知）"),
     }
-    Ok(body)
+}
+
+/// stall 告警行文案（G1，纯函数供单测锁形）：`label` 同 [`heartbeat_line`]。
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(
+///     browse_core::self_update::stall_line("browse update", 2048, 20),
+///     "browse update：仍在等数据（已收 2048 字节，20 秒无进展）"
+/// );
+/// ```
+pub fn stall_line(label: &str, got: u64, stalled_secs: u64) -> String {
+    format!("{label}：仍在等数据（已收 {got} 字节，{stalled_secs} 秒无进展）")
 }
 
 /// 双通道下载加锚校验：镜像 stable 段整对优先（资产或边车任一 404/失败
@@ -317,18 +466,24 @@ fn fetch_asset(client: &reqwest::blocking::Client, version: &str) -> Result<Vec<
     let asset = asset_name(version)?;
     let mirror = format!("{}/stable", mirror_base());
     eprintln!("browse update：镜像 stable 段取 {asset}");
-    // #58 心跳面：慢源下体感「完全卡死」的对策，节流闸见
-    // PROGRESS_MIN_BYTES/INTERVAL
-    let mut heartbeat = |got: u64, total: Option<u64>| match total {
-        Some(t) => eprintln!(
-            "browse update：下载中 {got}/{t}（{}%）",
-            got * 100 / t.max(1)
-        ),
-        None => eprintln!("browse update：下载中 {got} 字节（总量未知）"),
-    };
+    // #58 心跳面（慢源推进）加 G1 stall 面（零字节停顿）：文案走纯函数
+    // （heartbeat_line/stall_line，单测锁形），节流与告警闸见常量
+    let mut heartbeat =
+        |got: u64, total: Option<u64>| eprintln!("{}", heartbeat_line("browse update", got, total));
+    let on_stall: std::sync::Arc<std::sync::Mutex<dyn FnMut(u64, u64) + Send>> =
+        std::sync::Arc::new(std::sync::Mutex::new(|got: u64, stalled: u64| {
+            eprintln!("{}", stall_line("browse update", got, stalled))
+        }));
     // G2（评审）：镜像腿失败诊断透出——断流错误带已收/总量/耗时上下文，
     // 不再被回落吞掉；措辞区分「未命中」与「命中了但中途断」
-    match fetch_pair(client, &mirror, &asset, false, &mut heartbeat) {
+    match fetch_pair(
+        client,
+        &mirror,
+        &asset,
+        false,
+        &mut heartbeat,
+        on_stall.clone(),
+    ) {
         Ok((bytes, want)) => {
             verify_sha(&bytes, &want, &asset)?;
             eprintln!("browse update：资产取毕 {} 字节", bytes.len());
@@ -337,8 +492,8 @@ fn fetch_asset(client: &reqwest::blocking::Client, version: &str) -> Result<Vec<
         Err(e) => eprintln!("browse update：镜像腿失败（{e}），回落 GitHub Releases"),
     }
     let github = format!("https://github.com/{GITHUB_REPO}/releases/download/v{version}");
-    let (bytes, want) =
-        fetch_pair(client, &github, &asset, false, &mut heartbeat).map_err(|e| {
+    let (bytes, want) = fetch_pair(client, &github, &asset, false, &mut heartbeat, on_stall)
+        .map_err(|e| {
             anyhow::anyhow!(
                 "{e}；双源皆未取到 {asset}；下一步：手动升级走 GitHub Releases，\
                  或 BROWSE_RELEASE_MIRROR 换镜像源"
@@ -1073,13 +1228,15 @@ mod tests {
 
     /// 慢源 mock（#58）：body 按 chunk 分片写、片间 sleep，模拟限速源
     /// （服务端节流等价限速代理）；截断形由 truncate_to 控制声明长度
-    /// 后只写部分即关（模拟断流）。
+    /// 后只写部分即关（模拟断流）；stall 形在累计写出 N 字节后长睡
+    /// （模拟连接活但零字节的停顿，G1）。
     fn mock_mirror_slow(
         route_path: &str,
         body: Vec<u8>,
         chunk: usize,
         delay_ms: u64,
         truncate_to: Option<usize>,
+        stall: Option<(usize, u64)>,
     ) -> String {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
@@ -1102,9 +1259,17 @@ mod tests {
                 );
                 let _ = s.write_all(head.as_bytes());
                 let send = &body[..truncate_to.unwrap_or(body.len()).min(body.len())];
+                let mut sent = 0usize;
                 for piece in send.chunks(chunk.max(1)) {
+                    if let Some((at, ms)) = stall
+                        && sent <= at
+                        && sent + piece.len() > at
+                    {
+                        std::thread::sleep(std::time::Duration::from_millis(ms));
+                    }
                     let _ = s.write_all(piece);
                     let _ = s.flush();
+                    sent += piece.len();
                     if delay_ms > 0 {
                         std::thread::sleep(std::time::Duration::from_millis(delay_ms));
                     }
@@ -1120,7 +1285,7 @@ mod tests {
     #[test]
     fn download_progress_heartbeat_on_slow_source() {
         const TOTAL: usize = 300 * 1024;
-        let base = mock_mirror_slow("/a", vec![b'B'; TOTAL], 8 * 1024, 5, None);
+        let base = mock_mirror_slow("/a", vec![b'B'; TOTAL], 8 * 1024, 5, None, None);
         let url = format!("{base}/a");
         let client = update_http_client(std::time::Duration::from_secs(30)).unwrap();
         let resp = client.get(&url).send().unwrap().error_for_status().unwrap();
@@ -1128,9 +1293,14 @@ mod tests {
         let bytes = read_body_with_progress(
             resp,
             "a",
-            8 * 1024,
-            std::time::Duration::from_millis(30),
-            &mut |got, total| events.push((got, total)),
+            &mut ProgressHooks {
+                min_bytes: 8 * 1024,
+                min_interval: std::time::Duration::from_millis(30),
+                stall_interval: std::time::Duration::from_secs(3600),
+                tick: std::time::Duration::from_secs(1),
+                on_progress: &mut |got, total| events.push((got, total)),
+                on_stall: std::sync::Arc::new(std::sync::Mutex::new(|_, _| {})),
+            },
         )
         .expect("慢源全量送达");
         assert_eq!(bytes.len(), TOTAL, "全量完整");
@@ -1155,16 +1325,21 @@ mod tests {
     #[test]
     fn download_error_carries_progress_context() {
         const TOTAL: usize = 128 * 1024;
-        let base = mock_mirror_slow("/a", vec![b'C'; TOTAL], 8 * 1024, 0, Some(TOTAL / 2));
+        let base = mock_mirror_slow("/a", vec![b'C'; TOTAL], 8 * 1024, 0, Some(TOTAL / 2), None);
         let url = format!("{base}/a");
         let client = update_http_client(std::time::Duration::from_secs(30)).unwrap();
         let resp = client.get(&url).send().unwrap().error_for_status().unwrap();
         let err = read_body_with_progress(
             resp,
             "the-asset",
-            8 * 1024,
-            std::time::Duration::from_millis(30),
-            &mut |_, _| {},
+            &mut ProgressHooks {
+                min_bytes: 8 * 1024,
+                min_interval: std::time::Duration::from_millis(30),
+                stall_interval: std::time::Duration::from_secs(3600),
+                tick: std::time::Duration::from_secs(1),
+                on_progress: &mut |_, _| {},
+                on_stall: std::sync::Arc::new(std::sync::Mutex::new(|_, _| {})),
+            },
         )
         .expect_err("半途断流应错");
         let msg = format!("{err:#}");
@@ -1174,5 +1349,74 @@ mod tests {
             "带已收/总量上下文: {msg}"
         );
         assert!(msg.contains("耗时"), "带耗时: {msg}");
+    }
+
+    /// G1 stall 看门狗（用户令随批）：连接活但零字节的停顿经独立线程
+    /// 周期告警（已收字节与停顿秒数），停顿结束后续传不受扰、终值全量。
+    #[test]
+    fn download_stall_watchdog_warns_on_zero_byte_pause() {
+        const TOTAL: usize = 128 * 1024;
+        // 64KB 后长睡 450ms（stall），看门狗 150ms 闸 50ms 节拍应至少两拍
+        let base = mock_mirror_slow(
+            "/a",
+            vec![b'D'; TOTAL],
+            16 * 1024,
+            0,
+            None,
+            Some((64 * 1024, 450)),
+        );
+        let url = format!("{base}/a");
+        let client = update_http_client(std::time::Duration::from_secs(30)).unwrap();
+        let resp = client.get(&url).send().unwrap().error_for_status().unwrap();
+        let stalls: std::sync::Arc<std::sync::Mutex<Vec<(u64, u64)>>> =
+            std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let sink = stalls.clone();
+        let bytes = read_body_with_progress(
+            resp,
+            "a",
+            &mut ProgressHooks {
+                min_bytes: u64::MAX,
+                min_interval: std::time::Duration::from_millis(20),
+                stall_interval: std::time::Duration::from_millis(150),
+                tick: std::time::Duration::from_millis(50),
+                on_progress: &mut |_, _| {},
+                on_stall: std::sync::Arc::new(std::sync::Mutex::new(move |got, stalled| {
+                    sink.lock().unwrap().push((got, stalled))
+                })),
+            },
+        )
+        .expect("停顿后续传应全量送达");
+        assert_eq!(bytes.len(), TOTAL, "stall 不影响终值");
+        let events = stalls.lock().unwrap().clone();
+        assert!(
+            !events.is_empty(),
+            "零字节停顿应触发看门狗告警（450ms 停顿对 150ms 闸）"
+        );
+        assert!(
+            events.iter().all(|(got, _s)| *got == 64 * 1024),
+            // 秒数是 as_secs 截断形（测试停顿亚秒得 0），字节锚已足证
+            "告警带停顿点的已收字节: {events:?}"
+        );
+    }
+
+    /// 文案锁（评审 G 尾项）：心跳与 stall 行的措辞由纯函数锁形。
+    #[test]
+    fn progress_line_wording_locked() {
+        assert_eq!(
+            heartbeat_line("browse update", 1024, Some(4096)),
+            "browse update：下载中 1024/4096（25%）"
+        );
+        assert_eq!(
+            heartbeat_line("browse update", 0, Some(4096)),
+            "browse update：下载中 0/4096（0%）"
+        );
+        assert_eq!(
+            heartbeat_line("browse update", 7, None),
+            "browse update：下载中 7 字节（总量未知）"
+        );
+        assert_eq!(
+            stall_line("browse update", 2048, 20),
+            "browse update：仍在等数据（已收 2048 字节，20 秒无进展）"
+        );
     }
 }

@@ -29,3 +29,14 @@
 - 推送 3edf13f..ad4bc0c（纯 diary amend 属评审方免重核口径），CI 三跑加播种全绿；tag v0.16.0，release.ps1 全链过，镜像 stable/latest 滚 0.16.0
 - 五端拉平全镜像道（0.15.1 到 0.16.0；根除后镜像 2.8MB/s 级，秒级完成）。注记：本轮回执由 0.15.1 旧二进制执行故无心跳行可见，心跳面自下轮更新起实弹可见；验收 4 的慢源实弹已由节流 mock 测试锁
 - #58 关单（omc，open 集清零）；catalog pin 滚 0.16.0（omc af74655 加 2079aee 已推，tools.toml 三平台 0.16.0 在册）；ark locked 0.11.0 属端上快照口径不并轨
+
+## G 尾批（同日再续，0.17.0）
+
+- 用户令随批两件：G1 stall 看门狗（零字节停顿每满 10 秒告警一行，独立线程监控共享进度态，读结束一节拍内自退不阻塞收尾）；chrome 下载同享进度面（「干脆chrome下载也做了这个特性」）
+- 下载核心抽 stream_with_progress 通用缝：update 腿收 Vec、chrome install 腿写文件加哈希，心跳/看门狗/断流上下文同一口径；chrome 大件字节闸放宽 4MB（150MB 级包约 40 行）；文案抽 heartbeat_line/stall_line 纯函数带调用方 label（browse update / browse chrome install <版本>），单测锁形；G3 帽 256MB 收紧 64MB（评审附言）
+- 测试：stall 看门狗 mock（64KB 后长睡 450ms 对 150ms 闸）两拍告警字节锚精确加续传全量；既有三测随参数束 ProgressHooks 迁形（clippy too_many_arguments 收束）
+- 封版 0.17.0（chrome 下载获能力取 minor）；评审轮与发版随后补记
+
+## 评审一轮（browse-codex-review）
+
+四点名边界全 CONFIRM（看门狗生命周期、sink 泛化错误语义、4MB 闸口径、放宽断言的锁力），无必修加 G1-G4：G2 采纳（chrome 腿收尾行用上 received，死绑定消除）；G3 采纳（推进时刻移 read 后即刷，sink 落盘耗时不算停顿，「等数据」只对网络零字节负责）；G4 半采纳（STALL 常量导出 pub(crate) 复用消字面副本；文案函数维持 pub：稳定文案契约入 aidoc 公开面是收益非负担，doctest 双语境示例已锁）。G1（chrome 腿无读超时，stall 时只告警不退出）记档下批：stall 计数放弃制需独立设计（大包慢速合法，一刀切总超时会误杀）。评审附观察记档：self_update 既有测试固定名临时目录并发互撞（串行绿，属既有卫生面非本批）
