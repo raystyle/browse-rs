@@ -151,7 +151,107 @@ pub enum EngineSource {
         headless: bool,
         /// CDP 通道：`pipe`（S005 管道契约）或 `port`。
         channel: &'static str,
+        /// spawn 时刻（Unix 毫秒，#59）：引擎所有权时间锚，status 的
+        /// `engineProvenance.spawnedAt` 同源。
+        spawned_at: u64,
     },
+}
+
+/// Unix 毫秒钟（#59）：`SystemTime` 取现值，取不到回 0（时间锚缺失比
+/// 崩溃面轻）。
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// #59 引擎来源与所有权语义面（纯函数）：[`EngineSource`] 语义化为
+/// `{origin, hostContext, spawnedBy, spawnedAt}` 四字段。何时用：status
+/// 与 /health 的 `engineProvenance` 键；#60 操作回执告警面同源消费同一
+/// 结构（两处展示一份事实）。边界：spawned 态引擎与 daemon 同宿主，
+/// hostContext 是权威标注（daemon 的 os/hostname）；attached 态只能取
+/// ws_url 的 host 字面（loopback 经隧道转发时真实宿主不可辨，显式降级
+/// 标注不冒充确定）；未连接态四字段在但 origin 为 `none`。
+///
+/// # Examples
+///
+/// ```
+/// # use browse_core::engine::{EngineSource, provenance};
+/// let s = EngineSource::Spawned {
+///     ws_url: None, pid: 42, profile_dir: "/p".into(), chrome: "/c".into(),
+///     headless: true, channel: "port", spawned_at: 1700000000000,
+/// };
+/// let p = provenance(&s, false, "linux", "nuc-a");
+/// assert_eq!(p["origin"], "managed-spawn");
+/// assert_eq!(p["hostContext"], "linux/nuc-a");
+/// assert_eq!(p["spawnedAt"], 1_700_000_000_000u64);
+/// let a = EngineSource::Attached { ws_url: "ws://127.0.0.1:9222/x".into() };
+/// let p = provenance(&a, false, "windows", "host-pc");
+/// assert_eq!(p["origin"], "attached");
+/// assert!(p["hostContext"].as_str().unwrap().contains("loopback"));
+/// ```
+pub fn provenance(
+    source: &EngineSource,
+    isolated: bool,
+    daemon_os: &str,
+    daemon_host: &str,
+) -> serde_json::Value {
+    match source {
+        EngineSource::NotConnected => json!({
+            "origin": "none",
+            "hostContext": format!("{daemon_os}/{daemon_host}"),
+            "spawnedBy": serde_json::Value::Null,
+            "spawnedAt": serde_json::Value::Null,
+        }),
+        EngineSource::Attached { ws_url } => {
+            // 附着态的宿主只能取 ws 字面：loopback（127.0.0.1/localhost/
+            // ::1）可能是本机也可能是隧道转发，显式降级不冒充确定
+            let host = ws_authority_host(ws_url);
+            let ctx = if host.starts_with("127.")
+                || host.starts_with("[::1")
+                || host == "localhost"
+                || host == "[::1]"
+            {
+                format!("{host}（loopback：本机或隧道转发不可辨）")
+            } else {
+                host
+            };
+            json!({
+                "origin": "attached",
+                "hostContext": ctx,
+                "spawnedBy": "外部浏览器",
+                "spawnedAt": serde_json::Value::Null,
+            })
+        }
+        EngineSource::Spawned { spawned_at, .. } => json!({
+            "origin": if isolated { "isolated-spawn" } else { "managed-spawn" },
+            "hostContext": format!("{daemon_os}/{daemon_host}"),
+            "spawnedBy": "daemon",
+            "spawnedAt": spawned_at,
+        }),
+    }
+}
+
+/// ws(s) URL 的 authority host 字面（#59）：剥 scheme 后取 `/` 或 `:`
+/// 前段；带括号 IPv6 authority（`[::1]` 形）取首个 `]` 含括号整段
+/// （评审 F2：IPv6 字面自带 `:` 不能按 `:` 切）；畸形串原样返回
+/// （只做展示，不参与决策）。
+fn ws_authority_host(ws_url: &str) -> String {
+    let rest = ws_url
+        .strip_prefix("ws://")
+        .or_else(|| ws_url.strip_prefix("wss://"))
+        .unwrap_or(ws_url);
+    // IPv6 形（评审 F2）：']' 后面是 ':port'，host 含括号整段（IPv6
+    // 字面自带 ':'，不能按 ':' 切）
+    if rest.starts_with('[') {
+        return rest
+            .split(']')
+            .next()
+            .map(|h| format!("{h}]"))
+            .unwrap_or_else(|| rest.to_string());
+    }
+    rest.split(['/', ':']).next().unwrap_or(rest).to_string()
 }
 
 /// 引擎状态机：确保连接、报告来源、只终结自己 spawn 的。
@@ -391,6 +491,7 @@ impl Engine {
                 chrome,
                 headless,
                 channel: "port",
+                spawned_at: now_ms(),
             },
             isolated_dir,
             child: Some(child),
@@ -440,6 +541,7 @@ impl Engine {
                 chrome,
                 headless,
                 channel: "pipe",
+                spawned_at: now_ms(),
             },
             isolated_dir,
             child: Some(engine.child),
@@ -533,7 +635,11 @@ impl Engine {
     }
 
     /// 产出 `/health` 面的状态 JSON（实例名、引擎来源、连接与活动路由）。
-    pub async fn health_json(&self, uptime: Duration) -> serde_json::Value {
+    pub async fn health_json(
+        &self,
+        uptime: Duration,
+        daemon: &crate::server::DaemonDesc,
+    ) -> serde_json::Value {
         let source = self.source().await;
         let mut v = json!({
             "ok": true,
@@ -542,8 +648,12 @@ impl Engine {
             "connected": self.session.is_connected(),
             "activeTargetId": self.session.active_target().await,
             "activeSessionId": self.session.get_active_session().await,
+            // #59：daemon 自描述（CLI 跨宿主比对）与引擎来源语义面
+            "daemon": daemon.to_json(),
         });
         v["engine"] = serde_json::to_value(&source).unwrap_or(serde_json::Value::Null);
+        let isolated = self.inner.lock().await.isolated_dir.is_some();
+        v["engineProvenance"] = provenance(&source, isolated, daemon.os, &daemon.hostname);
         v
     }
 }
@@ -551,6 +661,71 @@ impl Engine {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// #59 health_json 装配面：daemon 自描述四字段在位、未连接态
+    /// provenance origin=none（键常在，向后兼容加法不改旧键）。
+    #[tokio::test]
+    async fn health_json_carries_daemon_self_desc() {
+        let session = cdp::Session::new();
+        let engine = Engine::new(session);
+        let desc = crate::server::DaemonDesc::capture();
+        let v = engine.health_json(Duration::ZERO, &desc).await;
+        assert!(v["daemon"]["pid"].as_u64().is_some_and(|p| p > 0));
+        assert!(!v["daemon"]["os"].as_str().unwrap_or("").is_empty());
+        assert!(!v["daemon"]["hostname"].as_str().unwrap_or("").is_empty());
+        assert_eq!(v["engineProvenance"]["origin"], "none");
+        // 旧键全在（向后兼容判据）
+        for k in ["ok", "name", "uptime", "connected", "engine"] {
+            assert!(v.get(k).is_some(), "旧键 {k} 不得被移除");
+        }
+    }
+
+    /// #59 provenance 四态：托管 spawn（权威宿主）、隔离 spawn（origin
+    /// 区分）、附着 loopback（降级标注不冒充）、附着远端 host（字面）。
+    #[test]
+    fn provenance_four_shapes() {
+        let spawned = EngineSource::Spawned {
+            ws_url: Some("ws://127.0.0.1:1/x".into()),
+            pid: 7,
+            profile_dir: "/p".into(),
+            chrome: "/c".into(),
+            headless: false,
+            channel: "port",
+            spawned_at: 42_000,
+        };
+        let p = provenance(&spawned, false, "linux", "wsl-a");
+        assert_eq!(p["origin"], "managed-spawn");
+        assert_eq!(p["hostContext"], "linux/wsl-a");
+        assert_eq!(p["spawnedBy"], "daemon");
+        assert_eq!(p["spawnedAt"], 42_000);
+
+        let p = provenance(&spawned, true, "linux", "wsl-a");
+        assert_eq!(p["origin"], "isolated-spawn");
+
+        let att = EngineSource::Attached {
+            ws_url: "ws://127.0.0.1:9222/devtools/browser/x".into(),
+        };
+        let p = provenance(&att, false, "windows", "host-pc");
+        assert_eq!(p["origin"], "attached");
+        assert!(p["hostContext"].as_str().unwrap().contains("不可辨"));
+
+        let att_remote = EngineSource::Attached {
+            ws_url: "ws://lan-ubuntu:9222/devtools/browser/x".into(),
+        };
+        let p = provenance(&att_remote, false, "linux", "wsl-a");
+        assert_eq!(p["hostContext"], "lan-ubuntu");
+
+        // IPv6 loopback（评审 F2）：含括号整段且走降级标注
+        let att_v6 = EngineSource::Attached {
+            ws_url: "ws://[::1]:9222/devtools/browser/x".into(),
+        };
+        let p = provenance(&att_v6, false, "linux", "wsl-a");
+        assert_eq!(p["hostContext"], "[::1]（loopback：本机或隧道转发不可辨）");
+
+        let p = provenance(&EngineSource::NotConnected, false, "linux", "wsl-a");
+        assert_eq!(p["origin"], "none");
+        assert!(p["spawnedAt"].is_null());
+    }
 
     /// 代理与引擎附加旗标派生（#25.5/#48）：双开与单开形、附加旗标
     /// 原样透传、非 Auto 面为空。

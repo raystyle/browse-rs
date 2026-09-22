@@ -185,7 +185,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Cli,
         signature: "browse status [--json]",
         args: &[arg!("json", "boolean", false, "false")],
-        description: "daemon/引擎/实例名/活动 tab 概览。",
+        description: "daemon/引擎/实例名/活动 tab 概览（含引擎来源语义面：origin 枚举（attached/managed-spawn/isolated-spawn）、宿主上下文、spawn 时刻；daemon 宿主自描述，CLI 与 daemon 跨宿主时显式标注）。",
         example: "browse status --json",
     },
     CmdSpec {

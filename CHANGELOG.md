@@ -2,6 +2,11 @@
 
 版本级里程碑；逐批过程见 docs/diary。semver 判据在册 docs/requirements/REQ-004。
 
+## 0.18.0 - 2026-09-23
+
+- **#59 引擎来源与所有权信息面**：status 与 /health 内嵌 daemon 自描述（`daemon` 键：os/hostname/pid/name/startedAt，hostname 走命令采值零新依赖）与引擎来源语义面（`engineProvenance` 键：origin 枚举 attached/managed-spawn/isolated-spawn、hostContext、spawnedBy、spawnedAt）；Spawned 快照加 `spawned_at` 时间锚（序列化加法向后兼容）；人读面补「daemon 宿主」行与引擎行的 `@ origin hostContext since` 段，CLI 与 daemon 跨宿主（Windows CLI 经 localhost 转发命中 WSL daemon）时显式告警标注；attached 态 loopback 宿主显式降级标注（本机或隧道不可辨，不冒充确定）。#60 操作回执告警面同源消费 provenance 结构（一份事实两处展示）
+- semver 判据结论（0.18.0 裁定）：信息面能力新增取 minor（REQ-004 判据行）
+
 ## 0.17.0 - 2026-09-23
 
 - **#58 批 G 尾随收加 chrome 下载进度面（用户令 2026-09-23）**：G1 stall 看门狗落地：下载腿独立线程监控零字节停顿，每满 10 秒告警一行 `仍在等数据（已收 N 字节，X 秒无进展）`，纯 stall（连接活但零字节）与慢速推进可辨，读结束后看门狗最多再活一个节拍即退；下载核心抽 `stream_with_progress` 通用缝（update 收 Vec、`chrome install` 写文件加哈希共用同一心跳/看门狗/断流上下文口径），chrome 下载（150MB 级）同享进度面（大件字节闸放宽 4MB 约 40 行不刷屏）；心跳与告警文案抽 `heartbeat_line`/`stall_line` 纯函数带调用方语境 label，单测锁形；G3 预分配帽 256MB 收紧 64MB。测试：stall 看门狗 mock（64KB 后长睡）告警字节锚与续传全量锁、文案锁补全

@@ -1,5 +1,5 @@
 <!-- browse_cli/index.md -->
-# browse-cli 0.17.0
+# browse-cli 0.18.0
 
 browse CLI 的可测半边：daemon 客户端（HTTP 调用 + 自动拉起）。
 
@@ -118,7 +118,7 @@ ledger.ohmygh.com（替代 issues.ohmygh.com 客户端面；旧服务只读保�
 
 
 <!-- browse_core/index.md -->
-# browse-core 0.17.0
+# browse-core 0.18.0
 
 browse CLI 的核心库：方言宿主、引擎策略、daemon HTTP API。
 
@@ -252,6 +252,10 @@ clean-chrome 专为自动化而生（`--auto-allow-devtools-connections` 免确�
 连上后自动 attach 首个 page target（没有就开 about:blank），
 让 agent 一条命令即可 `session.Page.navigate(...)`（ADR-0004）；
 片段里的显式 `session.connect` / `session.use` 仍然可覆盖。
+
+## Functions
+
+- `provenance` — #59 引擎来源与所有权语义面（纯函数）：[`EngineSource`] 语义化为
 
 ## Types
 
@@ -485,6 +489,7 @@ POST /quit 三端点保留），新增 `/engine/up` 与求值前的懒引擎策�
 ## Types
 
 - `Daemon` — HTTP daemon 的运行面聚合：宿主、引擎、缺省引擎意图、单飞槽与退出旗标。
+- `DaemonDesc` — daemon 自描述（#59）：宿主与进程身份一次采值，status 与 /health 内嵌
 - `EngineUpRequest` — 描述 POST /engine/up 的请求体。
 - `EvalRequest` — 描述 POST /eval 的请求体。
 
@@ -583,7 +588,7 @@ list/site/page）。git 维护走 shell-out `git`（不引 git crate）：instal
 
 
 <!-- cdp/index.md -->
-# cdp 0.17.0
+# cdp 0.18.0
 
 Chrome DevTools Protocol（CDP）连接层：一条常驻 browser-level WebSocket 会话。
 

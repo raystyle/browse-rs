@@ -18,6 +18,7 @@ POST /quit 三端点保留），新增 `/engine/up` 与求值前的懒引擎策�
 ## Types
 
 - `Daemon` — HTTP daemon 的运行面聚合：宿主、引擎、缺省引擎意图、单飞槽与退出旗标。
+- `DaemonDesc` — daemon 自描述（#59）：宿主与进程身份一次采值，status 与 /health 内嵌
 - `EngineUpRequest` — 描述 POST /engine/up 的请求体。
 - `EvalRequest` — 描述 POST /eval 的请求体。
 

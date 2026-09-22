@@ -16,7 +16,7 @@
 | `browse up [--headless] [--pipe] [--chrome <path>] [--profile <dir>] [--ws <url>] [--port <p>] [--proxy <url>] [--proxy-bypass <list>] [--engine-arg <a>] [--isolated] [--idle-timeout <ms>] [--cookies <域csv>]` | 显式起引擎（附着优先，缺则 spawn clean-chrome 隔离实例；--profile 自定义 user-data-dir，默认固定 profile 持久保存站点会话；--proxy/--proxy-bypass 直通 chrome 代理旗标；--engine-arg 引擎附加旗标（可叠加，spawn 时 argv 原样直通，BROWSE_ENGINE_ARGS 同道；与 browse 自身 spawn 旗标撞车时后值胜，慎叠；无显示会话如 ssh 未给 headless 时 spawn 自动补 --headless，显式旗标优先）；--isolated 隔离态 profile 引擎退出即删（给了 --profile 时 isolated 优先）；--idle-timeout 闲置回收毫秒只对新拉起的 daemon 生效）；--cookies 域 csv 起引擎后从附着浏览器只读热迁指定域登录态（源零写回，无附着源即报错指 storageState 整包往返）。 |
 | `browse update` | 自更新 browse 二进制（镜像 stable 段优先：判新读 latest 标记、下载取资产，缺或坏回落 GitHub，sha256 锚校验，自证回滚；ark 管理安装拦走 ark）。 |
 | `browse down` | 退 daemon；只终结自己 spawn 的引擎，附着来源不动。 |
-| `browse status [--json]` | daemon/引擎/实例名/活动 tab 概览。 |
+| `browse status [--json]` | daemon/引擎/实例名/活动 tab 概览（含引擎来源语义面：origin 枚举（attached/managed-spawn/isolated-spawn）、宿主上下文、spawn 时刻；daemon 宿主自描述，CLI 与 daemon 跨宿主时显式标注）。 |
 | `browse --llms [--full|--json]` | agent 手册直出（裸形 markdown 紧凑手册；--full 完整目录，--json 机器形 Schema；不拉 daemon）。 |
 | `browse --repl` | 显式进入交互 REPL（裸调用只出本仓帮助体，不弹交互）。 |
 | `browse --version` | 打印版本号（资产解包冒烟与安装核对用）。 |

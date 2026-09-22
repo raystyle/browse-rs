@@ -16,11 +16,16 @@
 ```json
 { "ok": true, "name": "default", "uptime": 1656, "connected": true,
   "activeTargetId": "46BC…", "activeSessionId": "FF6D…",
+  "daemon": { "os": "linux", "hostname": "AI-LAB", "pid": 2085366,
+      "name": "default", "startedAt": 1790097761849 },
   "engine": { "Spawned": { "pid": 267718, "ws_url": "ws://127.0.0.1:43877/…",
-      "profile_dir": "…", "chrome": "…", "headless": false, "channel": "port" } } }
+      "profile_dir": "…", "chrome": "…", "headless": false, "channel": "port",
+      "spawned_at": 1790097761849 } },
+  "engineProvenance": { "origin": "managed-spawn", "hostContext": "linux/AI-LAB",
+      "spawnedBy": "daemon", "spawnedAt": 1790097761849 } }
 ```
 
-`engine` 三态（单键包裹的枚举形）：`{"Spawned":{pid,ws_url,profile_dir,chrome,headless,channel}}`（自起）、`{"Attached":{ws_url}}`（附着）、`{"NotConnected":null}`。门外 agent 用它判「引擎在不在、活动 tab 是哪个」。
+`engine` 三态（单键包裹的枚举形）：`{"Spawned":{pid,ws_url,profile_dir,chrome,headless,channel,spawned_at}}`（自起）、`{"Attached":{ws_url}}`（附着）、`{"NotConnected":null}`。`daemon` 是 daemon 自描述（os/hostname/pid/name/startedAt）；`engineProvenance` 是来源语义面（origin 枚举 attached/managed-spawn/isolated-spawn、hostContext、spawnedBy、spawnedAt；attached 态 loopback 宿主显式降级标注）。门外 agent 用它判「引擎在不在、活动 tab 是哪个、引擎在谁的宿主上」。
 
 ## POST /engine/up 请求体
 

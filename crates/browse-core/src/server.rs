@@ -63,6 +63,58 @@ pub struct EngineUpRequest {
     pub engine_args: Vec<String>,
 }
 
+/// daemon 自描述（#59）：宿主与进程身份一次采值，status 与 /health 内嵌
+/// （`daemon` 键），CLI 比对自身平台做跨宿主标注（Windows CLI 经
+/// localhost 转发命中 WSL daemon 的场景）。
+#[derive(Debug, Clone)]
+pub struct DaemonDesc {
+    /// 宿主 OS（`std::env::consts::OS`：windows/macos/linux）。
+    pub os: &'static str,
+    /// 宿主主机名（`hostname` 命令采值，取不到 `unknown`）。
+    pub hostname: String,
+    /// daemon 进程 pid。
+    pub pid: u32,
+    /// 实例名（BROWSE_NAME 派生，缺省 default）。
+    pub name: String,
+    /// daemon 启动时刻（Unix 毫秒）。
+    pub started_at: u64,
+}
+
+impl DaemonDesc {
+    /// 现场采值：hostname 走 `hostname` 命令（仓内 git shell-out 先例，
+    /// 零新依赖），失败降级 `unknown` 不阻断 daemon 起。
+    pub fn capture() -> Self {
+        let hostname = std::process::Command::new("hostname")
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .filter(|h| !h.is_empty())
+            .unwrap_or_else(|| "unknown".into());
+        Self {
+            os: std::env::consts::OS,
+            hostname,
+            pid: std::process::id(),
+            name: crate::paths::instance_name().unwrap_or_else(|| "default".into()),
+            started_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0),
+        }
+    }
+
+    /// `daemon` 键的序列化形（status 与 /health 共用）。
+    pub fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "os": self.os,
+            "hostname": self.hostname,
+            "pid": self.pid,
+            "name": self.name,
+            "startedAt": self.started_at,
+        })
+    }
+}
+
 /// HTTP daemon 的运行面聚合：宿主、引擎、缺省引擎意图、单飞槽与退出旗标。
 pub struct Daemon {
     /// 方言宿主（vars 跨请求持久）。
@@ -77,6 +129,8 @@ pub struct Daemon {
     pub quit: Arc<AtomicBool>,
     /// daemon 启动时刻。
     pub started: Instant,
+    /// 自描述（#59）：status 与 /health 的 daemon 键。
+    pub desc: DaemonDesc,
     /// 最近活动时刻（#25.1 idle-timeout 判据）：eval/up 请求刷新。
     pub last_activity: std::sync::Mutex<Instant>,
 }
@@ -104,6 +158,7 @@ impl Daemon {
             eval_lock: tokio::sync::Mutex::new(()),
             quit: Arc::new(AtomicBool::new(false)),
             started: Instant::now(),
+            desc: DaemonDesc::capture(),
             last_activity: std::sync::Mutex::new(Instant::now()),
         })
     }
@@ -322,7 +377,10 @@ async fn dashboard_sse_handler(State(st): State<AppState>) -> impl IntoResponse 
     let daemon = st.daemon.clone();
     let stream = futures::stream::unfold(daemon, |daemon| async move {
         tokio::time::sleep(Duration::from_secs(2)).await;
-        let health = daemon.engine.health_json(daemon.started.elapsed()).await;
+        let health = daemon
+            .engine
+            .health_json(daemon.started.elapsed(), &daemon.desc)
+            .await;
         let mut ev = String::from("data: ");
         ev.push_str(&health.to_string());
         ev.push_str(
@@ -384,7 +442,7 @@ async fn health_handler(State(st): State<AppState>) -> impl IntoResponse {
     Json(
         st.daemon
             .engine
-            .health_json(st.daemon.started.elapsed())
+            .health_json(st.daemon.started.elapsed(), &st.daemon.desc)
             .await,
     )
 }
@@ -449,7 +507,7 @@ async fn engine_up_handler(
             Json(
                 st.daemon
                     .engine
-                    .health_json(st.daemon.started.elapsed())
+                    .health_json(st.daemon.started.elapsed(), &st.daemon.desc)
                     .await,
             ),
         ),

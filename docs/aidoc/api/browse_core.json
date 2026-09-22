@@ -1,6 +1,6 @@
 {
   "crate": "browse-core",
-  "version": "0.17.0",
+  "version": "0.18.0",
   "items": [
     {
       "path": "browse_core::chrome_mgr",
@@ -146,6 +146,11 @@
       "path": "browse_core::engine::EngineSpec",
       "kind": "enum",
       "docs": "引擎指令意图，由 CLI 旗标或环境变量解析而来。"
+    },
+    {
+      "path": "browse_core::engine::provenance",
+      "kind": "function",
+      "docs": "#59 引擎来源与所有权语义面（纯函数）：[`EngineSource`] 语义化为\n`{origin, hostContext, spawnedBy, spawnedAt}` 四字段。何时用：status\n与 /health 的 `engineProvenance` 键；#60 操作回执告警面同源消费同一\n结构（两处展示一份事实）。边界：spawned 态引擎与 daemon 同宿主，\nhostContext 是权威标注（daemon 的 os/hostname）；attached 态只能取\nws_url 的 host 字面（loopback 经隧道转发时真实宿主不可辨，显式降级\n标注不冒充确定）；未连接态四字段在但 origin 为 `none`。\n\n# Examples\n\n```\n# use browse_core::engine::{EngineSource, provenance};\nlet s = EngineSource::Spawned {\n    ws_url: None, pid: 42, profile_dir: \"/p\".into(), chrome: \"/c\".into(),\n    headless: true, channel: \"port\", spawned_at: 1700000000000,\n};\nlet p = provenance(&s, false, \"linux\", \"nuc-a\");\nassert_eq!(p[\"origin\"], \"managed-spawn\");\nassert_eq!(p[\"hostContext\"], \"linux/nuc-a\");\nassert_eq!(p[\"spawnedAt\"], 1_700_000_000_000u64);\nlet a = EngineSource::Attached { ws_url: \"ws://127.0.0.1:9222/x\".into() };\nlet p = provenance(&a, false, \"windows\", \"host-pc\");\nassert_eq!(p[\"origin\"], \"attached\");\nassert!(p[\"hostContext\"].as_str().unwrap().contains(\"loopback\"));\n```"
     },
     {
       "path": "browse_core::js_host",
@@ -626,6 +631,11 @@
       "path": "browse_core::server::Daemon",
       "kind": "struct",
       "docs": "HTTP daemon 的运行面聚合：宿主、引擎、缺省引擎意图、单飞槽与退出旗标。"
+    },
+    {
+      "path": "browse_core::server::DaemonDesc",
+      "kind": "struct",
+      "docs": "daemon 自描述（#59）：宿主与进程身份一次采值，status 与 /health 内嵌\n（`daemon` 键），CLI 比对自身平台做跨宿主标注（Windows CLI 经\nlocalhost 转发命中 WSL daemon 的场景）。"
     },
     {
       "path": "browse_core::server::EngineUpRequest",

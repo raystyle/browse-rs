@@ -1300,6 +1300,46 @@ fn print_health(h: &serde_json::Value, json: bool) {
         "instance    {}",
         h.get("name").and_then(|v| v.as_str()).unwrap_or("default")
     );
+    // #59：daemon 宿主自描述 + CLI 跨宿主比对（Windows CLI 经 localhost
+    // 转发命中 WSL daemon 时显式标注）
+    let d_os = h
+        .pointer("/daemon/os")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let d_host = h
+        .pointer("/daemon/hostname")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    if !d_os.is_empty() {
+        println!(
+            "daemon 宿主 {d_os}/{d_host}（pid {}）",
+            h.pointer("/daemon/pid")
+                .map(|v| v.to_string())
+                .unwrap_or_default()
+        );
+        // G1（评审）：与 DaemonDesc 同源取 os（cfg 三态对 freebsd 类目标
+        // 会误兜底 linux）；G3（评审）：同 OS 异机（隧道/两台 linux）也
+        // 告警，比对本机 hostname
+        let cli_os = std::env::consts::OS;
+        let cli_host = std::process::Command::new("hostname")
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .filter(|h| !h.is_empty())
+            .unwrap_or_default();
+        if d_os != cli_os {
+            println!(
+                "⚠ 跨宿主：CLI({cli_os}) 与 daemon({d_os}/{d_host}) 不同机（localhost 转发场景）"
+            );
+        } else if !cli_host.is_empty() && d_host != "unknown" && cli_host != d_host {
+            println!(
+                "⚠ 同 OS 异机：CLI({cli_host}) 与 daemon({d_os}/{d_host}) 不是同一台（隧道或转发场景）"
+            );
+        }
+    }
     println!(
         "uptime      {}s",
         h.get("uptime").and_then(|v| v.as_u64()).unwrap_or(0)
@@ -1310,13 +1350,51 @@ fn print_health(h: &serde_json::Value, json: bool) {
             .and_then(|v| v.as_bool())
             .unwrap_or(false)
     );
-    println!("engine      {kind} {detail}");
+    // #59 引擎来源行：origin 枚举 + 宿主上下文 + spawn 时刻
+    let prov = h.get("engineProvenance").cloned();
+    let extra = prov.as_ref().map(|p| {
+        let origin = p.get("origin").and_then(|v| v.as_str()).unwrap_or("");
+        let host = p.get("hostContext").and_then(|v| v.as_str()).unwrap_or("");
+        let at = p.get("spawnedAt").and_then(|v| v.as_u64()).unwrap_or(0);
+        let since = if at > 0 {
+            format!(" since {}", hms_utc(at))
+        } else {
+            String::new()
+        };
+        format!("@ {origin} {host}{since}")
+    });
+    let extra = extra.unwrap_or_default();
+    println!("engine      {kind} {detail} {extra}");
     println!(
         "active tab  {}",
         h.get("activeTargetId")
             .and_then(|v| v.as_str())
             .unwrap_or("-")
     );
+}
+
+/// Unix 毫秒转 `HH:MM:SS UTC`（#59 人读面）：无时区依赖，纯除余；零
+/// 值返回空串（无 spawn 时刻的附着态）。
+fn hms_utc(ms: u64) -> String {
+    let secs = ms / 1000;
+    let days = secs / 86400;
+    // 天数转月日：civil-from-days（无闰表，评审 G4 补日期面）
+    let z = days as i64 + 719_468;
+    let _era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    format!(
+        "{:02}-{:02} {:02}:{:02}:{:02} UTC",
+        m,
+        d,
+        (secs / 3600) % 24,
+        (secs / 60) % 60,
+        secs % 60
+    )
 }
 
 async fn run_tty(new_tab: bool, js: bool) -> Result<()> {
