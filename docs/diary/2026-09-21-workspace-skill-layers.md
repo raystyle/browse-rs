@@ -34,6 +34,8 @@ wsv12 命名实例隔离全链：workspace install 真 clone GitHub（head 对�
 
 ## 后续批候选
 
+- 跨端部署实弹已毕（2026-09-22 补记）：五端 workspace 全 main@02dfb5d（wsl 工作仓、lan-win 早装 update 拉平、lan-mac/lan-ubuntu/lan-linux 全新 install），lan-mac goto medium.com 双层点名实弹全中（domain 2 篇加 page 4 slug 带置信加 framework react）
+
 - bh 94 站 domain-skills 精选迁移（workspace 仓自己的事，#50 注记在册）
 - intent-skills 13 篇 bh 配方正文迁移（索引已在册）
 - workspace 跨端部署实弹（lan-win/lan-mac/lan-ubuntu 的 ~/.browse-rs/workspace 路径面，CI 三岗盖编译面后按需）
