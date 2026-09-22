@@ -40,3 +40,11 @@
 ## 评审一轮（browse-codex-review）
 
 四点名边界全 CONFIRM（看门狗生命周期、sink 泛化错误语义、4MB 闸口径、放宽断言的锁力），无必修加 G1-G4：G2 采纳（chrome 腿收尾行用上 received，死绑定消除）；G3 采纳（推进时刻移 read 后即刷，sink 落盘耗时不算停顿，「等数据」只对网络零字节负责）；G4 半采纳（STALL 常量导出 pub(crate) 复用消字面副本；文案函数维持 pub：稳定文案契约入 aidoc 公开面是收益非负担，doctest 双语境示例已锁）。G1（chrome 腿无读超时，stall 时只告警不退出）记档下批：stall 计数放弃制需独立设计（大包慢速合法，一刀切总超时会误杀）。评审附观察记档：self_update 既有测试固定名临时目录并发互撞（串行绿，属既有卫生面非本批）
+
+## 发版拉平与远程操刀测试（同日续）
+
+- 0.17.0 全链：推送 28d1039..2e7b23c，CI 三跑加播种绿，镜像滚标，五端拉平全镜像道。**心跳面真源首秀**：wsl 更新全程八拍「下载中 N/总量（%）」加取毕行肉眼可见（0.16.0 旧二进制执行的首个带心跳更新），#58 验收 1 真人面落地
+- 远程操刀测试（用户令，lan-ubuntu/lan-linux/lan-mac 三端）：wsl 的 browse 经 ssh -L 隧道 `--connect <口>` 附着并驱动各端引擎（goto/detect 族全过；lan-mac UA=Macintosh HeadlessChrome 坐实真 mac 引擎；lan-linux 无头服务器走 #57 地基）。三条硬发现：
+  1. `--remote-debugging-address=0.0.0.0` 进 argv 但被 chrome 152 无视（ss 实证仍绑 127.0.0.1；上游只支持已移除的 old headless）。mesh 直暴此道死，ssh 隧道为正典远程通道（与 AGENTS 连接姿势一致）；已派 clean-chrome 工位 fork 层实现该旗标（总台单，w1R:p1，回执随批补记）
+  2. clean-chrome 把 navigator.platform 抹平为 Linux x86_64（全平台指纹防御），身份判别用 UA 或 /json/version，勿用 platform（本测试差点误判串台）
+  3. --connect 附着后 daemon 态显示 Attached: port N。#59 来源语义面的数据雏形在位，缺宿主/归属标注正是 #59 的空档；#59/#60 的实证材料由本测试补足
