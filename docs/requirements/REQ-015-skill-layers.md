@@ -1,9 +1,9 @@
 ---
 id: REQ-015
-title: 技能触发层与 workspace 单仓（issue #50/#51）
+title: 技能触发层与 workspace 单仓（issue #50/#51/#56）
 status: implemented
 priority: should
-trace: e2e 三块断言全绿（域名命中加 hint、特征页六 slug 含置信档、素页键集恰三键、两层独立关闭交叉验证，双通道 58 秒实弹）；实弹 install 真 clone GitHub 仓与 goto github.com 命中 github 段；单测 12 件（skills 5 加 workspace 7）；surface 六词条与 env 节随卷；ADR-0008 立册
+trace: e2e 三块断言全绿（域名命中加 hint、特征页六 slug 含置信档、素页键集恰三键、两层独立关闭交叉验证，双通道 58 秒实弹）；实弹 install 真 clone GitHub 仓与 goto github.com 命中 github 段；单测 12 件（skills 5 加 workspace 7）；surface 六词条与 env 节随卷；ADR-0008 立册；#56 批 e2e 补 detect 判读点名与关断还原、单测补映射零漂移守卫与两腿接线（fetch 命中/未命中键集锁）、实弹四象限冒烟
 ---
 
 # REQ-015：技能触发层与 workspace 单仓
@@ -18,8 +18,9 @@ goto 回执只有 url/title/elapsedMs，agent 每站重学避坑知识；站点�
 - [x] #50 域名层：goto 回执按 URL 域名段（hostname 去 www 首段）命中 `domain-skills/<段>/` 时附 `domain_skills`（文件名列表封顶 10）与 `domain_skills_hint`；未命中回执零新增键（逐字节一致）
 - [x] #51 页面层：goto 后一次有界 pageEval（节点扫描封顶）检出 10 slug 两档置信（spa/hydration/shadow-dom/iframe/iframe-cross-origin/lazy-scroll/bot-shield/login-wall/captcha/service-worker）附 `page_skills`/`page_skills_hint`，框架名单列回执 `framework:{name,version}` 不占 slug；探测失败静默降级绝不失败 goto
 - [x] 两层独立 env 关闭：`BROWSE_DOMAIN_SKILLS=0` / `BROWSE_PAGE_SKILLS=0`（opt-out，镜像 bh 的 BH_DOMAIN_SKILLS=0）
+- [x] #56 事件面扩展：fetch 两腿（HTTP 直出与引擎升级）回执按 URL 同口径点名站点知识（CLI 侧补点不依赖引擎，命中附 domain_skills 与 hint，未命中逐字节一致）；detect() 判读映射 page-skill（challenged 映 bot-shield/captcha、login-wall 映 login-wall，恒 PLAUSIBLE）附 page_skills 与 hint；未映射判读零新增键
 - [x] daemon env 透传三变量（BROWSE_SECRETS 同款「改配置重启 daemon」口径）
-- [x] e2e 锁：域名命中断言、页面特征命中断言（含置信档）、未命中键集恰为 {elapsedMs,title,url}、分层关闭
+- [x] e2e 锁：域名命中断言、页面特征命中断言（含置信档）、未命中键集恰为 {elapsedMs,title,url}、分层关闭；#56 批补 detect 判读点名（challenged/login-wall）、无映射判读键集恰三键、PAGE_SKILLS 关断还原、fetch 两腿接线单测（命中附键与未命中键集锁）
 
 ## Notes
 
@@ -28,3 +29,4 @@ goto 回执只有 url/title/elapsedMs，agent 每站重学避坑知识；站点�
 - 种子仓只建骨架（page-skills 10 篇 + domain-skills 样例 + intent-skills 索引）；bh 94 站资产迁移后续批
 - 评审轮注记（2026-09-21）：F3 页面可控 JSON.stringify 注入面以 page_fields 白名单收口（slug 冻结名单、confidence 两档、framework 形校验、去重封顶）；fetch 引擎腿内部 goto 随层吃一次探测（回执键被丢弃，仅时延）；8 秒外层 timeout 丢 pending 登记与 semantic.rs 既有同型，cdp 侧窄接口已随 0.12.1 收口（call_with_deadline，issue #52 交付）；version 不设 charset 白名单（评审裁定）：与回执 title 同量级的页面可控通道，收益边际；exit 码映射统一（用法错 exit 2 直出四处）已随 0.12.1 收口
 - 仓内 interaction 机制知识随本批迁 workspace（统一维护，用户令 2026-09-21）：navigation-race/file-download/mouse-input 三篇直迁 intent-skills/，frames-shadow 分流进 page-skills 三篇
+- #56 评审轮注记（2026-09-22）：判读腿置信档恒 PLAUSIBLE（判读是关键词与网络行为推断，非 DOM 特征实证；captcha 探测腿 CONFIRMED 与判读腿 PLAUSIBLE 两腿不冲突，判据在 skills.rs 文档）；fetch 引擎腿点名在 CLI 侧补点（daemon 侧 goto 回执键被抽取串替换，ADR-0008 在册），双通道同 url_domain_fields 口径零漂移

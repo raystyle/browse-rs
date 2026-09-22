@@ -280,7 +280,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             ),
             arg!("timeout", "number", false, "15"),
         ],
-        description: "一次性只读抓取：HTTP 直取零浏览器成本；三条件升级引擎（正文空、墙词、少于 20 词）走 goto 加页内抽取（懒拉起）；回 {via, title, text, upgradedFrom}。对照 waitForResponse：这是无会话一次性抓取。",
+        description: "一次性只读抓取：HTTP 直取零浏览器成本；三条件升级引擎（正文空、墙词、少于 20 词）走 goto 加页内抽取（懒拉起）；回 {via, title, text, upgradedFrom}；两腿都按 URL 做 goto 同口径的 workspace 站点知识点名（命中附 domain_skills 与 hint，不依赖引擎）。对照 waitForResponse：这是无会话一次性抓取。",
         example: "browse fetch https://example.com",
     },
     CmdSpec {
@@ -596,7 +596,7 @@ pub const COMMANDS: &[CmdSpec] = &[
         kind: CmdKind::Global,
         signature: "detect()",
         args: &[],
-        description: "页面态结构化判读：{verdict, evidence[], suggestion}。判序 challenged（挑战关键词加 403/503 或短正文）> rate-limited（429）> blocked（403）> stalled（加载失败且未完成）> login-wall（complete 且有密码框，保守独立信号）> blank（complete 但正文与节点双低）> loading > ok；网络信号只认活动 tab（后台 tab 状态码不劫持判读）；信号源是页内探针（一次 evaluate）加事件缓冲网络计数。与 requests() 族互补：那是流的可观测性，本函数是页面态判官。",
+        description: "页面态结构化判读：{verdict, evidence[], suggestion}。判序 challenged（挑战关键词加 403/503 或短正文）> rate-limited（429）> blocked（403）> stalled（加载失败且未完成）> login-wall（complete 且有密码框，保守独立信号）> blank（complete 但正文与节点双低）> loading > ok；网络信号只认活动 tab（后台 tab 状态码不劫持判读）；信号源是页内探针（一次 evaluate）加事件缓冲网络计数；challenged/login-wall 判读附 page_skills 点名（映射 bot-shield/captcha/login-wall 配方）。与 requests() 族互补：那是流的可观测性，本函数是页面态判官。",
         example: "return await detect()",
     },
     CmdSpec {
@@ -1592,7 +1592,7 @@ pub fn render_manual() -> String {
 
     // 意图路由表（#46）：想做什么用什么，一行一带；细节下钻 interaction 层
     out.push_str(
-        "\n意图路由（想做什么用什么；机制细节下钻 browse workspace（仓在 ~/.browse-rs/workspace），HTTP 契约 docs/guides/http-api.md）：\n  去页面并等可用 goto(url,opts)；等加载 waitLoad(s)；等导航事件 waitFor(frameNavigated,s)\n  找元素 findRefs(q)；拿结构 snapshot({depth}) 或 {ref} 子树；点击/填 clickRef/fillRef（ref 来自最近快照或 findRefs）\n  取回值/正文 pageEval(js) 或 session.Runtime.evaluate；多 tab listPageTargets/switchTab/currentTab\n  hover 菜单 hoverRef；右键双击 clickRef(ref,{button,clickCount})；滚轮 mouseWheel；拖拽 mouseDown-Move-Up 手拼\n  传文件 dropFiles；下文件 裸 Page.navigate 加 downloads()/downloadPath()；等特定响应 waitForResponse(pattern,s)\n  页面打不开/登不上 detect() 七判；console 错误 console({minLevel});JS 异常 jsErrors();请求对账 requests()/requestDetail()\n  仿真 emulate({viewport,UA}) / emulateMedia({colorScheme});授予权限 grantPermissions(perms);登录态热迁 cloneCookies(domains)\n  iframe/shadow 内容 snapshot({pierce:true});录制可读性 recordStart({cursor,showActions}) 加 recordChapter(title)\n  引擎层直出（需扩展域版引擎）：语义快照 semanticSnapshot / 变更推送 subscribeChanges / 响应等待 engineWaitForResponse / 截图差分 screenshotDiff\n  复用片段 browse snippets list/show；站点/机制知识 browse workspace list/site/page（goto 回执自动点名）；门外语言 POST /eval；看板 GET /（只读）\n",
+        "\n意图路由（想做什么用什么；机制细节下钻 browse workspace（仓在 ~/.browse-rs/workspace），HTTP 契约 docs/guides/http-api.md）：\n  去页面并等可用 goto(url,opts)；等加载 waitLoad(s)；等导航事件 waitFor(frameNavigated,s)\n  找元素 findRefs(q)；拿结构 snapshot({depth}) 或 {ref} 子树；点击/填 clickRef/fillRef（ref 来自最近快照或 findRefs）\n  取回值/正文 pageEval(js) 或 session.Runtime.evaluate；多 tab listPageTargets/switchTab/currentTab\n  hover 菜单 hoverRef；右键双击 clickRef(ref,{button,clickCount})；滚轮 mouseWheel；拖拽 mouseDown-Move-Up 手拼\n  传文件 dropFiles；下文件 裸 Page.navigate 加 downloads()/downloadPath()；等特定响应 waitForResponse(pattern,s)\n  页面打不开/登不上 detect() 七判；console 错误 console({minLevel});JS 异常 jsErrors();请求对账 requests()/requestDetail()\n  仿真 emulate({viewport,UA}) / emulateMedia({colorScheme});授予权限 grantPermissions(perms);登录态热迁 cloneCookies(domains)\n  iframe/shadow 内容 snapshot({pierce:true});录制可读性 recordStart({cursor,showActions}) 加 recordChapter(title)\n  引擎层直出（需扩展域版引擎）：语义快照 semanticSnapshot / 变更推送 subscribeChanges / 响应等待 engineWaitForResponse / 截图差分 screenshotDiff\n  复用片段 browse snippets list/show；站点/机制知识 browse workspace list/site/page（goto/fetch/detect 回执自动点名）；门外语言 POST /eval；看板 GET /（只读）\n",
     );
     out.push_str(
         "定位：给 agent（也给人）的浏览器驾驶 CLI；JS 方言片段驱动 clean-chrome，\

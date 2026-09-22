@@ -1,6 +1,6 @@
 {
   "crate": "browse-core",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "items": [
     {
       "path": "browse_core::chrome_mgr",
@@ -635,7 +635,7 @@
     {
       "path": "browse_core::skills",
       "kind": "module",
-      "docs": "技能触发层（#50/#51）：goto 导航回执的条件附加面。知识全文存\nworkspace 单仓（[`crate::workspace`]，github.com/raystyle/browse_workspace），\n本模块只做「点名」：命中附加清单与 hint（读全文命令），未命中或\n关闭时一键不加，回执与现状逐字节一致。"
+      "docs": "技能触发层（#50/#51/#56）：goto 导航回执与 fetch/detect 回执的条件\n附加面。知识全文存 workspace 单仓（[`crate::workspace`]，\ngithub.com/raystyle/browse_workspace），本模块只做「点名」：命中附加\n清单与 hint（读全文命令），未命中或关闭时一键不加，回执与现状逐字节\n一致。"
     },
     {
       "path": "browse_core::skills::FROZEN_PAGE_SLUGS",
@@ -681,6 +681,21 @@
       "path": "browse_core::skills::parse_probe",
       "kind": "function",
       "docs": "解析探测回执（#51，纯函数）：吃 Runtime.evaluate `/result/value` 的\n字符串做 JSON.parse；非对象形态（数组、标量、坏 JSON）返回 `None`，\n调用方静默降级。边界：探测串由页内 `JSON.stringify` 产出而页面可\n覆写该全局（评审 F3 实证），故值域信任不在本函数在\n[`page_fields`] 的白名单。\n\n# Examples\n\n```\nassert!(browse_core::skills::parse_probe(r#\"{\"framework\":null,\"slugs\":[]}\"#).is_some());\nassert!(browse_core::skills::parse_probe(\"not json\").is_none());\nassert!(browse_core::skills::parse_probe(\"[1,2]\").is_none());\n```"
+    },
+    {
+      "path": "browse_core::skills::url_domain_fields",
+      "kind": "function",
+      "docs": "URL 到域名层键对（#56，fetch 腿的口径源）：与 goto 同口径的域名段\n匹配（[`domain_segment`] 加 [`list_domain_skills`]），但收 ws 目录\n与 url 显式入参——fetch 的两形态（HTTP 直出与引擎升级）都在 CLI 侧\n持 URL，点名不依赖引擎与 Session。何时用：回执含 url 且只想要域名\n层点名的调用方。边界：关闭（`BROWSE_DOMAIN_SKILLS`）或未命中返回\n空 vec，调用方零插入。\n\n# Examples\n\n```\nlet dir = std::env::temp_dir().join(format!(\"browse-sk56-{}\", std::process::id()));\nlet seg = dir.join(\"domain-skills\").join(\"x\");\nstd::fs::create_dir_all(&seg).unwrap();\nstd::fs::write(seg.join(\"notes.md\"), \"# x\").unwrap();\nlet f = browse_core::skills::url_domain_fields(&dir, \"https://www.x.com/a\");\nassert_eq!(f.len(), 2, \"命中出两键: {f:?}\");\nassert!(f.iter().all(|(k, _)| k.starts_with(\"domain_skills\")));\nassert!(browse_core::skills::url_domain_fields(&dir, \"data:text/html,x\").is_empty());\nlet _ = std::fs::remove_dir_all(&dir);\n```"
+    },
+    {
+      "path": "browse_core::skills::verdict_fields",
+      "kind": "function",
+      "docs": "detect() 回执的技能附加入口（#56）：判读经 [`verdict_page_slugs`]\n映射后出 `page_skills` 加 `page_skills_hint`（与探测腿同形）；\n关闭（`BROWSE_PAGE_SKILLS`）或判读无映射返回空 vec，调用方零插入。\n调用点在 [`crate::js_host`] 的 detect 判读构建处。\n\n# Examples\n\n```\nlet f = browse_core::skills::verdict_fields(\"challenged\");\nassert_eq!(f.len(), 2, \"page_skills 加 hint: {f:?}\");\nassert!(browse_core::skills::verdict_fields(\"loading\").is_empty());\n```"
+    },
+    {
+      "path": "browse_core::skills::verdict_page_slugs",
+      "kind": "function",
+      "docs": "detect() 判读到 page-skill slug 的映射表（#56，纯函数）：challenged\n映射 bot-shield 与 captcha，login-wall 映射 login-wall，其余判读\n（rate-limited/blocked/stalled/blank/loading/ok）无映射返回空。置信\n档恒 PLAUSIBLE：判读是关键词与网络行为推断，非 DOM 特征实证（对照\n探针腿的 CONFIRMED 档要 cf-chl DOM 这类硬证据）。slug 值域即\n[`FROZEN_PAGE_SLUGS`]，表驱动静态对不越白名单。\n\n# Examples\n\n```\nassert_eq!(\n    browse_core::skills::verdict_page_slugs(\"challenged\"),\n    &[(\"bot-shield\", \"PLAUSIBLE\"), (\"captcha\", \"PLAUSIBLE\")]\n);\nassert_eq!(\n    browse_core::skills::verdict_page_slugs(\"login-wall\"),\n    &[(\"login-wall\", \"PLAUSIBLE\")]\n);\nassert!(browse_core::skills::verdict_page_slugs(\"ok\").is_empty());\n```"
     },
     {
       "path": "browse_core::surface",

@@ -2,6 +2,16 @@
 
 版本级里程碑；逐批过程见 docs/diary。semver 判据在册 docs/requirements/REQ-004。
 
+## 0.15.0 - 2026-09-22
+
+- **#56 技能触发事件面扩展**：fetch 两腿（HTTP 直出与引擎升级）回执接入域名层点名（与 goto 同口径 `url_domain_fields`，CLI 侧补点不依赖引擎，命中附 `domain_skills` 与 hint）；detect() 判读映射 page-skill 点名（challenged 映 bot-shield/captcha、login-wall 映 login-wall，恒 PLAUSIBLE：判读是行为推断非 DOM 实证）；未命中或关闭回执零新增键（逐字节一致）；goto 域名段切统一口径，`page_skills` 键对构建两事件源共用
+- semver 判据结论（0.15.0 裁定）：能力新增取 minor（REQ-004 判据行）
+
+## 0.14.0 - 2026-09-22
+
+- **artifact publish 结构化字段面**：ledger-client 升 v0.1.3，`browse artifact publish` 增 `--summary`/`--outcome`/`--git-sha` 复旗标（summary 非空限长与 git_sha 十六进制形本地预检，免配额损耗）；总台令三件在册产物补载荷
+- semver 判据结论（0.14.0 裁定）：能力新增取 minor（REQ-004 判据行）
+
 ## 0.13.1 - 2026-09-22
 
 - **#55 帮助面专业化重排**：Commands 按语义五组分类（求值与抓取、引擎管理、片段与知识仓、账本与产物、自更新），组内名对齐、描述改首子句短述（从 description 机械派生，单一真源零手维护）；Options 短述化并自动回填默认值；帮助面、llms 手册与 schema 三面清零内部台账编号（#NN/REQ/ADR/评审/裁定日期，溯源归 CHANGELOG 与 diary）；片段方言节紧凑化；环境变量块对齐修正。守卫三件随卷：命令树全归组锁（HELP_GROUPS 恰一覆盖）、帮助面零内部编号锁、既有全覆盖锁随分组结构更新

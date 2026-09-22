@@ -1,7 +1,8 @@
-//! 技能触发层（#50/#51）：goto 导航回执的条件附加面。知识全文存
-//! workspace 单仓（[`crate::workspace`]，github.com/raystyle/browse_workspace），
-//! 本模块只做「点名」：命中附加清单与 hint（读全文命令），未命中或
-//! 关闭时一键不加，回执与现状逐字节一致。
+//! 技能触发层（#50/#51/#56）：goto 导航回执与 fetch/detect 回执的条件
+//! 附加面。知识全文存 workspace 单仓（[`crate::workspace`]，
+//! github.com/raystyle/browse_workspace），本模块只做「点名」：命中附加
+//! 清单与 hint（读全文命令），未命中或关闭时一键不加，回执与现状逐字节
+//! 一致。
 
 use serde_json::{Value, json};
 
@@ -274,8 +275,7 @@ pub fn page_fields(probe: &Value) -> Vec<(&'static str, Value)> {
     if let Some(fw) = valid_framework(probe.get("framework")) {
         out.push(("framework", fw));
     }
-    let mut kept: Vec<Value> = Vec::new();
-    let mut seen: Vec<&str> = Vec::new();
+    let mut kept: Vec<(&str, &str)> = Vec::new();
     for e in probe
         .get("slugs")
         .and_then(Value::as_array)
@@ -290,22 +290,36 @@ pub fn page_fields(probe: &Value) -> Vec<(&'static str, Value)> {
         };
         if !FROZEN_PAGE_SLUGS.contains(&slug)
             || !matches!(conf, "CONFIRMED" | "PLAUSIBLE")
-            || seen.contains(&slug)
+            || kept.iter().any(|(s, _)| *s == slug)
         {
             continue;
         }
-        seen.push(slug);
-        kept.push(json!({ "slug": slug, "confidence": conf }));
+        kept.push((slug, conf));
     }
-    if !kept.is_empty() {
-        let cmds: Vec<String> = seen
-            .iter()
-            .map(|s| format!("browse workspace page {s}"))
-            .collect();
-        out.push(("page_skills", json!(kept)));
-        out.push(("page_skills_hint", json!(cmds.join("；"))));
-    }
+    out.extend(page_skills_keys(&kept));
     out
+}
+
+/// （slug, confidence）对到 `page_skills` 加 `page_skills_hint` 键对的
+/// 统一构建（crate 内缝）：探测腿（[`page_fields`]）与 detect 判读腿
+/// （[`verdict_fields`]）共用，保两事件源的回执形逐字节同构。空入参
+/// 返回空 vec（调用方零插入）。
+fn page_skills_keys(pairs: &[(&str, &str)]) -> Vec<(&'static str, Value)> {
+    if pairs.is_empty() {
+        return Vec::new();
+    }
+    let kept: Vec<Value> = pairs
+        .iter()
+        .map(|(s, c)| json!({ "slug": s, "confidence": c }))
+        .collect();
+    let cmds: Vec<String> = pairs
+        .iter()
+        .map(|(s, _)| format!("browse workspace page {s}"))
+        .collect();
+    vec![
+        ("page_skills", json!(kept)),
+        ("page_skills_hint", json!(cmds.join("；"))),
+    ]
 }
 
 /// framework 形校验（评审 F3 白名单的 framework 腿）：name 是非空短串
@@ -334,22 +348,106 @@ fn valid_framework(v: Option<&Value>) -> Option<Value> {
     Some(json!({ "name": name, "version": version }))
 }
 
-/// goto 回执的技能附加入口（crate 内缝，#50/#51）：按开关分流各层；
+/// URL 到域名层键对（#56，fetch 腿的口径源）：与 goto 同口径的域名段
+/// 匹配（[`domain_segment`] 加 [`list_domain_skills`]），但收 ws 目录
+/// 与 url 显式入参——fetch 的两形态（HTTP 直出与引擎升级）都在 CLI 侧
+/// 持 URL，点名不依赖引擎与 Session。何时用：回执含 url 且只想要域名
+/// 层点名的调用方。边界：关闭（`BROWSE_DOMAIN_SKILLS`）或未命中返回
+/// 空 vec，调用方零插入。
+///
+/// # Examples
+///
+/// ```
+/// let dir = std::env::temp_dir().join(format!("browse-sk56-{}", std::process::id()));
+/// let seg = dir.join("domain-skills").join("x");
+/// std::fs::create_dir_all(&seg).unwrap();
+/// std::fs::write(seg.join("notes.md"), "# x").unwrap();
+/// let f = browse_core::skills::url_domain_fields(&dir, "https://www.x.com/a");
+/// assert_eq!(f.len(), 2, "命中出两键: {f:?}");
+/// assert!(f.iter().all(|(k, _)| k.starts_with("domain_skills")));
+/// assert!(browse_core::skills::url_domain_fields(&dir, "data:text/html,x").is_empty());
+/// let _ = std::fs::remove_dir_all(&dir);
+/// ```
+pub fn url_domain_fields(ws: &std::path::Path, url: &str) -> Vec<(&'static str, Value)> {
+    if !domain_skills_enabled() {
+        return Vec::new();
+    }
+    match domain_segment(url) {
+        Some(seg) => {
+            let files = list_domain_skills(ws, &seg);
+            if files.is_empty() {
+                return Vec::new();
+            }
+            vec![
+                ("domain_skills", json!(files)),
+                ("domain_skills_hint", json!(domain_hint(&seg))),
+            ]
+        }
+        None => Vec::new(),
+    }
+}
+
+/// detect() 判读到 page-skill slug 的映射表（#56，纯函数）：challenged
+/// 映射 bot-shield 与 captcha，login-wall 映射 login-wall，其余判读
+/// （rate-limited/blocked/stalled/blank/loading/ok）无映射返回空。置信
+/// 档恒 PLAUSIBLE：判读是关键词与网络行为推断，非 DOM 特征实证（对照
+/// 探针腿的 CONFIRMED 档要 cf-chl DOM 这类硬证据）。slug 值域即
+/// [`FROZEN_PAGE_SLUGS`]，表驱动静态对不越白名单。
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(
+///     browse_core::skills::verdict_page_slugs("challenged"),
+///     &[("bot-shield", "PLAUSIBLE"), ("captcha", "PLAUSIBLE")]
+/// );
+/// assert_eq!(
+///     browse_core::skills::verdict_page_slugs("login-wall"),
+///     &[("login-wall", "PLAUSIBLE")]
+/// );
+/// assert!(browse_core::skills::verdict_page_slugs("ok").is_empty());
+/// ```
+pub fn verdict_page_slugs(verdict: &str) -> &'static [(&'static str, &'static str)] {
+    match verdict {
+        "challenged" => &[("bot-shield", "PLAUSIBLE"), ("captcha", "PLAUSIBLE")],
+        "login-wall" => &[("login-wall", "PLAUSIBLE")],
+        _ => &[],
+    }
+}
+
+/// detect() 回执的技能附加入口（#56）：判读经 [`verdict_page_slugs`]
+/// 映射后出 `page_skills` 加 `page_skills_hint`（与探测腿同形）；
+/// 关闭（`BROWSE_PAGE_SKILLS`）或判读无映射返回空 vec，调用方零插入。
+/// 调用点在 [`crate::js_host`] 的 detect 判读构建处。
+///
+/// # Examples
+///
+/// ```
+/// let f = browse_core::skills::verdict_fields("challenged");
+/// assert_eq!(f.len(), 2, "page_skills 加 hint: {f:?}");
+/// assert!(browse_core::skills::verdict_fields("loading").is_empty());
+/// ```
+pub fn verdict_fields(verdict: &str) -> Vec<(&'static str, Value)> {
+    if !page_skills_enabled() {
+        return Vec::new();
+    }
+    page_skills_keys(verdict_page_slugs(verdict))
+}
+
+/// goto 回执的技能附加入口（crate 内缝，#50/#51/#56）：按开关分流各层；
 /// 任何失败（目录列举失败、探测超时或求值错或解析错）静默返回，绝不
 /// 让 goto 失败；未命中或关闭时一键不加（回执与现状逐字节一致）。
 /// 调用点在 [`crate::semantic::goto`] 的回执构建处，elapsedMs 在此
 /// 之前已固化（探测耗时不算进导航时长）。
 pub(crate) async fn augment_goto(s: &cdp::Session, receipt: &mut Value) {
-    if domain_skills_enabled() {
-        let url = receipt.get("url").and_then(Value::as_str).unwrap_or("");
-        if let Some(seg) = domain_segment(url) {
-            let files = list_domain_skills(&crate::paths::workspace_dir(), &seg);
-            if !files.is_empty()
-                && let Some(obj) = receipt.as_object_mut()
-            {
-                obj.insert("domain_skills".into(), json!(files));
-                obj.insert("domain_skills_hint".into(), json!(domain_hint(&seg)));
-            }
+    let url = receipt
+        .get("url")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    for (k, v) in url_domain_fields(&crate::paths::workspace_dir(), &url) {
+        if let Some(obj) = receipt.as_object_mut() {
+            obj.insert(k.to_string(), v);
         }
     }
     if page_skills_enabled() {
@@ -495,5 +593,64 @@ mod tests {
                 && hint.1.as_str().unwrap_or("").contains("；"),
             "hint 是读全文命令的连接: {hint:?}"
         );
+    }
+
+    /// #56 判读映射表：命中判读的 slug 全在冻结名单内（表驱动静态对
+    /// 不越白名单的零漂移守卫），未映射判读返回空。
+    #[test]
+    fn verdict_mapping_whitelisted() {
+        for verdict in [
+            "challenged",
+            "rate-limited",
+            "blocked",
+            "stalled",
+            "login-wall",
+            "blank",
+            "loading",
+            "ok",
+            "nonsense",
+        ] {
+            for (slug, conf) in verdict_page_slugs(verdict) {
+                assert!(
+                    FROZEN_PAGE_SLUGS.contains(slug),
+                    "判读 {verdict} 的 slug {slug} 不在冻结名单"
+                );
+                assert!(
+                    matches!(*conf, "CONFIRMED" | "PLAUSIBLE"),
+                    "判读 {verdict} 的 {slug} 置信档非法: {conf}"
+                );
+            }
+        }
+        assert!(verdict_page_slugs("rate-limited").is_empty());
+        assert!(verdict_page_slugs("ok").is_empty());
+    }
+
+    /// #56 url_domain_fields：命中出两键（清单与 goto 同口径），未命中
+    /// 站点与非 http(s) 形零键。
+    #[test]
+    fn url_domain_fields_shapes() {
+        let dir = std::env::temp_dir().join(format!("browse-sk56-{}", std::process::id()));
+        let seg = dir.join("domain-skills").join("x");
+        std::fs::create_dir_all(&seg).unwrap();
+        std::fs::write(seg.join("notes.md"), "# x").unwrap();
+        let f = url_domain_fields(&dir, "https://www.x.com/a");
+        assert_eq!(f.len(), 2, "命中出 domain_skills 加 hint: {f:?}");
+        assert_eq!(f[0].0, "domain_skills");
+        assert_eq!(f[0].1, json!(["notes.md"]), "清单与 goto 同口径");
+        assert!(
+            f[1].1
+                .as_str()
+                .is_some_and(|h| h == "browse workspace site x"),
+            "hint 是读全文命令: {f:?}"
+        );
+        assert!(
+            url_domain_fields(&dir, "https://nope.com/").is_empty(),
+            "未知识站点零键"
+        );
+        assert!(
+            url_domain_fields(&dir, "data:text/html,x").is_empty(),
+            "非 http(s) 零键"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

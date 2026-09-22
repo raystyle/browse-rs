@@ -2412,11 +2412,19 @@ impl JsHost {
                 } else {
                     ("ok", "页面正常：snapshot()/findRefs() 取结构")
                 };
-                Ok(json!({
+                // #56：判读映射 page-skill 点名（challenged/login-wall），
+                // 未命中或 page 层关闭零键，回执与现状逐字节一致
+                let mut out = json!({
                     "verdict": verdict,
                     "evidence": evidence,
                     "suggestion": suggestion,
-                }))
+                });
+                for (k, v) in crate::skills::verdict_fields(verdict) {
+                    if let Some(obj) = out.as_object_mut() {
+                        obj.insert(k.to_string(), v);
+                    }
+                }
+                Ok(out)
             }
             // ---- 交互动词补全（#23）与运营面（#25.2/#25.3）----
             "hoverRef" => {

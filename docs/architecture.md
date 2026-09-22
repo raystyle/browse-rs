@@ -33,9 +33,11 @@ crates/browse-core  语义与 daemon（不碰 argv）
                     clickRef/fillRef（backendNodeId 锚）、等待判官
                     （waitLoad/waitIdle）；Input 挂起自愈重试；goto 回执
                     构建后经 skills::augment_goto 条件附技能键
-  skills.rs         技能触发层（#50/#51，ADR-0008）：goto 后按域名段点名
+  skills.rs         技能触发层（#50/#51/#56，ADR-0008）：goto 后按域名段点名
                     workspace 站点知识、按页面特征（一次有界 pageEval，
-                    10 slug 两档置信）点名机制配方；未命中零新增键
+                    10 slug 两档置信）点名机制配方；fetch 两腿回执按 URL
+                    同口径点名站点知识（CLI 侧，不依赖引擎），detect() 判读
+                    映射机制配方；未命中零新增键
   record.rs         录制：startScreencast 帧流泵落盘 + 按 sessionId ack
   paths.rs          实例命名空间（BROWSE_NAME -> 状态目录 + 派生端口，
                     ADR-0006）；engine_profile_dir 与 workspace_dir（跨
@@ -93,8 +95,8 @@ POST /eval {code}
 
 知识仓 `github.com/raystyle/browse_workspace` 部署在 `~/.browse-rs/workspace`
 （`BROWSE_WORKSPACE` 覆盖；**不分 BROWSE_NAME**，跨实例共享）。三层使用面：
-goto 回执自动点名（domain_skills/page_skills 加 hint，`BROWSE_DOMAIN_SKILLS=0`
-/`BROWSE_PAGE_SKILLS=0` 分层关）-> `browse workspace site/page` 免浏览器读全文
+goto/fetch/detect 回执自动点名（domain_skills/page_skills 加 hint，
+`BROWSE_DOMAIN_SKILLS=0` /`BROWSE_PAGE_SKILLS=0` 分层关）-> `browse workspace site/page` 免浏览器读全文
 （CLI 直读文件，canonicalize 越界守卫）-> `browse workspace list` 意图反查。
 install/update 走 git shell-out（clone / pull --ff-only 脏树拒绝），本地修改
 手工 commit/push 回推。env 三变量经 `ensure_daemon_with_env` 显式透传（防御性：

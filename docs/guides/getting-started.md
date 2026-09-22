@@ -106,7 +106,9 @@ browse workspace page captcha        # 读机制配方全文
 ```
 
 goto 会自动点名：命中站点知识或页面特征（iframe、验证码、水合等）时回执附
-`domain_skills`/`page_skills` 清单与 hint 字段，照 hint 拉全文即可；两层可用
+`domain_skills`/`page_skills` 清单与 hint 字段，照 hint 拉全文即可；fetch 回执
+按 URL 同口径点名站点知识（两腿都生效，不依赖引擎），detect() 的
+challenged/login-wall 判读点名对应机制配方；两层可用
 `BROWSE_DOMAIN_SKILLS=0` / `BROWSE_PAGE_SKILLS=0` 独立关闭。
 
 ## 常见坑

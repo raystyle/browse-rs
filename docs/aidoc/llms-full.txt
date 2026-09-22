@@ -1,5 +1,5 @@
 <!-- browse_cli/index.md -->
-# browse-cli 0.14.0
+# browse-cli 0.15.0
 
 browse CLI 的可测半边：daemon 客户端（HTTP 调用 + 自动拉起）。
 
@@ -12,7 +12,7 @@ CLI 进程本身无状态、即起即走。
 ## Modules
 
 - [`client`](client.md): daemon 客户端：本地 HTTP 调用 + 首次使用自动拉起 detached daemon。
-- [`fetch`](fetch.md): 一次性只读抓取（#50）：HTTP 优先，三条件升级引擎，markdown 直出。
+- [`fetch`](fetch.md): 一次性只读抓取（#50/#56）：HTTP 优先，三条件升级引擎，markdown 直出。
 - [`ledger`](ledger.md): 账本薄适配层（REQ-063；总台修正令 2026-09-20 收口）：签名道与只增面
 - [`render`](render.md): 求值结果的打印面：大值自动落盘（artifact/checkpoint 的降级形态，
 
@@ -48,12 +48,15 @@ daemon 客户端：本地 HTTP 调用 + 首次使用自动拉起 detached daemon
 <!-- browse_cli/fetch.md -->
 # browse-cli::fetch
 
-一次性只读抓取（#50）：HTTP 优先，三条件升级引擎，markdown 直出。
+一次性只读抓取（#50/#56）：HTTP 优先，三条件升级引擎，markdown 直出。
 
 - HTTP 腿：reqwest 直取（零浏览器成本），判升级三条件：正文空、命中
   墙词、正文少于 20 词。
 - 引擎腿：经 daemon POST /eval 走 goto 加页内抽取（启发式标题加段落，
   非 Readability；v1 口径已在 surface 披露）。
+- 域名层点名（#56）：两腿回执都按 URL 做 goto 同口径匹配，命中
+  workspace 站点知识附 domain_skills 与 hint；不依赖引擎（引擎腿
+  daemon 侧 goto 的点名回执被抽取串替换，CLI 侧补点）。
 
 ## Functions
 
@@ -115,7 +118,7 @@ ledger.ohmygh.com（替代 issues.ohmygh.com 客户端面；旧服务只读保�
 
 
 <!-- browse_core/index.md -->
-# browse-core 0.14.0
+# browse-core 0.15.0
 
 browse CLI 的核心库：方言宿主、引擎策略、daemon HTTP API。
 
@@ -167,7 +170,7 @@ assert_eq!(render(&stmts), "const tabs = await listPageTargets()");
 - [`self_update`](self_update.md): browse 自更新（用户令 2026-09-18；对齐 build-release 公共契约第六节
 - [`semantic`](semantic.md): 语义层近期面：tab 族、交互三件、等待判官。
 - [`server`](server.md): daemon 的 HTTP API：常驻会话 + 方言求值 + 引擎生命周期。
-- [`skills`](skills.md): 技能触发层（#50/#51）：goto 导航回执的条件附加面。知识全文存
+- [`skills`](skills.md): 技能触发层（#50/#51/#56）：goto 导航回执与 fetch/detect 回执的条件
 - [`surface`](surface.md): 命令面目录（incur-rs 原则的方言版适配）：CLI 子命令、方言全局函数、
 - [`workspace`](workspace.md): workspace 单仓管理（#50/#51 配套）：站点与机制知识仓
 
@@ -487,10 +490,11 @@ POST /quit 三端点保留），新增 `/engine/up` 与求值前的懒引擎策�
 <!-- browse_core/skills.md -->
 # browse-core::skills
 
-技能触发层（#50/#51）：goto 导航回执的条件附加面。知识全文存
-workspace 单仓（[`crate::workspace`]，github.com/raystyle/browse_workspace），
-本模块只做「点名」：命中附加清单与 hint（读全文命令），未命中或
-关闭时一键不加，回执与现状逐字节一致。
+技能触发层（#50/#51/#56）：goto 导航回执与 fetch/detect 回执的条件
+附加面。知识全文存 workspace 单仓（[`crate::workspace`]，
+github.com/raystyle/browse_workspace），本模块只做「点名」：命中附加
+清单与 hint（读全文命令），未命中或关闭时一键不加，回执与现状逐字节
+一致。
 
 ## Functions
 
@@ -501,6 +505,9 @@ workspace 单仓（[`crate::workspace`]，github.com/raystyle/browse_workspace�
 - `page_fields` — 把探测结果变成回执附加键对（#51，纯函数）：framework 形合法出
 - `page_skills_enabled` — #51 页面层是否开启：`BROWSE_PAGE_SKILLS` 未设或非 0/false 即开。
 - `parse_probe` — 解析探测回执（#51，纯函数）：吃 Runtime.evaluate `/result/value` 的
+- `url_domain_fields` — URL 到域名层键对（#56，fetch 腿的口径源）：与 goto 同口径的域名段
+- `verdict_fields` — detect() 回执的技能附加入口（#56）：判读经 [`verdict_page_slugs`]
+- `verdict_page_slugs` — detect() 判读到 page-skill slug 的映射表（#56，纯函数）：challenged
 
 ## Constants
 
@@ -574,7 +581,7 @@ list/site/page）。git 维护走 shell-out `git`（不引 git crate）：instal
 
 
 <!-- cdp/index.md -->
-# cdp 0.14.0
+# cdp 0.15.0
 
 Chrome DevTools Protocol（CDP）连接层：一条常驻 browser-level WebSocket 会话。
 

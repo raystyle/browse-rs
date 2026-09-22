@@ -866,6 +866,87 @@ l`.length === 3].join(\"|\")", returnByValue:true})).result.value"#;
         Some(&json!("login-wall")),
         "密码页应 login-wall: {detl}"
     );
+    // ---- #56 detect 判读映射 page-skill 点名 ----
+    // login-wall 判读映射 login-wall 配方（PLAUSIBLE：判读是行为推断）
+    let det_slugs = |receipt: &Value, slug: &str| {
+        receipt
+            .get("page_skills")
+            .and_then(Value::as_array)
+            .is_some_and(|a| {
+                a.iter().any(|e| {
+                    e.get("slug") == Some(&json!(slug))
+                        && e.get("confidence") == Some(&json!("PLAUSIBLE"))
+                })
+            })
+    };
+    assert!(
+        det_slugs(&detl, "login-wall"),
+        "login-wall 判读应点名 login-wall 配方: {detl}"
+    );
+    assert!(
+        detl.get("page_skills_hint")
+            .and_then(Value::as_str)
+            .is_some_and(|h| h.contains("browse workspace page login-wall")),
+        "判读 hint 应给读全文命令: {detl}"
+    );
+    // 挑战页：标题关键词加短正文判 challenged，映射 bot-shield 与 captcha
+    host.eval_snippet(r#"await goto("data:text/html,<title>Just a moment...</title>")"#)
+        .await
+        .expect("goto 挑战页");
+    let detc = host
+        .eval_snippet("return await detect()")
+        .await
+        .expect("detect challenged");
+    assert_eq!(
+        detc.get("verdict"),
+        Some(&json!("challenged")),
+        "挑战标题加短正文应 challenged: {detc}"
+    );
+    assert!(
+        det_slugs(&detc, "bot-shield") && det_slugs(&detc, "captcha"),
+        "challenged 判读应点名 bot-shield 与 captcha: {detc}"
+    );
+    // 无映射判读（ok/blank）零新增键：回执键集恰为判读三键
+    for (name, d) in [("ok", &det), ("blank", &detb)] {
+        let mut ks: Vec<&str> = d
+            .as_object()
+            .expect("对象回执")
+            .keys()
+            .map(|k| k.as_str())
+            .collect();
+        ks.sort_unstable();
+        assert_eq!(
+            ks,
+            vec!["evidence", "suggestion", "verdict"],
+            "{name} 判读零技能键: {d}"
+        );
+    }
+    // 分层关断（#56）：BROWSE_PAGE_SKILLS=0 时判读回执不再带 page 键
+    // SAFETY: SEQ 互斥下本块独占改 env，块尾按原值还原
+    let saved_psk = std::env::var_os("BROWSE_PAGE_SKILLS");
+    unsafe { std::env::set_var("BROWSE_PAGE_SKILLS", "0") };
+    let det_off = host
+        .eval_snippet("return await detect()")
+        .await
+        .expect("detect page 关层面");
+    assert!(
+        det_off.get("page_skills").is_none() && det_off.get("page_skills_hint").is_none(),
+        "page 层关闭后判读零 page 键: {det_off}"
+    );
+    unsafe {
+        match &saved_psk {
+            Some(v) => std::env::set_var("BROWSE_PAGE_SKILLS", v),
+            None => std::env::remove_var("BROWSE_PAGE_SKILLS"),
+        }
+    }
+    let det_on = host
+        .eval_snippet("return await detect()")
+        .await
+        .expect("detect page 复开面");
+    assert!(
+        det_slugs(&det_on, "bot-shield"),
+        "还原后点名恢复（同页复测）: {det_on}"
+    );
 
     // ---- #42 storage 颗粒度 CRUD ----
     // cookieSet 回读：document.cookie 可见 + getAllCookies 一致 + 域过滤
