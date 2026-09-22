@@ -20,3 +20,8 @@
 ## 评审一轮（browse-codex-review）
 
 四点名边界过（含 #60 复用面判「够做形态翻转检测」）。F 三条必修全实：F1 doctest 补 u64 后缀后未重跑 aidoc（Must 违例，投影漂移精确一处），已 regen 随批；F2 ws_authority_host 对带括号 IPv6 按 `:` 误切（`[::1]` 得乱码 `[`），修为首 `]` 含括号整段加 IPv6 loopback 测试；F3 docs/guides/http-api.md 的 /health 契约段未随批（Spawned 枚举形过期加 daemon/engineProvenance 两键缺），已补全。G1 采纳（CLI os 判定换 env::consts::OS 同源，cfg 三态对 freebsd 类误兜底）；G3 采纳（同 OS 异机也告警：CLI 采本机 hostname 与 daemon.hostname 比对，隧道场景覆盖）；G4 半收（hms_utc 补日期走 civil-from-days 无闰表；pid 收进 provenance 归 #60 指纹批定）；G2 半收（hostname 采值超时记档下批；unknown 字面语义自明不加标注）。
+
+## 发版与关单（同日续）
+
+- 推送 2fcf5cf..df2ef70，CI 与播种全绿；tag v0.18.0，release.ps1 全链过，五端拉平全镜像道。验收 3 终极真火：Windows CLI 0.18.0 经 localhost 转发打 wsl daemon，跨宿主告警行当场显形（原始事故场景闭环）
+- 关单走正典双事件（总台纠偏令：执行者归本工位，browse 键签名道，勿再转呈）：result 事件（seq 216，digest 锚 v0.18.0 linux 资产 sha256:04df01c6…，digest 用词总台转呈形）加 status 事件（seq 217 to=done）；一次性执行器复刻 ledger-client post_signed 签名道（七行基五头，密档 base64url seed，kid 5f6664e4…与 CLI 同源）。ledger 服务端 result 门槛实证在位（status to=done 无 result 即 400 指管理面 force-status）；browse CLI 的 close 面按 0.9.0 收口令维持移除，一次性执行器是密档键的正典签名道而非面回潮。回读自证：issues/59 projection=done（timeline 三事件），#60 复核 open 不动
