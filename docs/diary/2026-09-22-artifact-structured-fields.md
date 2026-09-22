@@ -15,3 +15,10 @@
 - 封版 v0.14.0（能力新增取 minor）；release.ps1 全链 exit 0；seed run 35680140972 success 1m3s；stable/latest 滚 0.14.0
 - 五端拉平（镜像原生链）：wsl、lan-win、lan-mac（ark 委托）、lan-ubuntu、lan-linux 全 0.14.0
 - 回执总台：三件新 artifact_id 与 digest 见修法节，timeline payload 逐字段在册
+
+## kind 定谳跟进与七事件闭环（同日续，总台知会用户令）
+
+- kind 定谳三型（experience 成功经验、lesson 失败教训、research 研究成果，git 落地路径即证 git_range/git_sha 承载；prototype 等十一遗物型撤服务端白名单，publish 硬校验 summary 必填加 outcome 枚举空发 400）
+- browse 侧补发 research 型 browse-ledger-integration 替代 seq 178 的 prototype 版：9f6e3846-d78b-41f8-8ca7-a6e9b15f55df（publish seq 184，outcome success，git_range 8dd920a..6b055cd 加 git_sha 6b055cd，attest_dev 落）
+- omc 集中道七事件闭环（顺带解了一个死锁：browse 撤 promote 动词后 omc 与服务端原无此面，本轮补 admin 路由与命令族）：promote 三件 seq 186（research 9f6e3846）、187（experience eef7b8e4）、188（lesson 559e873f）；supersede 四件 seq 189（旧 prototype 66857bb2/seq 20）、190（旧 experience 299e9f16/seq 153）、191（旧 lesson 6768e7e0/seq 159）、192（seq 178 prototype 遗物 5b160f36，总台裁显式退役非自然退役）
+- 终态：仓页七行归位零悬空（research 件 current 带完整经验描述与落地路径，lesson 件 failure 如实带根因）
