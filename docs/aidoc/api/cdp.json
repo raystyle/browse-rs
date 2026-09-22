@@ -1,6 +1,6 @@
 {
   "crate": "cdp",
-  "version": "0.15.0",
+  "version": "0.15.1",
   "items": [
     {
       "path": "cdp::discovery",
@@ -165,7 +165,7 @@
     {
       "path": "cdp::spawn::spawn_engine",
       "kind": "function",
-      "docs": "拉起一个带调试口的专属引擎实例（独立 profile、端口自动分配）。\n\n参数：可执行文件、独立 profile 目录、是否无头。\n\n命令行：`--user-data-dir <dir> --remote-debugging-port=0 --no-first-run\n--no-default-browser-check --no-sandbox [--headless] about:blank`。\n\n`--no-sandbox`：SxS 部署的 clean-chrome 在本机沙箱进程打不开自身 exe\n（`Sandbox cannot access executable`，0x5）；引擎是自动化专属隔离实例，\n不承载用户浏览面，关沙箱与 clean-chrome 验收实践一致（linux 同款）。\nchrome 诊断写 `<state>/engine.log`。\n\n# Errors\n\nspawn 失败（路径不是可执行文件等）。"
+      "docs": "拉起一个带调试口的专属引擎实例（独立 profile、端口自动分配）。\n\n参数：可执行文件、独立 profile 目录、是否无头。\n\n命令行：`--user-data-dir <dir> --remote-debugging-port=0 --no-first-run\n--no-default-browser-check --no-sandbox [--headless] about:blank`；\n无显示会话（如 ssh 无 DISPLAY）有头意图自动补 `--headless`（#57 的\nheadless_fallback 判定），extra_args 显式 headless 旗标优先不叠补。\n\n`--no-sandbox`：SxS 部署的 clean-chrome 在本机沙箱进程打不开自身 exe\n（`Sandbox cannot access executable`，0x5）；引擎是自动化专属隔离实例，\n不承载用户浏览面，关沙箱与 clean-chrome 验收实践一致（linux 同款）。\nchrome 诊断写 `<state>/engine.log`。\n\n# Errors\n\nspawn 失败（路径不是可执行文件等）。"
     },
     {
       "path": "cdp::spawn::spawn_engine_pipes",

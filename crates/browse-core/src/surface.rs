@@ -161,7 +161,7 @@ pub const COMMANDS: &[CmdSpec] = &[
             arg!("isolated", "boolean", false, "false"),
             arg!("idle-timeout", "number", false, "3600000"),
         ],
-        description: "显式起引擎（附着优先，缺则 spawn clean-chrome 隔离实例；--profile 自定义 user-data-dir，默认固定 profile 持久保存站点会话；--proxy/--proxy-bypass 直通 chrome 代理旗标；--engine-arg 引擎附加旗标（可叠加，spawn 时 argv 原样直通，BROWSE_ENGINE_ARGS 同道；与 browse 自身 spawn 旗标撞车时后值胜，慎叠）；--isolated 隔离态 profile 引擎退出即删（给了 --profile 时 isolated 优先）；--idle-timeout 闲置回收毫秒只对新拉起的 daemon 生效）；--cookies 域 csv 起引擎后从附着浏览器只读热迁指定域登录态（源零写回，无附着源即报错指 storageState 整包往返）。",
+        description: "显式起引擎（附着优先，缺则 spawn clean-chrome 隔离实例；--profile 自定义 user-data-dir，默认固定 profile 持久保存站点会话；--proxy/--proxy-bypass 直通 chrome 代理旗标；--engine-arg 引擎附加旗标（可叠加，spawn 时 argv 原样直通，BROWSE_ENGINE_ARGS 同道；与 browse 自身 spawn 旗标撞车时后值胜，慎叠；无显示会话如 ssh 未给 headless 时 spawn 自动补 --headless，显式旗标优先）；--isolated 隔离态 profile 引擎退出即删（给了 --profile 时 isolated 优先）；--idle-timeout 闲置回收毫秒只对新拉起的 daemon 生效）；--cookies 域 csv 起引擎后从附着浏览器只读热迁指定域登录态（源零写回，无附着源即报错指 storageState 整包往返）。",
         example: "browse up --headless --profile ~/profiles/proj-a",
     },
     CmdSpec {
@@ -1872,7 +1872,7 @@ pub fn render_help() -> String {
         "\n片段方言：\n  const tabs = await listPageTargets()\n  await session.use(tabs[0].targetId)\n  await goto(\"https://example.com\", {waitIdle: true})\n  支持 await/const/return、字面量与成员下标；模板字符串 raw 语义可多行内嵌页面代码。\n  函数字面量与控制流走 --js（全量 JS 旁路）；等加载用 goto()/waitLoad()，别等 loadEventFired。\n  完整语言面、全局函数与 session 方法清单：browse --llms\n",
     );
     out.push_str(
-        "\nEnvironment Variables:\n  BROWSE_PORT              daemon 端口（default: 9880）\n  BROWSE_NAME              命名实例：状态目录加派生端口 9900-9999，多实例并行\n  BROWSE_CHROME            chrome 路径（default: 走发现序：显式、托管 pin、祖先部署、常规路径）\n  BROWSE_PROFILE           spawn 引擎 user-data-dir（default: 固定 engine-profile，down 不删）\n  BROWSE_CDP_WS            钉死连接的 WS URL\n  BROWSE_NO_ATTACH=1       跳过附着探测，强制 spawn 隔离实例\n  BROWSE_EVAL_TIMEOUT      单次求值超时秒数（default: 300）\n  BROWSE_IDLE_TIMEOUT      引擎闲置回收毫秒（default: 3600000，0 关闭）\n  BROWSE_PROXY             引擎代理 --proxy-server（与 --proxy 同值）\n  BROWSE_PROXY_BYPASS      代理旁路 --proxy-bypass-list\n  BROWSE_ENGINE_ARGS       引擎附加旗标，空格分隔直通 spawn argv（--engine-arg 同道）\n  BROWSE_SECRETS           dotenv 密钥文件（--secrets 同值；输出回显脱敏）\n  BROWSE_WORKSPACE         技能仓根（default: ~/.browse-rs/workspace，跨实例共享）\n  BROWSE_DOMAIN_SKILLS=0   关 goto 回执域名技能点名\n  BROWSE_PAGE_SKILLS=0     关 goto 回执页面特征点名\n",
+        "\nEnvironment Variables:\n  BROWSE_PORT              daemon 端口（default: 9880）\n  BROWSE_NAME              命名实例：状态目录加派生端口 9900-9999，多实例并行\n  BROWSE_CHROME            chrome 路径（default: 走发现序：显式、托管 pin、祖先部署、常规路径）\n  BROWSE_PROFILE           spawn 引擎 user-data-dir（default: 固定 engine-profile，down 不删）\n  BROWSE_CDP_WS            钉死连接的 WS URL\n  BROWSE_NO_ATTACH=1       跳过附着探测，强制 spawn 隔离实例\n  BROWSE_EVAL_TIMEOUT      单次求值超时秒数（default: 300）\n  BROWSE_IDLE_TIMEOUT      引擎闲置回收毫秒（default: 3600000，0 关闭）\n  BROWSE_PROXY             引擎代理 --proxy-server（与 --proxy 同值）\n  BROWSE_PROXY_BYPASS      代理旁路 --proxy-bypass-list\n  BROWSE_ENGINE_ARGS       引擎附加旗标，空格分隔直通 spawn argv（--engine-arg 同道；无显示会话 spawn 自动补 --headless，显式旗标优先）\n  BROWSE_SECRETS           dotenv 密钥文件（--secrets 同值；输出回显脱敏）\n  BROWSE_WORKSPACE         技能仓根（default: ~/.browse-rs/workspace，跨实例共享）\n  BROWSE_DOMAIN_SKILLS=0   关 goto/fetch 回执域名技能点名\n  BROWSE_PAGE_SKILLS=0     关 goto/detect 回执页面技能点名\n",
     );
     out.push_str("\n退出码：\n  0 成功 / 1 执行失败 / 2 用法错\n");
     out

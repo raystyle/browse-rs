@@ -2,6 +2,11 @@
 
 版本级里程碑；逐批过程见 docs/diary。semver 判据在册 docs/requirements/REQ-004。
 
+## 0.15.1 - 2026-09-22
+
+- **#57 无显示会话 headless 自动回退**：spawn 引擎（端口态与管道态两实现三落点）在有头意图且环境无 `DISPLAY`/`WAYLAND_DISPLAY`（典型 ssh 会话）且未显式给 headless 旗标时自动补 `--headless`（修复该场景 ozone 初始化失败即退、DevToolsActivePort 永不落盘的必挂）；有显示环境行为不变；`BROWSE_ENGINE_ARGS` 显式旗标优先不叠补；Windows 会话制与 macOS（Cocoa 非 X11，环境恒无这两变量但有桌面）恒不触发（ADR-0003 口径不动，macOS 有头默认不回退，评审 F1）；README/getting-started/surface 披露生效口径
+- semver 判据结论（0.15.1 裁定）：修复批取 patch（REQ-004 判据行）
+
 ## 0.15.0 - 2026-09-22
 
 - **#56 技能触发事件面扩展**：fetch 两腿（HTTP 直出与引擎升级）回执接入域名层点名（与 goto 同口径 `url_domain_fields`，CLI 侧补点不依赖引擎，命中附 `domain_skills` 与 hint）；detect() 判读映射 page-skill 点名（challenged 映 bot-shield/captcha、login-wall 映 login-wall，恒 PLAUSIBLE：判读是行为推断非 DOM 实证）；未命中或关闭回执零新增键（逐字节一致）；goto 域名段切统一口径，`page_skills` 键对构建两事件源共用

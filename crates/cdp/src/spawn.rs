@@ -139,12 +139,50 @@ fn engine_stdio(profile_dir: &Path) -> std::process::Stdio {
         .unwrap_or_else(|_| std::process::Stdio::null())
 }
 
+/// #57 无显示会话的 headless 自动回退判定（纯函数）：有头意图下，若
+/// extra_args 未显式带 headless 旗标且环境无显示（`display_present` 为
+/// false），返回应补的 `--headless`；已无头、用户已显式给旗标、有显示
+/// 三种情形都返回 `None`（spawn 行为不变）。何时用：三个 spawn 位的
+/// 公共缝（端口态与管道态两实现共用同一口径）。边界：只判 argv 元素
+/// 前缀（`--headless` 与 `--headless=*`），不解析语义。
+fn headless_fallback(
+    headless: bool,
+    extra_args: &[String],
+    display_present: bool,
+) -> Option<&'static str> {
+    if headless
+        || display_present
+        || extra_args
+            .iter()
+            .any(|a| a == "--headless" || a.starts_with("--headless="))
+    {
+        return None;
+    }
+    Some("--headless")
+}
+
+/// 显示可用性探测（#57）：Windows 会话制无 X 概念、macOS 是 Cocoa 非
+/// X11/Wayland（环境恒无这两变量但有桌面），两者恒真不在回退范围
+/// （有头默认与 ADR-0003 口径不动；macOS 误判无显示会把有头 spawn 静默
+/// 改无头，评审 F1 回归锁见 tests）；其余 unix（X11/Wayland 面，实跑
+/// 矩阵是 linux）看 `DISPLAY` 或 `WAYLAND_DISPLAY` 任一非空即真
+/// （WSLg 恒供 `DISPLAY`，ssh 会话恒无）。
+fn display_present() -> bool {
+    if cfg!(windows) || cfg!(target_os = "macos") {
+        return true;
+    }
+    std::env::var_os("DISPLAY").is_some_and(|d| !d.is_empty())
+        || std::env::var_os("WAYLAND_DISPLAY").is_some_and(|w| !w.is_empty())
+}
+
 /// 拉起一个带调试口的专属引擎实例（独立 profile、端口自动分配）。
 ///
 /// 参数：可执行文件、独立 profile 目录、是否无头。
 ///
 /// 命令行：`--user-data-dir <dir> --remote-debugging-port=0 --no-first-run
-/// --no-default-browser-check --no-sandbox [--headless] about:blank`。
+/// --no-default-browser-check --no-sandbox [--headless] about:blank`；
+/// 无显示会话（如 ssh 无 DISPLAY）有头意图自动补 `--headless`（#57 的
+/// headless_fallback 判定），extra_args 显式 headless 旗标优先不叠补。
 ///
 /// `--no-sandbox`：SxS 部署的 clean-chrome 在本机沙箱进程打不开自身 exe
 /// （`Sandbox cannot access executable`，0x5）；引擎是自动化专属隔离实例，
@@ -177,6 +215,10 @@ pub fn spawn_engine(
         .stderr(engine_stdio(profile_dir));
     if headless {
         cmd.arg("--headless");
+    } else if let Some(h) = headless_fallback(headless, extra_args, display_present()) {
+        // #57：无显示会话有头必挂（ozone 初始化失败即退，DevToolsActivePort
+        // 永不落盘），自动回退无头
+        cmd.arg(h);
     }
     cmd.args(extra_args);
     cmd.spawn()
@@ -271,6 +313,9 @@ pub fn spawn_engine_pipes(
             .stderr(engine_stdio(profile_dir));
         if headless {
             cmd.arg("--headless");
+        } else if let Some(h) = headless_fallback(headless, extra_args, display_present()) {
+            // #57：无显示会话自动回退（同端口态口径）
+            cmd.arg(h);
         }
         cmd.args(extra_args);
         // fork 后 exec 前：把两端布到固定 fd 3/4（clean-chrome POSIX 契约）。
@@ -341,6 +386,9 @@ pub fn spawn_engine_pipes(
             .stderr(engine_stdio(profile_dir));
         if headless {
             cmd.arg("--headless");
+        } else if let Some(h) = headless_fallback(headless, extra_args, display_present()) {
+            // #57：无显示会话自动回退（Windows 恒真不触发，口径同 unix 侧）
+            cmd.arg(h);
         }
         cmd.args(extra_args);
         let child = cmd
@@ -380,5 +428,50 @@ pub fn terminate_pid(pid: u32) -> Result<()> {
         Ok(s) if s.success() => Ok(()),
         Ok(s) => Err(anyhow!("terminate {pid}: exit {}", s.code().unwrap_or(-1))),
         Err(e) => Err(anyhow!("terminate {pid}: {e}")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// #57 回退判定四象限：已无头/显式旗标/有显示都 None，唯「有头意图
+    /// 加无显示加无显式旗标」补 --headless。
+    #[test]
+    fn headless_fallback_matrix() {
+        let no_args: Vec<String> = Vec::new();
+        // 已无头：不叠补
+        assert_eq!(headless_fallback(true, &no_args, false), None);
+        // 有显示：行为不变（有头默认不回退）
+        assert_eq!(headless_fallback(false, &no_args, true), None);
+        // 无显示 + 有头意图 + 无显式旗标：补 --headless
+        assert_eq!(
+            headless_fallback(false, &no_args, false),
+            Some("--headless")
+        );
+        // 用户显式旗标（两种形）优先，不叠补
+        for explicit in ["--headless", "--headless=new"] {
+            let args: Vec<String> = vec![explicit.to_string()];
+            assert_eq!(
+                headless_fallback(false, &args, false),
+                None,
+                "显式 {explicit} 优先"
+            );
+        }
+        // 显式旗标混在其他旗标里同样识别
+        let mixed: Vec<String> = ["--enable-features=X", "--headless=new"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert_eq!(headless_fallback(false, &mixed, false), None);
+    }
+
+    /// #57 F1 回归锁（只在 mac 岗跑）：macOS 是 Cocoa 非 X11/Wayland，
+    /// 环境恒无 DISPLAY/WAYLAND_DISPLAY 但有桌面，display_present 必须
+    /// 真——否则有头默认被静默改无头（lan-mac 有头测试面回归）。
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn display_present_true_on_macos() {
+        assert!(display_present(), "macOS 有显示，不得误判回退");
     }
 }

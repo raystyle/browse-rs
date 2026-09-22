@@ -18,6 +18,7 @@ browse 'return (await session.Runtime.evaluate({expression:"document.title", ret
 ```
 
 - `--headless` 只影响**首次** spawn 的引擎形态；daemon 常驻，后续调用免拉起。
+- 无显示会话（无 `DISPLAY`/`WAYLAND_DISPLAY`，典型 ssh）下 spawn 有头意图自动回退补 `--headless`（#57；`BROWSE_ENGINE_ARGS` 里的显式 headless 旗标优先不叠补）；daemon 常驻改环境需重启（在册口径）。
 - 变量跨调用持久：`browse 'const tabs = await listPageTargets()'` 之后另起进程 `browse 'return tabs[0].url'` 仍可用。
 
 ## 3. 真网页

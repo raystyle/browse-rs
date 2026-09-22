@@ -2589,3 +2589,64 @@ async fn isolated_profile_removed_on_shutdown() {
     engine.shutdown().await.expect("shutdown");
     assert!(!dir.exists(), "退场后目录应删: {dir:?}");
 }
+
+/// #57 无显示会话的 headless 自动回退：有头意图（headless: false）下
+/// 清空 DISPLAY 与 WAYLAND_DISPLAY 模拟 ssh 会话，spawn 应自动补
+/// --headless 并连上（修复前 ozone 初始化失败即退，DevToolsActivePort
+/// 永不落盘）。隔离 profile 不占 engine-profile，env 窄改在 SEQ 窗内
+/// 按原值还原。
+#[tokio::test]
+async fn no_display_headless_fallback_spawns() {
+    if !gated() {
+        eprintln!("skip: BROWSE_E2E 未设 1");
+        return;
+    }
+    let _seq = SEQ.lock().await;
+    let saved: Vec<(&str, Option<std::ffi::OsString>)> = ["DISPLAY", "WAYLAND_DISPLAY"]
+        .iter()
+        .map(|k| (*k, std::env::var_os(k)))
+        .collect();
+    // SAFETY: SEQ 串行窗内独占改 env，块尾按原值还原
+    unsafe {
+        std::env::remove_var("DISPLAY");
+        std::env::remove_var("WAYLAND_DISPLAY");
+    }
+    let session = cdp::Session::new();
+    let host = JsHost::new(session.clone());
+    let engine = Engine::new(session);
+    engine
+        .ensure(&EngineSpec::Auto {
+            chrome: None,
+            headless: false,
+            pipe: false,
+            profile: None,
+            proxy: None,
+            proxy_bypass: None,
+            isolated: true,
+            engine_args: Vec::new(),
+        })
+        .await
+        .expect("无显示会话有头意图应自动回退无头并连上（#57）");
+    // G1：钉住确实走了 spawn 分支（附着态连上也过不了本断言，防假绿）
+    let src = engine.source().await;
+    assert!(
+        matches!(src, browse_core::EngineSource::Spawned { .. }),
+        "应 Spawned（回退面在 spawn 腿）: {src:?}"
+    );
+    let title = host
+        .eval_js("document.title")
+        .await
+        .expect("回退态求值应可用");
+    assert_eq!(title, json!(""), "空页 title: {title:?}");
+    engine.shutdown().await.expect("shutdown");
+    // SAFETY: 同一 SEQ 窗内按原值还原（中途 panic 泄漏属既有接受口径：
+    // e2e 其余 spawn 全无头，清空的 DISPLAY 无观测面）
+    unsafe {
+        for (k, orig) in &saved {
+            match orig {
+                Some(v) => std::env::set_var(k, v),
+                None => std::env::remove_var(k),
+            }
+        }
+    }
+}
