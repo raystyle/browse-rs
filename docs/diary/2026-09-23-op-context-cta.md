@@ -20,3 +20,9 @@
 ## 评审一轮（browse-codex-review）
 
 四点名边界过（信封兼容、锁面、OnceLock 语义、键集边界）。F 两条必修：F1 diary 三处破折号踩 PEVO 禁字且回执自述与实况矛盾（#56 批同款「写完 diary 未复跑 PEVO」重演，已修三处标点并把「PEVO 最后跑」内化为批纪律）；F2 http-api.md /eval 契约段补 engineContext 键说明（#59 轮 F3 同款口径：契约档须随批）。G1 采纳：origin 变化时键集差异是形态切换副产物不是独立信号（附着态没有有头无头概念），只出来源句不稀释真信号；G2 采纳：origin 与逐键字符串值走裸值不带 JSON 引号。G1 后实弹复核：同 origin 真翻转双句（引擎换新加有头无头）零噪声；首发 eval 无基线零告警（语义正确，kill 前先存基线才有比对面）。issue #61（懒重 spawn 丢 headless 意图）随批入账。
+
+## 发版与关单（同日续）
+
+- 推送 3d0aad5..b3281fc，CI 与播种全绿；tag v0.19.0，五端拉平全镜像道（心跳面持续在线）
+- 关单走正典双事件（签名道执行器，browse 键 kid 5f6664e4）：result（seq 219，digest 锚 v0.19.0 linux 资产 sha256:d845ded9…）加 status（seq 220 to=done）；回读自证 issues/60 projection=done（timeline 三事件）
+- clean-chrome 工位回执到账：r5 窗实现 --remote-debugging-address 绑定生效（补丁、三端重编出包、三态冒烟、评审两轮全绿，9d3995a..2e45d03 已推）；交棒注记：browse 工位随 r5 窗接真实环境验收，直连记得用 IP 字面量 Host 头。验收（导入、驱动、mesh 直暴真实面）为下批
