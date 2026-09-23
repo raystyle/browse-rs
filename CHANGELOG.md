@@ -2,6 +2,11 @@
 
 版本级里程碑；逐批过程见 docs/diary。semver 判据在册 docs/requirements/REQ-004。
 
+## 0.21.0 - 2026-09-23
+
+- **#63 workspace 多仓加载（自定义技能仓）**：`browse workspace add <路径>`/`remove` 登记自定义技能仓，配置固化到应用状态目录 `~/.browse-rs/workspaces.json`（跨会话持久，不分 BROWSE_NAME 与仓本体跨实例口径一致）；多根序：`BROWSE_WORKSPACE` env 钉死单根最高优先（既有语义不变）> 配置清单序首优先 > 缺省仓垫底（同段被自定义仓覆盖时以自定义仓为准，未覆盖段默认仓仍可用）；技能格式同默认仓（domain-skills/<段>/ 与 page-skills/<slug>.md）；goto/fetch 点名与 site/page/list 读全吃多根（段命中序首仓整胜不混拼、清单跨根并集首见去重、全文读序首命中）；list 回执新增 roots 面
+- semver 判据结论（0.21.0 裁定）：能力新增取 minor（REQ-004 判据行）
+
 ## 0.20.0 - 2026-09-23
 
 - **#62 显式连接意图强制切换（--connect 暖态假绿修复）**：`Engine::ensure` 对 Attach/Port 显式意图不再被已连接态幂等短路，目标不同即切换：旧引擎是 browse spawn 的走优雅关（down 所有权，含隔离 profile 清理），是附着来源的零触碰只断本侧连接；同目标幂等免抖（重复 up 不次次断重连）；Auto 缺省意图维持原幂等（懒起与发现序不动）。修复 --connect 在暖 daemon 上静默跑既有引擎的假绿（本日两踩同根：mac 串台误判、lan-ubuntu 首连假绿）

@@ -799,6 +799,24 @@
       "output": "runtime JSON（回值随页面与 CDP 而定）",
       "type": "object"
     },
+    "cli.workspace-add": {
+      "description": "browse workspace add <路径> 登记自定义技能仓（多根序首优先；同段被自定义仓覆盖时以自定义仓为准，未覆盖段默认仓仍可用；目录须存在）：配置固化到应用状态目录 workspaces.json 跨会话持久；技能格式同默认仓（domain-skills/<段>/ 与 page-skills/<slug>.md）；goto/fetch 点名与 site/page/list 读都吃多根序。",
+      "example": "browse workspace add ~/my-skills",
+      "input": {
+        "properties": {
+          "path": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
     "cli.workspace-install": {
       "description": "browse workspace install git clone 种子仓（github.com/raystyle/browse_workspace）到仓根；三平台用户目录部署，跨实例共享不分 BROWSE_NAME。",
       "example": "browse workspace install",
@@ -833,6 +851,24 @@
         },
         "required": [
           "slug"
+        ],
+        "type": "object"
+      },
+      "output": "runtime JSON（回值随页面与 CDP 而定）",
+      "type": "object"
+    },
+    "cli.workspace-remove": {
+      "description": "browse workspace remove <路径> 移除登记的自定义技能仓（配置清单更新；默认仓与 BROWSE_WORKSPACE env 钉死根不受影响）。",
+      "example": "browse workspace remove ~/my-skills",
+      "input": {
+        "properties": {
+          "path": {
+            "description": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
         ],
         "type": "object"
       },

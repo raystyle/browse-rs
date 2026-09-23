@@ -1,6 +1,6 @@
 {
   "crate": "browse-core",
-  "version": "0.20.0",
+  "version": "0.21.0",
   "items": [
     {
       "path": "browse_core::chrome_mgr",
@@ -268,6 +268,11 @@
       "docs": "返回实例名（`BROWSE_NAME` 的非空值）；未设即默认实例（`None`）。\n\n# Examples\n\n```\n// 未设 BROWSE_NAME 时是默认实例\nif std::env::var_os(\"BROWSE_NAME\").is_none() {\n    assert_eq!(browse_core::paths::instance_name(), None);\n}\n```"
     },
     {
+      "path": "browse_core::paths::read_workspace_config",
+      "kind": "function",
+      "docs": "读多仓配置（JSON 字符串数组，序即优先序）；文件缺失或坏形回空清单\n（配置坏不致命，退单仓行为）。"
+    },
+    {
       "path": "browse_core::paths::state_dir",
       "kind": "function",
       "docs": "返回本实例状态目录（`%USERPROFILE%\\.browse-rs[\\<name>]`）。"
@@ -278,9 +283,24 @@
       "docs": "把实例名映射到状态目录的纯函数（同输入恒同输出，可单测）。\n\n# Examples\n\n```\nlet d = browse_core::paths::state_dir_for(&Some(\"t1\".into()));\nassert!(d.ends_with(r\".browse-rs\\t1\") || d.ends_with(\".browse-rs/t1\"));\n```"
     },
     {
+      "path": "browse_core::paths::workspace_config_path",
+      "kind": "function",
+      "docs": "多仓配置文件位（应用状态目录共享根，不分 BROWSE_NAME，与仓本体\n跨实例口径一致）：`~/.browse-rs/workspaces.json`。"
+    },
+    {
       "path": "browse_core::paths::workspace_dir",
       "kind": "function",
-      "docs": "返回 workspace 仓根：`BROWSE_WORKSPACE` 显式优先，缺省\n`<home>/.browse-rs/workspace`（home 解析同 [`state_dir_for`]，三平台\nUSERPROFILE/HOME 双道）。何时用：技能触发层（#50/#51）与\n`browse workspace` 命令族都从这定位站点知识仓。刻意**不分\n`BROWSE_NAME` 命名空间**：站点知识是跨实例共享资产，与 daemon\n端口、引擎 profile 的按名隔离相反（ADR-0008）；边界注记：\n`BROWSE_NAME=workspace` 的实例状态目录与本目录同路径，状态文件名\n不撞 domain-skills/page-skills，共存不冲突。\n\n# Examples\n\n```\nif std::env::var_os(\"BROWSE_WORKSPACE\").is_none() {\n    assert!(browse_core::paths::workspace_dir().ends_with(\"workspace\"));\n}\n```"
+      "docs": "返回 workspace 仓根：`BROWSE_WORKSPACE` 显式优先，缺省\n`<home>/.browse-rs/workspace`（home 解析同 [`state_dir_for`]，三平台\nUSERPROFILE/HOME 双道）。何时用：技能触发层（#50/#51）与\n`browse workspace` 命令族都从这定位站点知识仓。刻意**不分\n`BROWSE_NAME` 命名空间**：站点知识是跨实例共享资产，与 daemon\n端口、引擎 profile 的按名隔离相反（ADR-0008）；边界注记：\n`BROWSE_NAME=workspace` 的实例状态目录与本目录同路径，状态文件名\n不撞 domain-skills/page-skills，共存不冲突。\n\n# Examples\n\n```\nif std::env::var_os(\"BROWSE_WORKSPACE\").is_none() {\n    assert!(browse_core::paths::workspace_dir().ends_with(\"workspace\"));\n}\n```\n#63 多仓根序（自定义技能仓）：`BROWSE_WORKSPACE` env 钉死时单根最高\n优先（既有语义不变）；否则状态目录 `workspaces.json` 配置清单（序首\n优先）在前、缺省仓垫底（自定义盖默认，种子知识不丢）。配置持久在\nbrowse 应用目录，跨会话不靠 env。"
+    },
+    {
+      "path": "browse_core::paths::workspace_roots",
+      "kind": "function",
+      "docs": "#63 多仓根序（自定义技能仓）：`BROWSE_WORKSPACE` env 钉死时单根最高\n优先（既有语义不变）；否则 `workspaces.json` 配置清单（序首优先）\n在前、缺省仓垫底（自定义盖默认，种子知识不丢）。"
+    },
+    {
+      "path": "browse_core::paths::write_workspace_config",
+      "kind": "function",
+      "docs": "写多仓配置（覆盖写；目录缺失先建）。\n\n# Errors\n\n目录建不出或写盘失败（IO 错原样上抛）。"
     },
     {
       "path": "browse_core::record",
@@ -718,6 +738,11 @@
       "docs": "URL 到域名层键对（#56，fetch 腿的口径源）：与 goto 同口径的域名段\n匹配（[`domain_segment`] 加 [`list_domain_skills`]），但收 ws 目录\n与 url 显式入参——fetch 的两形态（HTTP 直出与引擎升级）都在 CLI 侧\n持 URL，点名不依赖引擎与 Session。何时用：回执含 url 且只想要域名\n层点名的调用方。边界：关闭（`BROWSE_DOMAIN_SKILLS`）或未命中返回\n空 vec，调用方零插入。\n\n# Examples\n\n```\nlet dir = std::env::temp_dir().join(format!(\"browse-sk56-{}\", std::process::id()));\nlet seg = dir.join(\"domain-skills\").join(\"x\");\nstd::fs::create_dir_all(&seg).unwrap();\nstd::fs::write(seg.join(\"notes.md\"), \"# x\").unwrap();\nlet f = browse_core::skills::url_domain_fields(&dir, \"https://www.x.com/a\");\nassert_eq!(f.len(), 2, \"命中出两键: {f:?}\");\nassert!(f.iter().all(|(k, _)| k.starts_with(\"domain_skills\")));\nassert!(browse_core::skills::url_domain_fields(&dir, \"data:text/html,x\").is_empty());\nlet _ = std::fs::remove_dir_all(&dir);\n```"
     },
     {
+      "path": "browse_core::skills::url_domain_fields_multi",
+      "kind": "function",
+      "docs": "#63 多根域名层键对：序首命中段（有文件）的根整胜，未命中零键。"
+    },
+    {
       "path": "browse_core::skills::verdict_fields",
       "kind": "function",
       "docs": "detect() 回执的技能附加入口（#56）：判读经 [`verdict_page_slugs`]\n映射后出 `page_skills` 加 `page_skills_hint`（与探测腿同形）；\n关闭（`BROWSE_PAGE_SKILLS`）或判读无映射返回空 vec，调用方零插入。\n调用点在 [`crate::js_host`] 的 detect 判读构建处。\n\n# Examples\n\n```\nlet f = browse_core::skills::verdict_fields(\"challenged\");\nassert_eq!(f.len(), 2, \"page_skills 加 hint: {f:?}\");\nassert!(browse_core::skills::verdict_fields(\"loading\").is_empty());\n```"
@@ -823,6 +848,11 @@
       "docs": "列 `<root>/domain-skills/<段>/` 的技能文件名（排序，封顶\n[`DOMAIN_FILES_CAP`]，只收 .md/.txt）。目录缺失返回空。何时用：\n技能触发层（[`crate::skills`]）的点名清单与 `browse workspace list`\n共用此口径。"
     },
     {
+      "path": "browse_core::workspace::domain_segment_files_multi",
+      "kind": "function",
+      "docs": "#63 多根段文件列（技能点名口径）：序首有文件的根整胜（不跨根混拼，\n保回执确定性——同段多仓时序首仓定义该站点知识）。"
+    },
+    {
       "path": "browse_core::workspace::install",
       "kind": "function",
       "docs": "`browse workspace install`：git clone 种子仓到 `root`。clone 不带\n`--depth`（shallow 与 `pull --ff-only`/回推有边角，仓极小不值得），\n分支吃缺省。回 `{root, remote, head}`。\n\n# Errors\n\ngit 未安装；目录已被占用（存在且非空）；clone 非零退出（网络、权限）。"
@@ -833,14 +863,29 @@
       "docs": "`browse workspace list` 的机器面：`{domains: [{segment, files}],\npages: [slug]}`。files 与回执点名同口径封顶 [`DOMAIN_FILES_CAP`]；\n未安装返回空结构（由调用面给安装提示）。"
     },
     {
+      "path": "browse_core::workspace::list_json_multi",
+      "kind": "function",
+      "docs": "#63 多根清单：domain 段与 page slug 跨根并集（首见序，段名重复以\n序首仓的文件清单为准）；`roots` 面给配置态可见性。"
+    },
+    {
       "path": "browse_core::workspace::read_page",
       "kind": "function",
       "docs": "`browse workspace page <slug>`：读 `page-skills/<slug>.md` 全文。\n\n# Errors\n\nslug 不存在（CTA 指回 list）；路径越出仓根；仓根未安装。"
     },
     {
+      "path": "browse_core::workspace::read_page_multi",
+      "kind": "function",
+      "docs": "#63 多根 page 读：序首命中根优先。\n\n# Errors\n\n所有根都未命中该 slug。"
+    },
+    {
       "path": "browse_core::workspace::read_site",
       "kind": "function",
       "docs": "`browse workspace site <段>[/<文件>]`：只给段时打该段清单（每行\n`<文件>  <首行标题>`，与 snippets list 同构；**不封顶**，是回执点名\n的下钻面）；带 `<段>/<文件>` 时读该文件全文。\n\n# Errors\n\n段或文件不存在（CTA 指回 list）；路径越出仓根；仓根未安装。"
+    },
+    {
+      "path": "browse_core::workspace::read_site_multi",
+      "kind": "function",
+      "docs": "#63 多根 site 读：序首命中根优先（根内逻辑同 [`read_site`]）；全根\n未命中时报错带全部根的找过路径。\n\n# Errors\n\n所有根都未命中该段或文件（错误聚合各根路径）。"
     },
     {
       "path": "browse_core::workspace::status_json",

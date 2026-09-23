@@ -110,6 +110,71 @@ pub fn engine_profile_dir() -> PathBuf {
     state_dir().join("engine-profile")
 }
 
+/// #63 多仓根序（自定义技能仓）：`BROWSE_WORKSPACE` env 钉死时单根最高
+/// 优先（既有语义不变）；否则 `workspaces.json` 配置清单（序首优先）
+/// 在前、缺省仓垫底（自定义盖默认，种子知识不丢）。
+pub fn workspace_roots() -> Vec<PathBuf> {
+    if let Some(p) = std::env::var_os("BROWSE_WORKSPACE") {
+        let p = PathBuf::from(p);
+        if !p.as_os_str().is_empty() {
+            return vec![p];
+        }
+    }
+    let mut roots = read_workspace_config();
+    let default = workspace_dir();
+    if !roots.iter().any(|r| r == &default) {
+        roots.push(default);
+    }
+    roots
+}
+
+/// 多仓配置文件位（应用状态目录共享根，不分 BROWSE_NAME，与仓本体
+/// 跨实例口径一致）：`~/.browse-rs/workspaces.json`。
+pub fn workspace_config_path() -> PathBuf {
+    state_dir_for(&None).join("workspaces.json")
+}
+
+/// 读多仓配置（JSON 字符串数组，序即优先序）；文件缺失或坏形回空清单
+/// （配置坏不致命，退单仓行为）。
+pub fn read_workspace_config() -> Vec<PathBuf> {
+    let Ok(text) = std::fs::read_to_string(workspace_config_path()) else {
+        return Vec::new();
+    };
+    match serde_json::from_str::<Vec<String>>(&text) {
+        Ok(list) => list.into_iter().map(PathBuf::from).collect(),
+        Err(e) => {
+            // G4（评审）：坏形一次性告警（本函数在点名热路径逐调用读，
+            // 恒告警会刷屏；OnceLock 收敛为每进程一次），行为仍退单仓
+            use std::sync::OnceLock;
+            static WARNED: OnceLock<()> = OnceLock::new();
+            if WARNED.set(()).is_ok() {
+                eprintln!(
+                    "[browse] workspaces.json 解析失败（{e}），自定义仓被忽略退默认单仓；下一步：修好后 browse workspace add 重登记（{}）",
+                    workspace_config_path().display()
+                );
+            }
+            Vec::new()
+        }
+    }
+}
+
+/// 写多仓配置（覆盖写；目录缺失先建）。
+///
+/// # Errors
+///
+/// 目录建不出或写盘失败（IO 错原样上抛）。
+pub fn write_workspace_config(roots: &[PathBuf]) -> std::io::Result<()> {
+    let path = workspace_config_path();
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let list: Vec<String> = roots
+        .iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
+    std::fs::write(&path, serde_json::to_vec_pretty(&list).unwrap_or_default())
+}
+
 /// 返回 workspace 仓根：`BROWSE_WORKSPACE` 显式优先，缺省
 /// `<home>/.browse-rs/workspace`（home 解析同 [`state_dir_for`]，三平台
 /// USERPROFILE/HOME 双道）。何时用：技能触发层（#50/#51）与
@@ -126,6 +191,10 @@ pub fn engine_profile_dir() -> PathBuf {
 ///     assert!(browse_core::paths::workspace_dir().ends_with("workspace"));
 /// }
 /// ```
+/// #63 多仓根序（自定义技能仓）：`BROWSE_WORKSPACE` env 钉死时单根最高
+/// 优先（既有语义不变）；否则状态目录 `workspaces.json` 配置清单（序首
+/// 优先）在前、缺省仓垫底（自定义盖默认，种子知识不丢）。配置持久在
+/// browse 应用目录，跨会话不靠 env。
 pub fn workspace_dir() -> PathBuf {
     if let Some(p) = std::env::var_os("BROWSE_WORKSPACE") {
         let p = PathBuf::from(p);

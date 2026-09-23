@@ -74,6 +74,10 @@ enum Mode {
     WorkspaceSite(String),
     /// `browse workspace page <slug>`：页面技能全文。
     WorkspacePage(String),
+    /// `browse workspace add <path>`：登记自定义技能仓（#63，多根序首优先）。
+    WorkspaceAdd(String),
+    /// `browse workspace remove <path>`：移除登记的自定义仓（#63）。
+    WorkspaceRemove(String),
     /// `browse fetch <url> [--markdown] [--timeout <s>]`：一次性只读抓取（#50）。
     Fetch { url: String, timeout_s: u64 },
     /// `browse issue close` 面已移除（总台修正令 2026-09-20 收口：关闭与删除唯一道 = omc 工位经 herdr 委托）。
@@ -397,6 +401,12 @@ async fn main() -> Result<()> {
                     "list" => mode = Mode::WorkspaceList,
                     "site" => mode = Mode::WorkspaceSite(args.next_opt().unwrap_or_default()),
                     "page" => mode = Mode::WorkspacePage(args.next_opt().unwrap_or_default()),
+                    "add" if mode_is_eval(&mode) && snippets.is_empty() => {
+                        mode = Mode::WorkspaceAdd(args.next("workspace add 的路径"))
+                    }
+                    "remove" if mode_is_eval(&mode) && snippets.is_empty() => {
+                        mode = Mode::WorkspaceRemove(args.next("workspace remove 的路径"))
+                    }
                     other => {
                         eprintln!(
                             "browse: workspace 子命令不认识 {other}（status/install/update/list/site/page，退出 2）"
@@ -989,11 +999,67 @@ async fn main() -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&r)?);
             Ok(())
         }
+        // #63 自定义仓登记面：配置固化到应用状态目录 workspaces.json，
+        // 多根序首优先（env BROWSE_WORKSPACE 钉死时仍单根最高优先）
+        Mode::WorkspaceAdd(path) => {
+            let mut roots = browse_core::paths::read_workspace_config();
+            let p = std::path::PathBuf::from(&path);
+            let abs = if p.is_absolute() {
+                p
+            } else {
+                std::env::current_dir()?.join(&p)
+            };
+            // G3（评审）：canonicalize 规范化（./、尾斜杠、符号链接别名
+            // 归一），同仓多写法不重复入册、remove 也按同形匹配
+            let abs = abs.canonicalize().unwrap_or(abs);
+            if !abs.is_dir() {
+                eprintln!(
+                    "browse: workspace add 的路径不是目录（{}）；先建好再登记（退出 2）",
+                    abs.display()
+                );
+                std::process::exit(2);
+            }
+            if !roots.iter().any(|r| r == &abs) {
+                roots.push(abs);
+            }
+            browse_core::paths::write_workspace_config(&roots)?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "ok": true,
+                    "config": browse_core::paths::workspace_config_path().display().to_string(),
+                    "roots": roots.iter().map(|r| r.display().to_string()).collect::<Vec<_>>(),
+                }))?
+            );
+            Ok(())
+        }
+        Mode::WorkspaceRemove(path) => {
+            let mut roots = browse_core::paths::read_workspace_config();
+            let before = roots.len();
+            let p = std::path::PathBuf::from(&path);
+            let canon = p.canonicalize().ok();
+            roots.retain(|r| {
+                Some(r) != canon.as_ref() && *r != p && r.display().to_string() != path
+            });
+            browse_core::paths::write_workspace_config(&roots)?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "ok": true,
+                    "removed": before != roots.len(),
+                    "config": browse_core::paths::workspace_config_path().display().to_string(),
+                    "roots": roots.iter().map(|r| r.display().to_string()).collect::<Vec<_>>(),
+                }))?
+            );
+            Ok(())
+        }
         Mode::WorkspaceList => {
+            // #63 多根并集（含 roots 面）；未装提示走默认根口径不变
             let root = browse_core::paths::workspace_dir();
+            let roots = browse_core::paths::workspace_roots();
             let l = tokio::task::spawn_blocking({
-                let root = root.clone();
-                move || browse_core::workspace::list_json(&root)
+                let roots = roots.clone();
+                move || browse_core::workspace::list_json_multi(&roots)
             })
             .await
             .map_err(|e| anyhow!("workspace list 任务崩了：{e}"))?;
@@ -1032,11 +1098,13 @@ async fn main() -> Result<()> {
                 );
                 std::process::exit(2);
             }
-            let root = browse_core::paths::workspace_dir();
-            let text =
-                tokio::task::spawn_blocking(move || browse_core::workspace::read_site(&root, &seg))
-                    .await
-                    .map_err(|e| anyhow!("workspace site 任务崩了：{e}"))??;
+            // #63 多根读（自定义仓序首优先）
+            let roots = browse_core::paths::workspace_roots();
+            let text = tokio::task::spawn_blocking(move || {
+                browse_core::workspace::read_site_multi(&roots, &seg)
+            })
+            .await
+            .map_err(|e| anyhow!("workspace site 任务崩了：{e}"))??;
             println!("{text}");
             Ok(())
         }
@@ -1047,9 +1115,9 @@ async fn main() -> Result<()> {
                 );
                 std::process::exit(2);
             }
-            let root = browse_core::paths::workspace_dir();
+            let roots = browse_core::paths::workspace_roots();
             let text = tokio::task::spawn_blocking(move || {
-                browse_core::workspace::read_page(&root, &slug)
+                browse_core::workspace::read_page_multi(&roots, &slug)
             })
             .await
             .map_err(|e| anyhow!("workspace page 任务崩了：{e}"))??;

@@ -11,10 +11,14 @@ list/site/page）。git 维护走 shell-out `git`（不引 git crate）：instal
 ## Functions
 
 - `domain_segment_files` — 列 `<root>/domain-skills/<段>/` 的技能文件名（排序，封顶
+- `domain_segment_files_multi` — #63 多根段文件列（技能点名口径）：序首有文件的根整胜（不跨根混拼，
 - `install` — `browse workspace install`：git clone 种子仓到 `root`。clone 不带
 - `list_json` — `browse workspace list` 的机器面：`{domains: [{segment, files}],
+- `list_json_multi` — #63 多根清单：domain 段与 page slug 跨根并集（首见序，段名重复以
 - `read_page` — `browse workspace page <slug>`：读 `page-skills/<slug>.md` 全文。
+- `read_page_multi` — #63 多根 page 读：序首命中根优先。
 - `read_site` — `browse workspace site <段>[/<文件>]`：只给段时打该段清单（每行
+- `read_site_multi` — #63 多根 site 读：序首命中根优先（根内逻辑同 [`read_site`]）；全根
 - `status_json` — `browse workspace status` 的机器面：`{installed, root, gitPresent,
 - `update` — `browse workspace update`：脏树先拒（本地修改未提交会挡 fast-forward），
 

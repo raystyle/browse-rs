@@ -104,7 +104,11 @@ browse workspace update              # git pull --ff-only（本地有未提交�
 browse workspace list                # 列全部站点段与页面特征 slug
 browse workspace site github         # 读单站知识清单；site github/scraping.md 读全文
 browse workspace page captcha        # 读机制配方全文
+browse workspace add ~/my-skills     # 登记自定义技能仓（格式同默认仓；多根序首优先，配置固化 ~/.browse-rs/workspaces.json）
+browse workspace remove ~/my-skills  # 移除登记
 ```
+
+自定义仓只改「在哪找」不改「怎么找」：domain-skills/<段>/ 与 page-skills/<slug>.md 同构，点名与读全文都吃多根序（`BROWSE_WORKSPACE` env 钉死时单根最高优先）。
 
 goto 会自动点名：命中站点知识或页面特征（iframe、验证码、水合等）时回执附
 `domain_skills`/`page_skills` 清单与 hint 字段，照 hint 拉全文即可；fetch 回执

@@ -16,6 +16,7 @@ github.com/raystyle/browse_workspace），本模块只做「点名」：命中�
 - `page_skills_enabled` — #51 页面层是否开启：`BROWSE_PAGE_SKILLS` 未设或非 0/false 即开。
 - `parse_probe` — 解析探测回执（#51，纯函数）：吃 Runtime.evaluate `/result/value` 的
 - `url_domain_fields` — URL 到域名层键对（#56，fetch 腿的口径源）：与 goto 同口径的域名段
+- `url_domain_fields_multi` — #63 多根域名层键对：序首命中段（有文件）的根整胜，未命中零键。
 - `verdict_fields` — detect() 回执的技能附加入口（#56）：判读经 [`verdict_page_slugs`]
 - `verdict_page_slugs` — detect() 判读到 page-skill slug 的映射表（#56，纯函数）：challenged
 

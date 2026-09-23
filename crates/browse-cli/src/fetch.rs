@@ -190,8 +190,9 @@ pub async fn fetch(url: &str, _markdown: bool, timeout_s: u64) -> Result<Value> 
 /// 域名层点名（#56，两腿共用缝）：URL 与 workspace 目录取
 /// [`browse_core::skills::url_domain_fields`]，未命中或关闭零插入。
 fn add_domain_skills(url: &str, r: &mut Value) {
-    for (k, v) in browse_core::skills::url_domain_fields(&browse_core::paths::workspace_dir(), url)
-    {
+    // #63 多根序（自定义仓盖默认仓）
+    let roots = browse_core::paths::workspace_roots();
+    for (k, v) in browse_core::skills::url_domain_fields_multi(&roots, url) {
         if let Some(obj) = r.as_object_mut() {
             obj.insert(k.to_string(), v);
         }

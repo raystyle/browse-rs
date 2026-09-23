@@ -434,6 +434,29 @@ pub fn verdict_fields(verdict: &str) -> Vec<(&'static str, Value)> {
     page_skills_keys(verdict_page_slugs(verdict))
 }
 
+/// #63 多根域名层键对：序首命中段（有文件）的根整胜，未命中零键。
+pub fn url_domain_fields_multi(
+    roots: &[std::path::PathBuf],
+    url: &str,
+) -> Vec<(&'static str, Value)> {
+    if !domain_skills_enabled() {
+        return Vec::new();
+    }
+    match domain_segment(url) {
+        Some(seg) => {
+            let files = crate::workspace::domain_segment_files_multi(roots, &seg);
+            if files.is_empty() {
+                return Vec::new();
+            }
+            vec![
+                ("domain_skills", json!(files)),
+                ("domain_skills_hint", json!(domain_hint(&seg))),
+            ]
+        }
+        None => Vec::new(),
+    }
+}
+
 /// goto 回执的技能附加入口（crate 内缝，#50/#51/#56）：按开关分流各层；
 /// 任何失败（目录列举失败、探测超时或求值错或解析错）静默返回，绝不
 /// 让 goto 失败；未命中或关闭时一键不加（回执与现状逐字节一致）。
@@ -445,7 +468,9 @@ pub(crate) async fn augment_goto(s: &cdp::Session, receipt: &mut Value) {
         .and_then(Value::as_str)
         .unwrap_or("")
         .to_string();
-    for (k, v) in url_domain_fields(&crate::paths::workspace_dir(), &url) {
+    // #63 多根序：自定义仓（workspaces.json 配置）盖默认仓，序首命中
+    let roots = crate::paths::workspace_roots();
+    for (k, v) in url_domain_fields_multi(&roots, &url) {
         if let Some(obj) = receipt.as_object_mut() {
             obj.insert(k.to_string(), v);
         }

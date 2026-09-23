@@ -87,7 +87,7 @@ docs/diary/2026-09-16-doc-system.md），修复自起引擎被 Google 登录
 | `BROWSE_CHROME_LATEST` | `chrome update` 发现源钉（缺省读镜像 `latest` 指针） |
 | `BROWSE_RELEASE_MIRROR` | `browse update` 自更新镜像源覆写（缺省 browse.ohmygh.com/browse） |
 | `BROWSE_ISSUES_API` | issue 通道基址覆写（测与灰度） |
-| `BROWSE_WORKSPACE` | 技能仓根（默认 `~/.browse-rs/workspace`，跨实例共享） |
+| `BROWSE_WORKSPACE` | 技能仓根（默认 `~/.browse-rs/workspace`，跨实例共享；钉死时单根最高优先，`workspace add` 的多根配置不生效） |
 | `BROWSE_DOMAIN_SKILLS=0` / `BROWSE_PAGE_SKILLS=0` | 关掉 goto/fetch/detect 回执的域名 / 页面特征技能点名（#50/#51/#56） |
 
 状态目录 `~/.browse-rs/`（Windows `%USERPROFILE%\.browse-rs`，命名实例在
@@ -110,6 +110,7 @@ browse 'return await screenshot()'                    # 截图；pdf()/recordSta
 browse 'await routeBlock("*://ads.example.com/*")'    # 拦网；routeMock 本地假应答
 browse 'return await detectBrowsers()'                # 探测可附着浏览器
 browse workspace install                              # 装站点/机制知识仓（goto/fetch/detect 回执自动点名，ADR-0008）
+browse workspace add ~/my-skills                      # 登记自定义技能仓（多根序首优先，配置固化 ~/.browse-rs/workspaces.json）
 browse chrome install 152.0.7977.84                   # 镜像装引擎（或本地导入）
 browse chrome update                                   # 升最新版并默认切用
 browse chrome remove <旧版本>                          # 删旧版（pin 指向的拒删，先 use 切走）

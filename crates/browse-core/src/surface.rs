@@ -407,6 +407,22 @@ pub const COMMANDS: &[CmdSpec] = &[
         example: "browse workspace update",
     },
     CmdSpec {
+        name: "workspace-add",
+        kind: CmdKind::Cli,
+        signature: "browse workspace add <路径>",
+        args: &[arg!("path", "string", true)],
+        description: "登记自定义技能仓（多根序首优先；同段被自定义仓覆盖时以自定义仓为准，未覆盖段默认仓仍可用；目录须存在）：配置固化到应用状态目录 workspaces.json 跨会话持久；技能格式同默认仓（domain-skills/<段>/ 与 page-skills/<slug>.md）；goto/fetch 点名与 site/page/list 读都吃多根序。",
+        example: "browse workspace add ~/my-skills",
+    },
+    CmdSpec {
+        name: "workspace-remove",
+        kind: CmdKind::Cli,
+        signature: "browse workspace remove <路径>",
+        args: &[arg!("path", "string", true)],
+        description: "移除登记的自定义技能仓（配置清单更新；默认仓与 BROWSE_WORKSPACE env 钉死根不受影响）。",
+        example: "browse workspace remove ~/my-skills",
+    },
+    CmdSpec {
         name: "workspace-list",
         kind: CmdKind::Cli,
         signature: "browse workspace list",
@@ -1622,8 +1638,14 @@ pub fn render_manual() -> String {
          | 1 | 执行失败 |\n| 2 | 用法错 |\n",
     );
     out.push_str("\n## 常用例\n\n```bash\n");
+    // 精选纪律（#63 批手册帽）：去重保序；--serve 是维护面不进常用例
+    // （目录与 --full 面仍全量在册）
+    let mut seen: Vec<&str> = Vec::new();
     for c in COMMANDS.iter().filter(|c| c.kind == CmdKind::Cli) {
-        out.push_str(&format!("{}\n", c.example));
+        if !c.example.starts_with("browse --serve") && !seen.contains(&c.example) {
+            seen.push(c.example);
+            out.push_str(&format!("{}\n", c.example));
+        }
     }
     out.push_str("```\n");
     out
@@ -1734,6 +1756,8 @@ pub const HELP_GROUPS: &[(&str, &[&str])] = &[
             "browse workspace list",
             "browse workspace site <段>[/<文件>]",
             "browse workspace page <slug>",
+            "browse workspace add <路径>",
+            "browse workspace remove <路径>",
         ],
     ),
     (
@@ -1869,11 +1893,11 @@ pub fn render_help() -> String {
     }
 
     out.push_str(
-        "\n片段方言：\n  const tabs = await listPageTargets()\n  await session.use(tabs[0].targetId)\n  await goto(\"https://example.com\", {waitIdle: true})\n  支持 await/const/return、字面量与成员下标；模板字符串 raw 语义可多行内嵌页面代码。\n  函数字面量与控制流走 --js（全量 JS 旁路）；等加载用 goto()/waitLoad()，别等 loadEventFired。\n  完整语言面、全局函数与 session 方法清单：browse --llms\n",
+        "\n片段方言：\n  const tabs = await listPageTargets()\n  await session.use(tabs[0].targetId)\n  await goto(\"https://example.com\", {waitIdle: true})\n  支持 await/const/return、字面量与成员下标；模板字符串 raw 可多行内嵌页面代码；函数与控制流走 --js；等加载用 goto()/waitLoad()。\n  完整语言面、全局函数与 session 方法清单：browse --llms\n",
     );
     out.push_str(
-        "\nEnvironment Variables:\n  BROWSE_PORT              daemon 端口（default: 9880）\n  BROWSE_NAME              命名实例：状态目录加派生端口 9900-9999，多实例并行\n  BROWSE_CHROME            chrome 路径（default: 走发现序：显式、托管 pin、祖先部署、常规路径）\n  BROWSE_PROFILE           spawn 引擎 user-data-dir（default: 固定 engine-profile，down 不删）\n  BROWSE_CDP_WS            钉死连接的 WS URL\n  BROWSE_NO_ATTACH=1       跳过附着探测，强制 spawn 隔离实例\n  BROWSE_EVAL_TIMEOUT      单次求值超时秒数（default: 300）\n  BROWSE_IDLE_TIMEOUT      引擎闲置回收毫秒（default: 3600000，0 关闭）\n  BROWSE_PROXY             引擎代理 --proxy-server（与 --proxy 同值）\n  BROWSE_PROXY_BYPASS      代理旁路 --proxy-bypass-list\n  BROWSE_ENGINE_ARGS       引擎附加旗标，空格分隔直通 spawn argv（--engine-arg 同道；无显示会话 spawn 自动补 --headless，显式旗标优先）\n  BROWSE_SECRETS           dotenv 密钥文件（--secrets 同值；输出回显脱敏）\n  BROWSE_WORKSPACE         技能仓根（default: ~/.browse-rs/workspace，跨实例共享）\n  BROWSE_DOMAIN_SKILLS=0   关 goto/fetch 回执域名技能点名\n  BROWSE_PAGE_SKILLS=0     关 goto/detect 回执页面技能点名
-  BROWSE_ENGINE_CONTEXT   操作回执显引擎紧凑行（default: 关；异常告警恒开不受此开关控制）\n",
+        "\nEnvironment Variables:\n  BROWSE_PORT              daemon 端口（default: 9880）\n  BROWSE_NAME              命名实例：状态目录加派生端口 9900-9999，多实例并行\n  BROWSE_CHROME            chrome 路径（default: 走发现序：显式、托管 pin、祖先部署、常规路径）\n  BROWSE_PROFILE           spawn 引擎 user-data-dir（default: 固定 engine-profile，down 不删）\n  BROWSE_CDP_WS            钉死连接的 WS URL\n  BROWSE_NO_ATTACH=1       跳过附着探测，强制 spawn 隔离实例\n  BROWSE_EVAL_TIMEOUT      单次求值超时秒数（default: 300）\n  BROWSE_IDLE_TIMEOUT      引擎闲置回收毫秒（default: 3600000，0 关闭）\n  BROWSE_PROXY/BYPASS      引擎代理与旁路 --proxy-server/--proxy-bypass-list（同值旗标）\n  BROWSE_ENGINE_ARGS       引擎附加旗标，空格分隔直通 spawn argv（--engine-arg 同道；无显示会话 spawn 自动补 --headless，显式旗标优先）\n  BROWSE_SECRETS           dotenv 密钥文件（--secrets 同值；输出回显脱敏）\n  BROWSE_WORKSPACE         技能仓根（default: ~/.browse-rs/workspace，跨实例共享）\n  BROWSE_DOMAIN_SKILLS=0   关 goto/fetch 回执域名技能点名\n  BROWSE_PAGE_SKILLS=0     关 goto/detect 回执页面技能点名
+  BROWSE_ENGINE_CONTEXT   操作回执显引擎紧凑行（default: 关；异常告警恒开）\n",
     );
     out.push_str("\n退出码：\n  0 成功 / 1 执行失败 / 2 用法错\n");
     out

@@ -213,6 +213,88 @@ pub fn list_json(root: &Path) -> serde_json::Value {
     json!({ "domains": domains, "pages": pages })
 }
 
+/// #63 多根 site 读：序首命中根优先（根内逻辑同 [`read_site`]）；全根
+/// 未命中时报错带全部根的找过路径。
+///
+/// # Errors
+///
+/// 所有根都未命中该段或文件（错误聚合各根路径）。
+pub fn read_site_multi(roots: &[PathBuf], rel: &str) -> Result<String> {
+    let mut misses = Vec::new();
+    for root in roots {
+        match read_site(root, rel) {
+            Ok(text) => return Ok(text),
+            Err(e) => misses.push(format!("{}（{e:#}）", root.display())),
+        }
+    }
+    bail!(
+        "workspace site {rel} 在 {} 个仓根都未命中：{}；下一步：browse workspace add <自定义仓> 或 list 看在册段",
+        misses.len(),
+        misses.join("；")
+    )
+}
+
+/// #63 多根 page 读：序首命中根优先。
+///
+/// # Errors
+///
+/// 所有根都未命中该 slug。
+pub fn read_page_multi(roots: &[PathBuf], slug: &str) -> Result<String> {
+    let mut misses = Vec::new();
+    for root in roots {
+        match read_page(root, slug) {
+            Ok(text) => return Ok(text),
+            Err(e) => misses.push(format!("{}（{e:#}）", root.display())),
+        }
+    }
+    bail!(
+        "workspace page {slug} 在 {} 个仓根都未命中：{}；下一步：browse workspace list 看在册 slug",
+        misses.len(),
+        misses.join("；")
+    )
+}
+
+/// #63 多根段文件列（技能点名口径）：序首有文件的根整胜（不跨根混拼，
+/// 保回执确定性——同段多仓时序首仓定义该站点知识）。
+pub fn domain_segment_files_multi(roots: &[PathBuf], segment: &str) -> Vec<String> {
+    for root in roots {
+        let files = domain_segment_files(root, segment);
+        if !files.is_empty() {
+            return files;
+        }
+    }
+    Vec::new()
+}
+
+/// #63 多根清单：domain 段与 page slug 跨根并集（首见序，段名重复以
+/// 序首仓的文件清单为准）；`roots` 面给配置态可见性。
+pub fn list_json_multi(roots: &[PathBuf]) -> serde_json::Value {
+    let mut domains: Vec<serde_json::Value> = Vec::new();
+    let mut seen_seg: Vec<String> = Vec::new();
+    let mut pages: Vec<String> = Vec::new();
+    for root in roots {
+        let v = list_json(root);
+        for d in v["domains"].as_array().cloned().unwrap_or_default() {
+            let seg = d["segment"].as_str().unwrap_or("").to_string();
+            if !seg.is_empty() && !seen_seg.contains(&seg) {
+                seen_seg.push(seg);
+                domains.push(d);
+            }
+        }
+        for p in v["pages"].as_array().cloned().unwrap_or_default() {
+            let slug = p.as_str().unwrap_or("").to_string();
+            if !slug.is_empty() && !pages.contains(&slug) {
+                pages.push(slug);
+            }
+        }
+    }
+    json!({
+        "domains": domains,
+        "pages": pages,
+        "roots": roots.iter().map(|r| r.display().to_string()).collect::<Vec<_>>(),
+    })
+}
+
 /// 仓内相对读取的越界守卫：canonicalize 后必须仍在 `root` 内，挡绝对
 /// 路径、`..` 与符号链接出仓（snippets #44 评审 F2 同律）。返回可读的
 /// 规范路径。
@@ -541,5 +623,84 @@ mod tests {
         assert_eq!(s["installed"], json!(false));
         assert_eq!(s["domainSites"], json!(0));
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// #63 多根序首胜：同段两仓，序首仓的文件清单整胜；空仓跳过。
+    #[test]
+    fn multi_root_first_hit_wins() {
+        let dir = std::env::temp_dir().join(format!("browse-ws-multi-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let first = dir.join("first");
+        let second = dir.join("second");
+        std::fs::create_dir_all(first.join("domain-skills").join("x")).unwrap();
+        std::fs::create_dir_all(second.join("domain-skills").join("x")).unwrap();
+        std::fs::write(first.join("domain-skills/x/a.md"), "# a").unwrap();
+        std::fs::write(second.join("domain-skills/x/b.md"), "# b").unwrap();
+        let roots = vec![first.clone(), second.clone()];
+        assert_eq!(
+            domain_segment_files_multi(&roots, "x"),
+            vec!["a.md".to_string()],
+            "序首仓整胜不混拼"
+        );
+        std::fs::remove_file(first.join("domain-skills/x/a.md")).unwrap();
+        assert_eq!(
+            domain_segment_files_multi(&roots, "x"),
+            vec!["b.md".to_string()],
+            "空仓跳过"
+        );
+        let text = read_site_multi(&roots, "x").unwrap();
+        assert!(text.contains("b.md"), "{text}");
+        std::fs::create_dir_all(second.join("page-skills")).unwrap();
+        std::fs::write(second.join("page-skills/captcha.md"), "# 配方").unwrap();
+        let page = read_page_multi(&roots, "captcha").unwrap();
+        assert!(page.contains("配方"), "{page}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// #63 多根清单并集：段与 slug 跨根首见去重，roots 面在册。
+    #[test]
+    fn multi_root_list_union() {
+        let dir = std::env::temp_dir().join(format!("browse-ws-list-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        for (sub, segs, pages) in [
+            ("one", vec!["github"], vec!["captcha"]),
+            ("two", vec!["medium", "github"], vec!["hydration"]),
+        ] {
+            for seg in &segs {
+                std::fs::create_dir_all(dir.join(sub).join("domain-skills").join(seg)).unwrap();
+            }
+            for slug in &pages {
+                std::fs::create_dir_all(dir.join(sub).join("page-skills")).unwrap();
+                std::fs::write(
+                    dir.join(sub).join("page-skills").join(format!("{slug}.md")),
+                    "# x",
+                )
+                .unwrap();
+            }
+        }
+        let roots = vec![dir.join("one"), dir.join("two")];
+        let l = list_json_multi(&roots);
+        let segs: Vec<&str> = l["domains"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|d| d["segment"].as_str())
+            .collect();
+        assert!(
+            segs.contains(&"github") && segs.contains(&"medium"),
+            "{segs:?}"
+        );
+        let slugs: Vec<&str> = l["pages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|p| p.as_str())
+            .collect();
+        assert!(
+            slugs.contains(&"captcha") && slugs.contains(&"hydration"),
+            "{slugs:?}"
+        );
+        assert_eq!(l["roots"].as_array().map(|a| a.len()), Some(2));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
