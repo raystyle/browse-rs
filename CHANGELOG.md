@@ -2,6 +2,11 @@
 
 版本级里程碑；逐批过程见 docs/diary。semver 判据在册 docs/requirements/REQ-004。
 
+## 0.20.0 - 2026-09-23
+
+- **#62 显式连接意图强制切换（--connect 暖态假绿修复）**：`Engine::ensure` 对 Attach/Port 显式意图不再被已连接态幂等短路，目标不同即切换：旧引擎是 browse spawn 的走优雅关（down 所有权，含隔离 profile 清理），是附着来源的零触碰只断本侧连接；同目标幂等免抖（重复 up 不次次断重连）；Auto 缺省意图维持原幂等（懒起与发现序不动）。修复 --connect 在暖 daemon 上静默跑既有引擎的假绿（本日两踩同根：mac 串台误判、lan-ubuntu 首连假绿）
+- semver 判据结论（0.20.0 裁定）：行为变化取 minor（REQ-004 判据行）
+
 ## 0.19.1 - 2026-09-23
 
 - **#61 引擎懒重 spawn 丢 up --headless 意图**：/engine/up 成功且是 Auto（spawn）意图时回写 daemon 缺省 spec（Mutex 形，eval 读侧克隆快照），引擎意外退出后的自动重拉沿用最近一次显式 up 的形态（headless 等），不再回退 daemon 启动时的 from_env 有头缺省；Attach 是连接意图不是重生意图不回写。实弹验收：up --headless 后 kill -9 引擎，重拉后 headless True 对 True，#60 告警面仅「引擎换新」一句零翻转（修复前同场景双句含翻转）。surface up 述补形态记忆口径

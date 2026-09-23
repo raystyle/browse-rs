@@ -2590,6 +2590,99 @@ async fn isolated_profile_removed_on_shutdown() {
     assert!(!dir.exists(), "退场后目录应删: {dir:?}");
 }
 
+/// #62 显式连接意图强制切换：暖 daemon（已有 spawn 引擎 A）ensure
+/// Attach 到引擎 B 的 ws 应真切换——A 被优雅关（spawn 所有权），当前
+/// 来源变 Attached{B}；同目标重复 ensure 幂等不再切换。
+#[tokio::test]
+async fn explicit_attach_switches_from_spawned_engine() {
+    if !gated() {
+        eprintln!("skip: BROWSE_E2E 未设 1");
+        return;
+    }
+    let _seq = SEQ.lock().await;
+    let session_a = cdp::Session::new();
+    let engine_a = Engine::new(session_a);
+    engine_a
+        .ensure(&EngineSpec::Auto {
+            chrome: None,
+            headless: true,
+            pipe: false,
+            profile: None,
+            proxy: None,
+            proxy_bypass: None,
+            isolated: true,
+            engine_args: Vec::new(),
+        })
+        .await
+        .expect("引擎 A");
+    let (pid_a, dir_a) = {
+        let src = engine_a.source().await;
+        let browse_core::EngineSource::Spawned {
+            pid, profile_dir, ..
+        } = &src
+        else {
+            panic!("A 应 Spawned: {src:?}")
+        };
+        (*pid, profile_dir.clone())
+    };
+    // 引擎 B：另一条 session 再 spawn 一个
+    let session_b = cdp::Session::new();
+    let engine_b = Engine::new(session_b);
+    engine_b
+        .ensure(&EngineSpec::Auto {
+            chrome: None,
+            headless: true,
+            pipe: false,
+            profile: None,
+            proxy: None,
+            proxy_bypass: None,
+            isolated: true,
+            engine_args: Vec::new(),
+        })
+        .await
+        .expect("引擎 B");
+    let ws_b = {
+        let src = engine_b.source().await;
+        let browse_core::EngineSource::Spawned {
+            ws_url: Some(ws), ..
+        } = &src
+        else {
+            panic!("B 应端口态: {src:?}")
+        };
+        ws.clone()
+    };
+    // 暖态显式 Attach 到 B：A 优雅关、当前来源切到 B
+    engine_a
+        .ensure(&EngineSpec::Attach {
+            ws_url: ws_b.clone(),
+        })
+        .await
+        .expect("切换附着 B");
+    let src = engine_a.source().await;
+    assert!(
+        matches!(&src, browse_core::EngineSource::Attached { ws_url } if *ws_url == ws_b),
+        "暖态显式意图应切换: {src:?}"
+    );
+    // A 的 chrome 已退场（优雅关的实证：pid 不活、隔离目录已删）
+    assert!(!dir_a.exists(), "A 的隔离目录应随优雅关删除: {dir_a:?}");
+    // 同目标幂等：再来一次不切换不报错
+    engine_a
+        .ensure(&EngineSpec::Attach {
+            ws_url: ws_b.clone(),
+        })
+        .await
+        .expect("同目标幂等");
+    assert!(
+        matches!(
+            engine_a.source().await,
+            browse_core::EngineSource::Attached { ref ws_url } if *ws_url == ws_b
+        ),
+        "同目标幂等不切换"
+    );
+    let _ = pid_a;
+    engine_b.shutdown().await.expect("B 收场");
+}
+
 /// #57 无显示会话的 headless 自动回退：有头意图（headless: false）下
 /// 清空 DISPLAY 与 WAYLAND_DISPLAY 模拟 ssh 会话，spawn 应自动补
 /// --headless 并连上（修复前 ozone 初始化失败即退，DevToolsActivePort

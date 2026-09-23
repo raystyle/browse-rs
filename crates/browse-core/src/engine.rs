@@ -208,11 +208,7 @@ pub fn provenance(
             // 附着态的宿主只能取 ws 字面：loopback（127.0.0.1/localhost/
             // ::1）可能是本机也可能是隧道转发，显式降级不冒充确定
             let host = ws_authority_host(ws_url);
-            let ctx = if host.starts_with("127.")
-                || host.starts_with("[::1")
-                || host == "localhost"
-                || host == "[::1]"
-            {
+            let ctx = if is_loopback_host(&host) {
                 format!("{host}（loopback：本机或隧道转发不可辨）")
             } else {
                 host
@@ -312,6 +308,33 @@ pub fn fingerprint_changes(old: &serde_json::Value, new: &serde_json::Value) -> 
     out
 }
 
+/// host 字面是否 loopback 形（127.*、localhost、[::1]；#62 抽出共用，
+/// provenance 降级标注与 Port 同目标判同口径）。
+fn is_loopback_host(host: &str) -> bool {
+    host.starts_with("127.") || host.starts_with("[::1") || host == "localhost" || host == "[::1]"
+}
+
+/// ws(s) URL 的端口（#62 同目标判）：authority 的 `:port` 段；无端口
+/// （畸形或默认口）返回 `None`。
+fn ws_port_of(ws_url: &str) -> Option<u16> {
+    let rest = ws_url
+        .strip_prefix("ws://")
+        .or_else(|| ws_url.strip_prefix("wss://"))
+        .unwrap_or(ws_url);
+    let authority = rest.split('/').next().unwrap_or(rest);
+    let port = authority.rsplit(':').next()?;
+    if authority.starts_with('[') {
+        // IPv6 形：']' 后才是端口
+        let after = authority.split(']').nth(1)?;
+        return after.trim_start_matches(':').parse().ok();
+    }
+    if port.len() != authority.len() {
+        port.parse().ok()
+    } else {
+        None
+    }
+}
+
 /// ws(s) URL 的 authority host 字面（#59）：剥 scheme 后取 `/` 或 `:`
 /// 前段；带括号 IPv6 authority（`[::1]` 形）取首个 `]` 含括号整段
 /// （评审 F2：IPv6 字面自带 `:` 不能按 `:` 切）；畸形串原样返回
@@ -337,6 +360,11 @@ fn ws_authority_host(ws_url: &str) -> String {
 pub struct Engine {
     session: Arc<Session>,
     inner: Mutex<EngineInner>,
+    /// #62 显式切换单飞锁（评审 G1）：切换段（关旧加连新）在 inner 锁
+    /// 之外，两并发显式意图会互撕连接与来源记录；ensure 全程持此锁
+    /// 串行（引擎操作低频，粗粒度足够）。不能复用 inner：shutdown 要
+    /// 取 inner。
+    switch_lock: tokio::sync::Mutex<()>,
 }
 
 struct EngineInner {
@@ -373,6 +401,7 @@ impl Engine {
                 child: None,
                 isolated_dir: None,
             }),
+            switch_lock: tokio::sync::Mutex::new(()),
         })
     }
 
@@ -394,10 +423,46 @@ impl Engine {
     /// - 自动策略下探测不到、且 chrome 找不到或 spawn 后 15 秒内调试口未就绪。
     /// - 连上后 attach 首个 page target 失败。
     pub async fn ensure(&self, spec: &EngineSpec) -> Result<EngineSource> {
+        // G1（评审）：全程单飞——两并发显式切换同时过闸会各执一次
+        // 关旧连新，inner.source 与实际连接错位
+        let _switch = self.switch_lock.lock().await;
+        // #62：显式连接意图（Attach/Port，来自 --connect/--ws/--port/
+        // BROWSE_CDP_WS）是「切到这个」不是「有就行」——已连接且目标不同
+        // 也要切换；同目标幂等免抖（重复 up 不次次断重连）。旧引擎是
+        // spawn 的优雅关（down 所有权），是附着来源的零触碰只断本侧连接
+        let explicit = matches!(spec, EngineSpec::Attach { .. } | EngineSpec::Port(_));
         {
             let inner = self.inner.lock().await;
             if self.session.is_connected() {
-                return Ok(inner.source.clone());
+                if !explicit {
+                    return Ok(inner.source.clone());
+                }
+                let same_target = match (&inner.source, spec) {
+                    (EngineSource::Attached { ws_url }, EngineSpec::Attach { ws_url: w }) => {
+                        ws_url == w
+                    }
+                    (EngineSource::Attached { ws_url }, EngineSpec::Port(p)) => {
+                        // F1（评审）：Port 语义是本机 127.0.0.1:<p>，同目标
+                        // 要求现状 ws 也是 loopback 宿主——远端同端口的附着
+                        // 不得误判同目标吞掉本机切换意图
+                        ws_port_of(ws_url) == Some(*p)
+                            && is_loopback_host(&ws_authority_host(ws_url))
+                    }
+                    _ => false,
+                };
+                if same_target {
+                    return Ok(inner.source.clone());
+                }
+            }
+        }
+        if explicit && self.session.is_connected() {
+            if matches!(self.source().await, EngineSource::Spawned { .. }) {
+                let _ = self.shutdown().await;
+            } else {
+                // 附着来源零触碰：只断本侧连接，浏览器继续活
+                self.session.close().await;
+                let mut inner = self.inner.lock().await;
+                inner.source = EngineSource::NotConnected;
             }
         }
         // 重连快路径：自己 spawn 的端口态引擎还活着（session.close 后的恢复），
@@ -440,16 +505,23 @@ impl Engine {
                 }
             }
             EngineSpec::Port(port) => {
+                // F2（评审）：先解出真 ws URL 再连，来源记真端点（不记
+                // 「port N」合成串）——同目标判与 provenance 的 hostContext
+                // 都吃到真形
+                let ws = discovery::http_version_ws_url(
+                    &format!("http://127.0.0.1:{port}"),
+                    Duration::from_secs(10),
+                )
+                .await
+                .with_context(|| format!("attach port {port}"))?;
                 self.session
                     .connect_opts(ConnectOptions {
-                        port: Some(*port),
+                        ws_url: Some(ws.clone()),
                         ..Default::default()
                     })
                     .await
-                    .with_context(|| format!("attach port {port}"))?;
-                EngineSource::Attached {
-                    ws_url: format!("port {port}"),
-                }
+                    .with_context(|| format!("attach {ws}"))?;
+                EngineSource::Attached { ws_url: ws }
             }
             EngineSpec::Auto {
                 chrome,
@@ -770,6 +842,26 @@ mod tests {
         for k in ["ok", "name", "uptime", "connected", "engine"] {
             assert!(v.get(k).is_some(), "旧键 {k} 不得被移除");
         }
+    }
+
+    /// #62 同目标判的端口解析与 loopback 面（评审 F1/F2）：本机同端口
+    /// 判同目标，远端同端口判不同（吞意图是 bug），合成串已消灭。
+    #[test]
+    fn ws_port_shapes() {
+        assert_eq!(ws_port_of("ws://127.0.0.1:9222/x"), Some(9222));
+        assert_eq!(ws_port_of("ws://[::1]:4333/devtools/browser/x"), Some(4333));
+        assert_eq!(ws_port_of("ws://host/devtools"), None);
+        // loopback 面
+        assert!(is_loopback_host("127.0.0.1"));
+        assert!(is_loopback_host("localhost"));
+        assert!(is_loopback_host("[::1]"));
+        assert!(!is_loopback_host("lan-ubuntu"));
+        // F1：远端同端口不是同目标
+        let remote = "ws://lan-ubuntu:9222/devtools/browser/x";
+        assert!(ws_port_of(remote) == Some(9222) && !is_loopback_host(&ws_authority_host(remote)));
+        // F2：本机真 ws 形（Port 连接后的记录形态）判同目标
+        let local = "ws://127.0.0.1:9222/devtools/browser/abc";
+        assert!(ws_port_of(local) == Some(9222) && is_loopback_host(&ws_authority_host(local)));
     }
 
     /// #60 指纹比对：无变化空 vec；pid 换新、有头无头翻转、形态翻转
