@@ -18,3 +18,7 @@
 ## 评审一轮（browse-codex-review）
 
 四点名边界部分过。F 两条必修全实：F1 Port 同目标判只比端口不比宿主（远端同端口附着被误判同目标吞掉本机切换意图）；F2 Port 连接来源记「port N」合成串（ws_port_of 解不出致 Port 幂等失效每次断重连，attachedHost 显示同步受害）。修法：Port 臂先 discovery 解真 ws URL 再连、来源记真端点；同目标判加 is_loopback_host（从 provenance 内联判式抽出共用）；单测补 F1 远端不同目标与 F2 本机真 ws 同目标两断言。G1 采纳：Engine 加 switch_lock 单飞锁（ensure 全程持，防两并发显式切换互撕连接与来源记录；不能复用 inner 因 shutdown 要取它）；G2 采纳记档：宿主级 vars/refs 跨切换不清（与「变量跨调用持久」口径一致，diary 点明免误解）；G3 记档不做（ws 字面等值的 localhost/127 写法差异低频）。评审另正一笔：CHANGELOG/diary 的「BROWSE_CDP_WS 钉死 daemon 逐 eval 免抖」措辞不准，它守的是重复 up 不是逐 eval（eval 懒起只在未连接时走 ensure），已随批改准。
+
+## 发版与关单（同日续）
+
+- 推送 6a67571..b346102，CI 与播种绿；tag v0.20.0，五端拉平全镜像道；关单正典双事件（seq 225 result 加 226 status），板上转余 #63（用户新需求：workspace 多仓加载，已入单待开工）
